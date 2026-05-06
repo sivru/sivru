@@ -5,7 +5,7 @@
 
 import { stat } from "node:fs/promises";
 
-import { buildIndex } from "@sivrujs/search";
+import { buildIndex } from "@sivru/search";
 
 type ParsedArgs = {
   path: string;

@@ -1,4 +1,4 @@
-// W6 — @sivrujs/observe HTTP server factory.
+// W6 — @sivru/observe HTTP server factory.
 // See DESIGN.md §5 (observe architecture) and §5.5 (privacy boundary).
 //
 // PRIVACY NOTE (DESIGN.md §5.5): this is the inbound listener. We bind to

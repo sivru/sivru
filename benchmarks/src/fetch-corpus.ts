@@ -2,7 +2,7 @@
 // `benchmarks/corpus/<name>/`. Local-developer step — `corpus/` is gitignored
 // so the repo stays standalone.
 //
-// Run via `pnpm --filter @sivrujs/benchmarks fetch-corpus`.
+// Run via `pnpm --filter @sivru/benchmarks fetch-corpus`.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";

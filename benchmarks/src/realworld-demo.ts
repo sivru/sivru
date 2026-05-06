@@ -4,7 +4,7 @@
 // `BENCHMARKS.md` — not part of `pnpm bench:agent`, not gated by CI.
 //
 // Usage:
-//   pnpm --filter @sivrujs/benchmarks tsx src/realworld-demo.ts \
+//   pnpm --filter @sivru/benchmarks tsx src/realworld-demo.ts \
 //     --repo /path/to/checkout \
 //     --name vitest \
 //     --root packages/vitest/src
@@ -17,8 +17,8 @@ import { writeFileSync } from "node:fs";
 import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildIndex } from "@sivrujs/search";
-import type { SivruIndex } from "@sivrujs/search";
+import { buildIndex } from "@sivru/search";
+import type { SivruIndex } from "@sivru/search";
 
 import { runAgentTasks, formatAgentTaskReport } from "./agent-tasks.js";
 import type { Annotation, RepoSpec, RetrievalResult } from "./types.js";

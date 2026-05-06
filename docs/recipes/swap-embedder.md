@@ -118,7 +118,7 @@ can pick it by short name (`sivru search --embed=my-model`,
 ## Use it from the engine
 
 ```ts
-import { buildIndex, createMyProvider } from "@sivrujs/search";
+import { buildIndex, createMyProvider } from "@sivru/search";
 
 const idx = await buildIndex("./repo", {
   embed: { provider: createMyProvider({ apiKey: process.env.MY_API_KEY }) },

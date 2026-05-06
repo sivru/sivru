@@ -45,13 +45,13 @@ ever. Enforced by a static lint rule and a runtime `fetch` spy.
 
 ```
 packages/
-├── search/         → @sivrujs/search       (engine; library + workers)
+├── search/         → @sivru/search       (engine; library + workers)
 ├── cli/            → sivru               (CLI binary + MCP entry)
-├── observe/        → @sivrujs/observe      (session readers, HTTP server)
-└── observe-ui/     → @sivrujs/observe-ui   (Vite + React + Tailwind shell)
+├── observe/        → @sivru/observe      (session readers, HTTP server)
+└── observe-ui/     → @sivru/observe-ui   (Vite + React + Tailwind shell)
 ```
 
-### `@sivrujs/search`
+### `@sivru/search`
 
 ```
 walk → chunk → tokenize → BM25 index ┐
@@ -126,7 +126,7 @@ and `mcp__sivru__find_related`. The MCP search response is a JSON
 envelope with measured `latencyMs` / `refreshMs` / per-result `score` /
 line range; the index is refreshed on every search via `refreshStale()`.
 
-### `@sivrujs/observe`
+### `@sivru/observe`
 
 ```
 src/
@@ -154,7 +154,7 @@ GET /api/bench-history/:id                     # one run, full detail
 When mounted with `uiDistDir`, the server also serves the observe-ui
 SPA with a path-traversal guard.
 
-### `@sivrujs/observe-ui`
+### `@sivru/observe-ui`
 
 Vite + React 18 + Tailwind v3. Dark-only; soft-amber accent. Tabs:
 
@@ -164,7 +164,7 @@ Vite + React 18 + Tailwind v3. Dark-only; soft-amber accent. Tabs:
 - **Bench** — past `sivru bench personal` runs with recall@5 / MRR /
   tokens-saved bars and bootstrap CI bands.
 
-Talks only to its own backend (the `@sivrujs/observe` server) — no
+Talks only to its own backend (the `@sivru/observe` server) — no
 third-party network calls.
 
 ## Data flow — a single search

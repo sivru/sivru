@@ -12,8 +12,8 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { buildIndex } from "@sivrujs/search";
-import type { EmbeddingProvider, SivruIndex } from "@sivrujs/search";
+import { buildIndex } from "@sivru/search";
+import type { EmbeddingProvider, SivruIndex } from "@sivru/search";
 
 import type { RepoSpec, RetrievalResult } from "./types.js";
 import type { RetrievalAdapter } from "./runner.js";
@@ -47,7 +47,7 @@ export function createSivruAdapter(options: SivruAdapterOptions): RetrievalAdapt
         const benchRoot = resolve(repoRoot, repo.benchmark_root);
         if (!existsSync(benchRoot)) {
           process.stderr.write(
-            `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivrujs/benchmarks fetch-corpus\`\n`,
+            `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivru/benchmarks fetch-corpus\`\n`,
           );
           return null;
         }

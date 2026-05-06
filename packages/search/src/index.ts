@@ -1,4 +1,4 @@
-// Public API of `@sivrujs/search`. W2 Pass 1 lights up the BM25-backed
+// Public API of `@sivru/search`. W2 Pass 1 lights up the BM25-backed
 // `buildIndex` + `SivruIndex.searchBM25` flow over the W1 walker + chunker;
 // embeddings, cosine, and RRF land in Pass 2 behind the same facade.
 

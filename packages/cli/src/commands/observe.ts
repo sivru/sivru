@@ -22,8 +22,8 @@ import {
   listSessions,
   readSession,
   replaySession,
-} from "@sivrujs/observe";
-import type { ReplayedEvent, ReplayResult, AggregateReport } from "@sivrujs/observe";
+} from "@sivru/observe";
+import type { ReplayedEvent, ReplayResult, AggregateReport } from "@sivru/observe";
 
 const DEFAULT_PORT = 7676;
 
@@ -104,7 +104,7 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
     process.stdout.write(`  ui:   ${server.url}/\n`);
   } else if (!parsed.noUi) {
     process.stdout.write(
-      `  ui:   not bundled (run \`pnpm --filter @sivrujs/observe-ui build\` to produce one)\n`,
+      `  ui:   not bundled (run \`pnpm --filter @sivru/observe-ui build\` to produce one)\n`,
     );
   }
   process.stdout.write(`  api:  ${server.url}/api/sessions\n`);

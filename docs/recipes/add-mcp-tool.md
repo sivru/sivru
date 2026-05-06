@@ -103,12 +103,12 @@ the handler so we can give actionable error messages — `SIVRU-Exxx` codes.
 ## Reuse the engine, don't fork it
 
 The CLI subcommands (`packages/cli/src/commands/`) and MCP tools should
-both call the same `@sivrujs/search` library functions. If you find yourself
+both call the same `@sivru/search` library functions. If you find yourself
 implementing the same logic twice, lift it into a shared module.
 
 ```ts
 // good: both paths call the same library function
-import { findRelated } from "@sivrujs/search";
+import { findRelated } from "@sivru/search";
 
 // bad: tool handler reimplements rank fusion
 ```

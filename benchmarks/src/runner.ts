@@ -164,7 +164,7 @@ async function main(): Promise<void> {
     ? createSivruAdapter({
         corpusDir,
         mode: "hybrid",
-        embed: (await import("@sivrujs/search")).createPotionProvider(),
+        embed: (await import("@sivru/search")).createPotionProvider(),
       })
     : createSivruAdapter({ corpusDir });
   const adapterName = hybrid ? "sivru-hybrid" : "sivru-bm25";

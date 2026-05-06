@@ -13,7 +13,7 @@
 // for that query — those queries get scored on tokens-saved only.
 
 import { resolve, sep } from "node:path";
-import type { SivruEvent } from "@sivrujs/observe";
+import type { SivruEvent } from "@sivru/observe";
 
 export type QueryWithGroundTruth = {
   query: string;

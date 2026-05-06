@@ -1,4 +1,4 @@
-// Public barrel for `@sivrujs/search/rerank`.
+// Public barrel for `@sivru/search/rerank`.
 export type { CrossEncoder } from "./provider.js";
 export {
   createTransformersCrossEncoder,

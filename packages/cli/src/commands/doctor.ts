@@ -168,7 +168,7 @@ export function checkObserveUiDist(): CheckResult {
       name: "observe-ui dist",
       severity: "warn",
       detail: "observe-ui dist not built — `sivru observe` UI won't render",
-      fix: "pnpm --filter @sivrujs/observe-ui build",
+      fix: "pnpm --filter @sivru/observe-ui build",
     };
   }
   return { name: "observe-ui dist", severity: "ok", detail: "built" };

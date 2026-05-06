@@ -100,7 +100,7 @@ it("chunks a small Zig file", () => {
 Then re-run the agent-task benchmark to make sure recall didn't regress:
 
 ```bash
-pnpm --filter @sivrujs/benchmarks bench:agent
+pnpm --filter @sivru/benchmarks bench:agent
 ```
 
 Numbers stay comparable for line-fallback registrations; tree-sitter

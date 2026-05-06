@@ -23,7 +23,7 @@ import {
   createTransformersProvider,
   type CrossEncoder,
   type EmbeddingProvider,
-} from "@sivrujs/search";
+} from "@sivru/search";
 
 /** Stable identity for a registered model — what users type. */
 export type ModelShortName = string;

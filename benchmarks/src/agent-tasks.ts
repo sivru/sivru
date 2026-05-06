@@ -504,7 +504,7 @@ export async function runAgentTasks(
       statSync(benchRoot);
     } catch {
       process.stderr.write(
-        `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivrujs/benchmarks fetch-corpus\`\n`,
+        `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivru/benchmarks fetch-corpus\`\n`,
       );
       continue;
     }
@@ -663,7 +663,7 @@ export function formatAgentTaskReport(report: AgentTaskReport): string {
   return lines.join("\n");
 }
 
-// CLI entry — `pnpm --filter @sivrujs/benchmarks bench:agent`
+// CLI entry — `pnpm --filter @sivru/benchmarks bench:agent`
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
@@ -679,7 +679,7 @@ async function main(): Promise<void> {
     ? createSivruAdapter({
         corpusDir,
         mode: "hybrid",
-        embed: (await import("@sivrujs/search")).createPotionProvider(),
+        embed: (await import("@sivru/search")).createPotionProvider(),
       })
     : createSivruAdapter({ corpusDir });
   const adapterName = hybrid ? "sivru-hybrid" : "sivru-bm25";
