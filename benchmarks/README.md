@@ -57,14 +57,14 @@ any other retrieval method on the same data.
 **Run:**
 ```bash
 # One-time: clone the 3 corpus repos at their pinned SHAs (~130 MB).
-pnpm --filter @sivru/benchmarks fetch-corpus
+pnpm --filter @sivrujs/benchmarks fetch-corpus
 
 # BM25-only mode — fast, no model required.
-pnpm --filter @sivru/benchmarks bench
+pnpm --filter @sivrujs/benchmarks bench
 
 # Hybrid mode (BM25 ⊕ semantic cosine, RRF-merged) — downloads the
 # default Transformers.js model on first run (~25 MB to ~/.cache/sivru/models/).
-pnpm --filter @sivru/benchmarks bench --hybrid
+pnpm --filter @sivrujs/benchmarks bench --hybrid
 ```
 
 **Current baselines** (captured 2026-05-04, all with the on-disk index

@@ -33,7 +33,7 @@ If a number above looks wrong, the JSON file is the source of truth.
 
 ![Token economy across labeled and real-world corpora](benchmarks/charts/corpus-comparison.svg)
 
-Charts are generated SVG (`pnpm --filter @sivru/benchmarks tsx src/render-charts.ts`) — re-run after re-baselining and the new images land in `benchmarks/charts/`.
+Charts are generated SVG (`pnpm --filter @sivrujs/benchmarks tsx src/render-charts.ts`) — re-run after re-baselining and the new images land in `benchmarks/charts/`.
 
 ---
 
@@ -70,7 +70,7 @@ that excludes generated code, examples, and tests:
 | [`psf/requests`](https://github.com/psf/requests) | Python | `f7822f7c4185...` | `src/requests/` |
 | [`google/gson`](https://github.com/google/gson) | Java | `8260eddffe41...` | `gson/src/main/java/` |
 
-Specs in `benchmarks/repos.json`. ~130 MB total. `pnpm --filter @sivru/benchmarks fetch-corpus`
+Specs in `benchmarks/repos.json`. ~130 MB total. `pnpm --filter @sivrujs/benchmarks fetch-corpus`
 clones at depth 1, checks out the pinned SHA, then deletes the `.git/` dir
 to keep checkouts deterministic. Same SHAs forever — if a number changes,
 it's because *we* changed, not because the corpus did.
@@ -123,7 +123,7 @@ first-result is the top-line constraint, not the last point of NDCG.
 
 ```bash
 pnpm install
-pnpm --filter @sivru/benchmarks fetch-corpus    # one-time
+pnpm --filter @sivrujs/benchmarks fetch-corpus    # one-time
 pnpm bench                                       # BM25
 pnpm bench --hybrid                              # Model2Vec hybrid
 ```
@@ -257,7 +257,7 @@ finds the answer fast. They drag the *mean* savings down from 65%+ to
 
 ```bash
 pnpm install
-pnpm --filter @sivru/benchmarks fetch-corpus
+pnpm --filter @sivrujs/benchmarks fetch-corpus
 pnpm bench:agent                  # default 20 tasks, BM25, text output
 pnpm bench:agent --json | jq      # JSON for tooling
 pnpm bench:agent --n=5            # smoke run with 5 tasks
@@ -344,7 +344,7 @@ in isolation. Both numbers are real; both are reproducible.
 git clone --depth 1 https://github.com/some-org/some-repo /tmp/some-repo
 
 # Run the demo
-pnpm --filter @sivru/benchmarks --silent exec tsx src/realworld-demo.ts \
+pnpm --filter @sivrujs/benchmarks --silent exec tsx src/realworld-demo.ts \
   --repo /tmp/some-repo \
   --name some-repo \
   --root packages/main/src   # or "." for the whole repo
@@ -493,7 +493,7 @@ If a PR intentionally regresses one of these (e.g. switching to a
 slower-but-better chunker), the gate output prints the exact command:
 
 ```bash
-pnpm --filter @sivru/benchmarks bench:perf --json > benchmarks/perf-baseline.json
+pnpm --filter @sivrujs/benchmarks bench:perf --json > benchmarks/perf-baseline.json
 ```
 
 Commit the new baseline as part of the PR with a sentence in the
@@ -503,7 +503,7 @@ description explaining why.
 
 ```bash
 pnpm install
-pnpm --filter @sivru/benchmarks fetch-corpus
+pnpm --filter @sivrujs/benchmarks fetch-corpus
 pnpm bench:perf                   # text report
 pnpm bench:perf --json            # JSON
 pnpm bench:perf:gate              # compare current vs baseline; exits 1 on regression

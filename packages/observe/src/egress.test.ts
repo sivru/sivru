@@ -1,4 +1,4 @@
-// Privacy boundary (DESIGN.md §5.5): @sivru/observe must not make any
+// Privacy boundary (DESIGN.md §5.5): @sivrujs/observe must not make any
 // outbound network calls. This file enforces that two ways:
 //
 //   1. Static — no source file imports `node:http`, `node:https`, `node:net`,
@@ -44,7 +44,7 @@ function isServerFile(absPath: string): boolean {
   return absPath.includes(`${SRC_DIR}/server/`) || absPath.includes(`${SRC_DIR}\\server\\`);
 }
 
-describe("@sivru/observe — privacy boundary (DESIGN.md §5.5)", () => {
+describe("@sivrujs/observe — privacy boundary (DESIGN.md §5.5)", () => {
   it("data-layer source files don't import a network module", async () => {
     const files = (await listTsFiles(SRC_DIR)).filter((f) => !isServerFile(f));
     expect(files.length).toBeGreaterThan(0);

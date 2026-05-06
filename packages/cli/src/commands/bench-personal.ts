@@ -29,9 +29,9 @@ import type { Dirent } from "node:fs";
 import { homedir } from "node:os";
 import { dirname as pathDirname, resolve } from "node:path";
 
-import { listSessions, readSession } from "@sivru/observe";
-import type { Session, SivruEvent } from "@sivru/observe";
-import { buildIndex, type CrossEncoder, type SivruIndex } from "@sivru/search";
+import { listSessions, readSession } from "@sivrujs/observe";
+import type { Session, SivruEvent } from "@sivrujs/observe";
+import { buildIndex, type CrossEncoder, type SivruIndex } from "@sivrujs/search";
 
 import {
   listModels,
@@ -242,7 +242,7 @@ export function extractQueriesFromEvents(events: readonly SivruEvent[]): string[
 
 // ----- agent-task simulator -------------------------------------------------
 
-// Inlined from `@sivru/benchmarks/src/agent-tasks.ts` — the canonical
+// Inlined from `@sivrujs/benchmarks/src/agent-tasks.ts` — the canonical
 // version lives there with full test coverage; this is a self-contained
 // copy so the published CLI doesn't need to depend on a workspace-only
 // benchmarks package. If you tweak the simulator math, update both.

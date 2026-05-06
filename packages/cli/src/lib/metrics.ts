@@ -1,5 +1,5 @@
 // Retrieval-quality metrics for `sivru bench personal`. Pure helpers
-// — kept here (not in `@sivru/search`) because they're CLI-specific:
+// — kept here (not in `@sivrujs/search`) because they're CLI-specific:
 // tied to the bench's per-query loop, not the search package's runtime.
 //
 // recall@k and MRR are file-level, not chunk-level. Rationale: agent

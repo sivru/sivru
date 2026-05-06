@@ -143,7 +143,7 @@ is folded in below; this is what actually ships to npm.
 
 ### Added
 
-**Engine (`@sivru/search`)**
+**Engine (`@sivrujs/search`)**
 - Gitignore-aware async walker (`walk()`) with nested `.gitignore` + negations, symlink-loop bounds, binary skip, size cap, typed skip reasons.
 - Line-fallback chunker (50 lines, 5 overlap per DESIGN.md §4.1) with extension-driven language detection for the 16 grammars in scope.
 - Identifier-aware BM25 tokenizer (`tokenize`) — splits camelCase / snake_case / kebab-case, preserves dotted identifiers.
@@ -165,14 +165,14 @@ is folded in below; this is what actually ships to npm.
 - `sivru observe` — boots the Hono HTTP server on `127.0.0.1:7676` (default) and serves the built observe-ui on `/`. SIGINT-aware shutdown.
 - `sivru version` / `sivru help`.
 
-**Observe (`@sivru/observe`)**
+**Observe (`@sivrujs/observe`)**
 - Jsonl source: `listSessions`, `readSession`, `createJsonlSource` — full normalizer for the real Claude Code on-disk format (handles user/assistant entries with content as plain string OR array of text/tool_use/tool_result/thinking blocks; tool_results inside user entries; system events).
 - Hono v4 HTTP server: `GET /api/health`, `/api/sessions`, `/api/sessions/:id/events?limit=N`. CORS allowlist restricted to `http://localhost:*` and `127.0.0.1:*`. Optional static UI mount with SPA fallback + path-traversal guard.
 - Layer 1 savings estimator (`estimateSavings` per DESIGN.md §20.1) — counterfactual K=5 grep+read baseline, per-call chunk count from tool_result output shape, configurable via `SavingsOptions`.
 - Layer 2 cost analytics (`pricing.ts`) — known-Claude-model pricing table, `turnCostUsd`, `blendedRateUsdPerMTok`, `dollarsConsumed` / `dollarsSaved` / `percentDollars` / `turns[]` fields on `SavingsEstimate`.
 - Privacy boundary (DESIGN.md §5.5) enforced statically (data-layer files banned from importing `node:http`/`node:https`/`node:net`/`node:tls`/`undici` — `src/server/` excepted as the inbound listener) and at runtime (fetch spy throws on call during representative reads).
 
-**Observe UI (`@sivru/observe-ui`)**
+**Observe UI (`@sivrujs/observe-ui`)**
 - Vite + React 18 + Tailwind v3, dark-only, soft-amber accent per DESIGN.md §6.7 tokens.
 - Three-pane layout: sessions sidebar / event timeline / inspector. Sticky panel headers.
 - Keyboard nav: J/K (or ↓/↑) cycle events, Enter inspect, Esc clear, Cmd/Ctrl+K focus quick-filter.

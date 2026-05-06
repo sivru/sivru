@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildIndex } from "@sivru/search";
+import { buildIndex } from "@sivrujs/search";
 
 import type { RepoSpec } from "./types.js";
 
@@ -96,7 +96,7 @@ export async function runPerf(): Promise<PerfReport> {
     const benchRoot = resolve(corpusDir, repo.name, repo.benchmark_root);
     if (!existsSync(benchRoot)) {
       process.stderr.write(
-        `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivru/benchmarks fetch-corpus\`\n`,
+        `  ${repo.name}: corpus missing (${benchRoot}) — run \`pnpm --filter @sivrujs/benchmarks fetch-corpus\`\n`,
       );
       continue;
     }

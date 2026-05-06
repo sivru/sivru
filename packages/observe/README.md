@@ -1,4 +1,4 @@
-# @sivru/observe
+# @sivrujs/observe
 
 **Local-only session observability for Claude Code.** Reads
 `~/.claude/projects/<cwd>/<uuid>.jsonl`, normalizes events to a stable
@@ -12,7 +12,7 @@ programmatically.
 ## Install
 
 ```bash
-npm install @sivru/observe
+npm install @sivrujs/observe
 ```
 
 ## Privacy boundary
@@ -28,7 +28,7 @@ ship in a separate `sivru-analytics` package the user adds explicitly.
 ## Quick start
 
 ```ts
-import { listSessions, readSession, createObserveApp } from "@sivru/observe";
+import { listSessions, readSession, createObserveApp } from "@sivrujs/observe";
 
 // List all Claude Code sessions on disk.
 const sessions = await listSessions();

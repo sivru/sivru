@@ -3,7 +3,7 @@
 //
 // PRIVACY GUARANTEE (DESIGN.md §5.5):
 // This package MUST NOT make network calls. Enforced at lint + runtime tests.
-// Model file download lives in @sivru/search only.
+// Model file download lives in @sivrujs/search only.
 
 export const SIVRU_OBSERVE_VERSION = "0.1.0";
 

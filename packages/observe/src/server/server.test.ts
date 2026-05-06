@@ -61,7 +61,7 @@ function buildApp() {
   return createObserveApp({ source: makeFakeSource() });
 }
 
-describe("@sivru/observe — HTTP server", () => {
+describe("@sivrujs/observe — HTTP server", () => {
   describe("GET /api/health", () => {
     it("returns ok + version", async () => {
       const app = buildApp();

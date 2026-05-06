@@ -16,10 +16,10 @@
 
 | Package | What it does |
 |---|---|
-| `@sivru/search` | Engine. Walker → chunker → BM25 + cosine + RRF → optional cross-encoder rerank. Pluggable embedders (Model2Vec, Transformers.js, OpenAI-compatible HTTP) with asymmetric query encoding for BGE / Nomic / E5. On-disk cache + mid-session `refreshStale()`. |
+| `@sivrujs/search` | Engine. Walker → chunker → BM25 + cosine + RRF → optional cross-encoder rerank. Pluggable embedders (Model2Vec, Transformers.js, OpenAI-compatible HTTP) with asymmetric query encoding for BGE / Nomic / E5. On-disk cache + mid-session `refreshStale()`. |
 | `sivru` (CLI) | `search`, `index`, `from-git`, `mcp`, `observe`, `session`, `bench personal`, `bench models`, `config`, `doctor`. Persistent embedder + reranker via `sivru config`. |
-| `@sivru/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. No network egress, ever — enforced by lint rule + runtime fetch spy. |
-| `@sivru/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Replay / Costs / Bench. Dark-only. |
+| `@sivrujs/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. No network egress, ever — enforced by lint rule + runtime fetch spy. |
+| `@sivrujs/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Replay / Costs / Bench. Dark-only. |
 | `benchmarks/` | NDCG@10, agent-task token economy, perf gate. Raw data committed; see [BENCHMARKS.md](BENCHMARKS.md). |
 
 ## Numbers
@@ -150,7 +150,7 @@ sivru observe costs --since=7 --json     # same, machine-readable
 ## Pluggable embedding providers
 
 ```ts
-import { buildIndex, createTransformersProvider, createHttpEmbeddingProvider } from "@sivru/search";
+import { buildIndex, createTransformersProvider, createHttpEmbeddingProvider } from "@sivrujs/search";
 
 // Default: Xenova/all-MiniLM-L6-v2 (384-dim)
 const idx = await buildIndex("./repo", { embed: { provider: createTransformersProvider() } });

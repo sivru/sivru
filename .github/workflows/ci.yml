@@ -39,7 +39,7 @@ jobs:
 
       # `pnpm build` runs tsc with emit, which also typechecks. Run it first
       # so dist/ exists for any cross-package imports the typecheck step
-      # validates afterwards (e.g. benchmarks → @sivru/search).
+      # validates afterwards (e.g. benchmarks → @sivrujs/search).
       - name: Build
         run: pnpm build
 
@@ -70,11 +70,11 @@ jobs:
       # Need the pinned corpus for the perf bench. ~130 MB; the action's
       # default cache strips it after the run.
       - name: Fetch corpus
-        run: pnpm --filter @sivru/benchmarks fetch-corpus
+        run: pnpm --filter @sivrujs/benchmarks fetch-corpus
 
       # Compares against benchmarks/perf-baseline.json. Tolerances:
       #   chunks    +1%   (deterministic — catches chunker drift)
       #   buildMs   +50%  (CI runners vary 2-3×; only catches blowouts)
       #   peakHeap  +15%  (when baseline >= 4 MiB)
       - name: Perf gate
-        run: pnpm --filter @sivru/benchmarks bench:perf:gate
+        run: pnpm --filter @sivrujs/benchmarks bench:perf:gate

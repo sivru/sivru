@@ -1,4 +1,4 @@
-// Public types for @sivru/search.
+// Public types for @sivrujs/search.
 //
 // Engine architecture lives in DESIGN.md §4. This file is the type contract;
 // implementations land progressively across W1–W4.

@@ -1,5 +1,5 @@
 {
-  "name": "@sivru/search",
+  "name": "@sivrujs/search",
   "version": "0.1.0",
   "description": "Sivru search engine — gitignore-aware walker, code-aware chunker, BM25, cosine top-k, ranking signals, on-disk cache.",
   "license": "MIT",

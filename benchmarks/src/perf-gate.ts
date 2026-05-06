@@ -11,7 +11,7 @@
 //
 // To re-baseline (e.g. after an intentional perf change):
 //
-//   pnpm --filter @sivru/benchmarks bench:perf --json > benchmarks/perf-baseline.json
+//   pnpm --filter @sivrujs/benchmarks bench:perf --json > benchmarks/perf-baseline.json
 //
 // and commit the result.
 
@@ -98,7 +98,7 @@ export function formatFailures(failures: readonly Failure[]): string {
     "If the regression is intentional, re-baseline:",
   );
   lines.push(
-    "  pnpm --filter @sivru/benchmarks bench:perf --json > benchmarks/perf-baseline.json",
+    "  pnpm --filter @sivrujs/benchmarks bench:perf --json > benchmarks/perf-baseline.json",
   );
   return lines.join("\n");
 }
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
   const baselinePath = resolve(ROOT, "benchmarks", "perf-baseline.json");
   if (!existsSync(baselinePath)) {
     process.stderr.write(
-      `perf gate: no baseline at ${baselinePath} — run \`pnpm --filter @sivru/benchmarks bench:perf --json > benchmarks/perf-baseline.json\` first\n`,
+      `perf gate: no baseline at ${baselinePath} — run \`pnpm --filter @sivrujs/benchmarks bench:perf --json > benchmarks/perf-baseline.json\` first\n`,
     );
     process.exit(0); // soft pass — no baseline to compare against yet
   }

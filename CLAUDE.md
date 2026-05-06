@@ -98,7 +98,7 @@ pnpm typecheck
 pnpm test
 
 # Public benchmarks
-pnpm --filter @sivru/benchmarks fetch-corpus
+pnpm --filter @sivrujs/benchmarks fetch-corpus
 pnpm bench                 # BM25 + signals
 pnpm bench --hybrid        # downloads embedder model on first run
 

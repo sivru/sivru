@@ -22,8 +22,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { buildIndex } from "@sivru/search";
-import type { SearchHit, SivruIndex } from "@sivru/search";
+import { buildIndex } from "@sivrujs/search";
+import type { SearchHit, SivruIndex } from "@sivrujs/search";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
@@ -112,7 +112,7 @@ export function _clearIndexCacheForTest(): void {
 }
 
 async function loadHybridProvider(): Promise<{
-  provider: import("@sivru/search").EmbeddingProvider;
+  provider: import("@sivrujs/search").EmbeddingProvider;
 }> {
   // Honors `sivru config set embedder <name>` — looks up the persisted
   // default and resolves it via the shared model catalog. Falls back to
@@ -139,7 +139,7 @@ async function loadHybridProvider(): Promise<{
   // Default: Model2Vec (potion-retrieval-32M). Orders of magnitude faster
   // than the Transformers.js path on cold-start and avoids the
   // onnxruntime-node native crash on older Node versions.
-  const search = await import("@sivru/search");
+  const search = await import("@sivrujs/search");
   return { provider: search.createPotionProvider() };
 }
 

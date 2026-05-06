@@ -3,7 +3,7 @@
 // Output goes to `benchmarks/charts/`. SVG is committed alongside data so
 // GitHub renders it natively in markdown. Re-run after re-baselining:
 //
-//   pnpm --filter @sivru/benchmarks tsx src/render-charts.ts
+//   pnpm --filter @sivrujs/benchmarks tsx src/render-charts.ts
 //
 // No deps. The two chart types are 200 lines of SVG generation, dark-mode
 // styled to match observe-ui (`#0f1115` bg, `#d4a056` soft-amber accent,

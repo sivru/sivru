@@ -1,4 +1,4 @@
-// W6 — Hono app factory for the @sivru/observe HTTP server.
+// W6 — Hono app factory for the @sivrujs/observe HTTP server.
 // See DESIGN.md §5 (observe architecture) and §5.5 (privacy boundary).
 //
 // PRIVACY NOTE (DESIGN.md §5.5): this file is part of the inbound listener

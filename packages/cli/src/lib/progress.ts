@@ -14,7 +14,7 @@
 // TTY). On phase transitions in TTY mode we commit the previous line
 // with a newline so it survives in scrollback.
 
-import type { BuildIndexProgress } from "@sivru/search";
+import type { BuildIndexProgress } from "@sivrujs/search";
 
 export type ProgressReporterOptions = {
   /** Pretty label prefixed on every line, e.g. the model's display name. */

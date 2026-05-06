@@ -1,4 +1,4 @@
-# @sivru/search
+# @sivrujs/search
 
 **Hybrid code search engine.** Gitignore-aware walker → code-aware
 chunker → BM25 + cosine + RRF → optional cross-encoder rerank.
@@ -11,13 +11,13 @@ standalone as a TypeScript library.
 ## Install
 
 ```bash
-npm install @sivru/search
+npm install @sivrujs/search
 ```
 
 ## Quick start
 
 ```ts
-import { buildIndex, createPotionProvider } from "@sivru/search";
+import { buildIndex, createPotionProvider } from "@sivrujs/search";
 
 const idx = await buildIndex("./repo", {
   embed: { provider: createPotionProvider() },
@@ -39,7 +39,7 @@ import {
   createPotionProvider,           // Model2Vec, default — no transformer inference
   createTransformersProvider,     // @huggingface/transformers, any HF model
   createHttpEmbeddingProvider,    // OpenAI / Voyage / Ollama / vLLM / LM Studio
-} from "@sivru/search";
+} from "@sivrujs/search";
 ```
 
 `EmbeddingProvider` is two methods (`{ dim, embed }` plus optional
@@ -52,7 +52,7 @@ recipe at https://github.com/sivru/sivru/blob/main/docs/recipes/swap-embedder.md
 import {
   buildIndex,
   createTransformersCrossEncoder,
-} from "@sivru/search";
+} from "@sivrujs/search";
 
 const idx = await buildIndex("./repo", {
   embed: { provider: createPotionProvider() },

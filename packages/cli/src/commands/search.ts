@@ -27,12 +27,12 @@ import {
   buildIndex,
   createPotionProvider,
   createTransformersProvider,
-} from "@sivru/search";
+} from "@sivrujs/search";
 import type {
   BuildIndexProgress,
   EmbeddingProvider,
   SearchHit,
-} from "@sivru/search";
+} from "@sivrujs/search";
 
 import { resolveModel, resolveReranker } from "../lib/model-catalog.js";
 import { loadConfig } from "../lib/config.js";

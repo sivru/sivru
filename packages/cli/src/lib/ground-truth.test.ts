@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SivruEvent } from "@sivru/observe";
+import type { SivruEvent } from "@sivrujs/observe";
 
 import {
   extractGroundTruth,

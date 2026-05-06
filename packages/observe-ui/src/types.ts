@@ -1,4 +1,4 @@
-// Duplicated from @sivru/observe's types.ts for runtime decoupling.
+// Duplicated from @sivrujs/observe's types.ts for runtime decoupling.
 // The UI consumes JSON over /api and intentionally does not take a
 // workspace dep on the server package. Keep these in sync by hand.
 
@@ -59,7 +59,7 @@ export type TurnCost = {
   usd: number | null;
 };
 
-/** Subset of @sivru/observe's SavingsEstimate the UI needs. */
+/** Subset of @sivrujs/observe's SavingsEstimate the UI needs. */
 export type SessionSavings = {
   sessionId: string;
   tokensSaved: number;
@@ -95,7 +95,7 @@ export type AggregateSavings = {
 };
 
 // Per-event counterfactual replay (DESIGN.md §6.5 / §20.3). Mirrors
-// `@sivru/observe`'s ReplayedEvent / ReplayTotals — duplicated here for
+// `@sivrujs/observe`'s ReplayedEvent / ReplayTotals — duplicated here for
 // runtime decoupling (the UI consumes JSON over /api).
 export type ReplayedEvent = {
   index: number;

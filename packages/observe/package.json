@@ -1,5 +1,5 @@
 {
-  "name": "@sivru/observe",
+  "name": "@sivrujs/observe",
   "version": "0.1.0",
   "description": "Sivru observe — Claude Code session reader, event normalizer, savings counter, replay harness, HTTP+WS server. Strict no-network-egress (DESIGN.md §5.5).",
   "license": "MIT",

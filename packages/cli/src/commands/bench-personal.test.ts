@@ -4,7 +4,7 @@ import {
   _internal,
   extractQueriesFromEvents,
 } from "./bench-personal.js";
-import type { SivruEvent } from "@sivru/observe";
+import type { SivruEvent } from "@sivrujs/observe";
 
 function ev(
   index: number,

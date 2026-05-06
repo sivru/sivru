@@ -8,12 +8,12 @@
 
 import { basename } from "node:path";
 
-import { listSessions, readSession } from "@sivru/observe";
+import { listSessions, readSession } from "@sivrujs/observe";
 import type {
   JsonlSourceOptions,
   Session,
   SivruEvent,
-} from "@sivru/observe";
+} from "@sivrujs/observe";
 
 const DEFAULT_LIST_LIMIT = 20;
 const TEXT_TEXT_SNIPPET_MAX = 120;

@@ -1,5 +1,5 @@
 {
-  "name": "@sivru/benchmarks",
+  "name": "@sivrujs/benchmarks",
   "version": "0.0.0",
   "private": true,
   "description": "Sivru benchmarks — labeled NDCG@10 corpus + agent-task suite + TTHW measurement.",
@@ -18,7 +18,7 @@
     "lint": "echo 'TODO: configure eslint in W1'"
   },
   "dependencies": {
-    "@sivru/search": "workspace:*"
+    "@sivrujs/search": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

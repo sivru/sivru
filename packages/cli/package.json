@@ -23,11 +23,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "lint": "echo 'TODO: configure eslint in W1'",
-    "prepublishOnly": "pnpm --filter @sivru/search build && pnpm --filter @sivru/observe build && tsc -p tsconfig.json"
+    "prepublishOnly": "pnpm --filter @sivrujs/search build && pnpm --filter @sivrujs/observe build && tsc -p tsconfig.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@sivru/observe": "workspace:*",
-    "@sivru/search": "workspace:*"
+    "@sivrujs/observe": "workspace:*",
+    "@sivrujs/search": "workspace:*"
   }
 }
