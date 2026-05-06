@@ -1,0 +1,38 @@
+{
+  "name": "@sivru/search",
+  "version": "0.1.0",
+  "description": "Sivru search engine — gitignore-aware walker, code-aware chunker, BM25, cosine top-k, ranking signals, on-disk cache.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/sivru/sivru",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sivru/sivru.git",
+    "directory": "packages/search"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "echo 'TODO: configure eslint in W1'",
+    "prepublishOnly": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "ignore": "^6.0.2"
+  }
+}

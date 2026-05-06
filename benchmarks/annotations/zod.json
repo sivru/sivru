@@ -1,0 +1,122 @@
+[
+  {
+    "query": "where are all the schema types like ZodString, ZodObject, ZodArray defined",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/external.ts", "src/index.ts"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is the public z.* api exposed and re-exported as a single namespace",
+    "relevant": ["src/external.ts", "src/index.ts"],
+    "secondary": ["src/types.ts"],
+    "category": "architecture"
+  },
+  {
+    "query": "where is the standard schema spec adapter implemented",
+    "relevant": ["src/standard-schema.ts"],
+    "secondary": ["src/types.ts"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is the parse pipeline wired together internally with ParseStatus and ParseContext",
+    "relevant": ["src/helpers/parseUtil.ts"],
+    "secondary": ["src/types.ts"],
+    "category": "architecture"
+  },
+  {
+    "query": "how does .refine() add a custom validation predicate to a schema",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts", "src/ZodError.ts"],
+    "category": "behavior"
+  },
+  {
+    "query": "how does async parsing differ from sync parsing under the hood",
+    "relevant": ["src/types.ts", "src/helpers/parseUtil.ts"],
+    "secondary": [],
+    "category": "behavior"
+  },
+  {
+    "query": "how does .transform() change the output type of a parsed value",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "behavior"
+  },
+  {
+    "query": "how does a discriminated union pick the correct variant by its discriminator key",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "behavior"
+  },
+  {
+    "query": "how are default values applied when input is undefined",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "behavior"
+  },
+  {
+    "query": "where is ZodError defined and how does it format collected issues",
+    "relevant": ["src/ZodError.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "error-path"
+  },
+  {
+    "query": "where do default english error messages live for built-in issue codes",
+    "relevant": ["src/locales/en.ts"],
+    "secondary": ["src/errors.ts", "src/ZodError.ts"],
+    "category": "error-path"
+  },
+  {
+    "query": "how do you set a custom global error map for all schemas",
+    "relevant": ["src/errors.ts"],
+    "secondary": ["src/ZodError.ts", "src/helpers/parseUtil.ts"],
+    "category": "error-path"
+  },
+  {
+    "query": "how is a ZodIssue created and added during parsing of a single field",
+    "relevant": ["src/helpers/parseUtil.ts"],
+    "secondary": ["src/ZodError.ts"],
+    "category": "error-path"
+  },
+  {
+    "query": "what does parse() return on success and where is it implemented",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "api"
+  },
+  {
+    "query": "how does safeParse differ from parse at the return-type level",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "api"
+  },
+  {
+    "query": "where is the .catch() fallback handler implemented for failed schemas",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "api"
+  },
+  {
+    "query": "how does .pipe() chain two schemas so the output of one becomes the input of the next",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "api"
+  },
+  {
+    "query": "how does ParseStatus accumulate validity across nested object fields",
+    "relevant": ["src/helpers/parseUtil.ts"],
+    "secondary": ["src/types.ts"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how is deepPartial computed at the type level for nested object schemas",
+    "relevant": ["src/helpers/partialUtil.ts"],
+    "secondary": ["src/types.ts"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how does ZodLazy support self-referencing recursive schemas",
+    "relevant": ["src/types.ts"],
+    "secondary": ["src/helpers/parseUtil.ts"],
+    "category": "data-flow"
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "query": "how do high-level functions like requests.get and requests.post dispatch to a session",
+    "relevant": ["src/requests/api.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is the Session class organized and what request-state does it persist",
+    "relevant": ["src/requests/sessions.py"],
+    "secondary": ["src/requests/adapters.py", "src/requests/cookies.py"],
+    "category": "architecture"
+  },
+  {
+    "query": "how does the HTTP adapter actually send requests over the wire to urllib3",
+    "relevant": ["src/requests/adapters.py"],
+    "secondary": ["src/requests/sessions.py", "src/requests/models.py"],
+    "category": "architecture"
+  },
+  {
+    "query": "where are the Request, PreparedRequest, and Response models defined",
+    "relevant": ["src/requests/models.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is HTTP basic auth implemented and applied to an outgoing request",
+    "relevant": ["src/requests/auth.py"],
+    "secondary": ["src/requests/sessions.py", "src/requests/models.py"],
+    "category": "behavior"
+  },
+  {
+    "query": "how are cookies persisted across multiple requests within a single session",
+    "relevant": ["src/requests/cookies.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "behavior"
+  },
+  {
+    "query": "how do redirect chains get followed automatically",
+    "relevant": ["src/requests/sessions.py"],
+    "secondary": ["src/requests/models.py", "src/requests/adapters.py"],
+    "category": "behavior"
+  },
+  {
+    "query": "how can I register a hook to inspect every response before it returns",
+    "relevant": ["src/requests/hooks.py"],
+    "secondary": ["src/requests/sessions.py", "src/requests/models.py"],
+    "category": "behavior"
+  },
+  {
+    "query": "how is response content streamed and decoded chunk by chunk",
+    "relevant": ["src/requests/models.py"],
+    "secondary": ["src/requests/utils.py"],
+    "category": "behavior"
+  },
+  {
+    "query": "what exceptions can a request raise and how are they organized in a hierarchy",
+    "relevant": ["src/requests/exceptions.py"],
+    "secondary": ["src/requests/adapters.py", "src/requests/sessions.py"],
+    "category": "error-path"
+  },
+  {
+    "query": "how does a connection timeout get translated into a Timeout exception",
+    "relevant": ["src/requests/adapters.py"],
+    "secondary": ["src/requests/exceptions.py"],
+    "category": "error-path"
+  },
+  {
+    "query": "how does raise_for_status decide which status codes are errors",
+    "relevant": ["src/requests/models.py"],
+    "secondary": ["src/requests/status_codes.py", "src/requests/exceptions.py"],
+    "category": "error-path"
+  },
+  {
+    "query": "how is an SSL verification failure surfaced to the caller",
+    "relevant": ["src/requests/adapters.py", "src/requests/exceptions.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "error-path"
+  },
+  {
+    "query": "where are the top-level functions get post put delete head options defined",
+    "relevant": ["src/requests/api.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "api"
+  },
+  {
+    "query": "how are HTTP status code names like ok and not_found exposed as a lookup table",
+    "relevant": ["src/requests/status_codes.py"],
+    "secondary": ["src/requests/models.py"],
+    "category": "api"
+  },
+  {
+    "query": "where is the public package surface area and what does the package export",
+    "relevant": ["src/requests/__init__.py"],
+    "secondary": ["src/requests/api.py"],
+    "category": "api"
+  },
+  {
+    "query": "how is environment-derived proxy configuration resolved from env vars and netrc",
+    "relevant": ["src/requests/utils.py"],
+    "secondary": ["src/requests/sessions.py", "src/requests/adapters.py"],
+    "category": "api"
+  },
+  {
+    "query": "how is a PreparedRequest built from a Request and merged with session defaults",
+    "relevant": ["src/requests/models.py"],
+    "secondary": ["src/requests/sessions.py"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how is a multipart form-data body assembled from files and fields",
+    "relevant": ["src/requests/models.py"],
+    "secondary": ["src/requests/utils.py"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how does the case-insensitive header dictionary preserve original casing",
+    "relevant": ["src/requests/structures.py"],
+    "secondary": ["src/requests/models.py"],
+    "category": "data-flow"
+  }
+]

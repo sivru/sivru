@@ -1,0 +1,122 @@
+[
+  {
+    "query": "how does Gson convert between Java objects and JSON at a high level",
+    "relevant": ["gson/src/main/java/com/google/gson/Gson.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/TypeAdapter.java", "gson/src/main/java/com/google/gson/TypeAdapterFactory.java"],
+    "category": "architecture"
+  },
+  {
+    "query": "how do you configure Gson with custom adapters, naming policies, and serialization options",
+    "relevant": ["gson/src/main/java/com/google/gson/GsonBuilder.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/Gson.java"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is reflection used to bind json keys to Java fields on arbitrary classes",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java", "gson/src/main/java/com/google/gson/internal/reflect/ReflectionHelper.java"],
+    "category": "architecture"
+  },
+  {
+    "query": "how is the in-memory json tree of JsonElement subtypes structured",
+    "relevant": ["gson/src/main/java/com/google/gson/JsonElement.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/JsonObject.java", "gson/src/main/java/com/google/gson/JsonArray.java", "gson/src/main/java/com/google/gson/JsonPrimitive.java"],
+    "category": "architecture"
+  },
+  {
+    "query": "how does the streaming JsonReader tokenize input one token at a time",
+    "relevant": ["gson/src/main/java/com/google/gson/stream/JsonReader.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/stream/JsonToken.java", "gson/src/main/java/com/google/gson/stream/JsonScope.java"],
+    "category": "behavior"
+  },
+  {
+    "query": "how does the streaming writer emit pretty-printed json with indentation",
+    "relevant": ["gson/src/main/java/com/google/gson/stream/JsonWriter.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/FormattingStyle.java"],
+    "category": "behavior"
+  },
+  {
+    "query": "how is the SerializedName annotation honored when reading json into a field",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/annotations/SerializedName.java", "gson/src/main/java/com/google/gson/FieldNamingStrategy.java"],
+    "category": "behavior"
+  },
+  {
+    "query": "how is the JsonAdapter annotation discovered on a class or field and applied",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/JsonAdapterAnnotationTypeAdapterFactory.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/annotations/JsonAdapter.java"],
+    "category": "behavior"
+  },
+  {
+    "query": "how are enum constants serialized using their @SerializedName overrides",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/EnumTypeAdapter.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/annotations/SerializedName.java"],
+    "category": "behavior"
+  },
+  {
+    "query": "what exceptions does parsing throw and how are they related",
+    "relevant": ["gson/src/main/java/com/google/gson/JsonParseException.java", "gson/src/main/java/com/google/gson/JsonSyntaxException.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/JsonIOException.java", "gson/src/main/java/com/google/gson/stream/MalformedJsonException.java"],
+    "category": "error-path"
+  },
+  {
+    "query": "how does the stream reader signal malformed json to the caller",
+    "relevant": ["gson/src/main/java/com/google/gson/stream/MalformedJsonException.java", "gson/src/main/java/com/google/gson/stream/JsonReader.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/JsonSyntaxException.java"],
+    "category": "error-path"
+  },
+  {
+    "query": "how is an underlying IOException wrapped into a json exception",
+    "relevant": ["gson/src/main/java/com/google/gson/JsonIOException.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/Gson.java", "gson/src/main/java/com/google/gson/internal/Streams.java"],
+    "category": "error-path"
+  },
+  {
+    "query": "where is the entry point that exposes toJson and fromJson",
+    "relevant": ["gson/src/main/java/com/google/gson/Gson.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/GsonBuilder.java"],
+    "category": "api"
+  },
+  {
+    "query": "how do I parse a json string into a JsonElement tree",
+    "relevant": ["gson/src/main/java/com/google/gson/JsonParser.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/JsonStreamParser.java", "gson/src/main/java/com/google/gson/stream/JsonReader.java"],
+    "category": "api"
+  },
+  {
+    "query": "how do I represent a generic type at runtime so it survives erasure for deserialization",
+    "relevant": ["gson/src/main/java/com/google/gson/reflect/TypeToken.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/GsonTypes.java"],
+    "category": "api"
+  },
+  {
+    "query": "what user-facing annotations does gson provide to control serialization",
+    "relevant": ["gson/src/main/java/com/google/gson/annotations/SerializedName.java", "gson/src/main/java/com/google/gson/annotations/Expose.java", "gson/src/main/java/com/google/gson/annotations/JsonAdapter.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/annotations/Since.java", "gson/src/main/java/com/google/gson/annotations/Until.java"],
+    "category": "api"
+  },
+  {
+    "query": "how does a typed object flow through the right TypeAdapter at runtime",
+    "relevant": ["gson/src/main/java/com/google/gson/Gson.java", "gson/src/main/java/com/google/gson/TypeAdapter.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/bind/TypeAdapterRuntimeTypeWrapper.java", "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how are Java collections like List and Set turned into json arrays",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/CollectionTypeAdapterFactory.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how are Java maps with non-string keys handled during serialization",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/bind/CollectionTypeAdapterFactory.java"],
+    "category": "data-flow"
+  },
+  {
+    "query": "how is a JsonElement tree converted to and from the streaming reader and writer",
+    "relevant": ["gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java", "gson/src/main/java/com/google/gson/internal/bind/JsonTreeWriter.java"],
+    "secondary": ["gson/src/main/java/com/google/gson/internal/Streams.java", "gson/src/main/java/com/google/gson/JsonElement.java"],
+    "category": "data-flow"
+  }
+]

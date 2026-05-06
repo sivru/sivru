@@ -1,0 +1,26 @@
+{
+  "name": "@sivru/benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sivru benchmarks — labeled NDCG@10 corpus + agent-task suite + TTHW measurement.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --dir src --passWithNoTests",
+    "fetch-corpus": "tsx src/fetch-corpus.ts",
+    "bench": "tsx src/runner.ts",
+    "bench:agent": "tsx src/agent-tasks.ts",
+    "bench:perf": "tsx src/perf.ts",
+    "bench:perf:gate": "tsx src/perf-gate.ts",
+    "label": "echo 'TODO: labeling tool for the corpus (W0)'",
+    "lint": "echo 'TODO: configure eslint in W1'"
+  },
+  "dependencies": {
+    "@sivru/search": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

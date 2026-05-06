@@ -1,0 +1,552 @@
+{
+  "adapter": "sivru-bm25",
+  "repos": [
+    {
+      "repo": "zod",
+      "language": "typescript",
+      "queries": [
+        {
+          "query": "where are all the schema types like ZodString, ZodObject, ZodArray defined",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how is the public z.* api exposed and re-exported as a single namespace",
+          "category": "architecture",
+          "nRelevant": 2,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "where is the standard schema spec adapter implemented",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how is the parse pipeline wired together internally with ParseStatus and ParseContext",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how does .refine() add a custom validation predicate to a schema",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does async parsing differ from sync parsing under the hood",
+          "category": "behavior",
+          "nRelevant": 2,
+          "ranks": [
+            1,
+            7
+          ],
+          "ndcg10": 0.8175295903539445
+        },
+        {
+          "query": "how does .transform() change the output type of a parsed value",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            2
+          ],
+          "ndcg10": 0.6309297535714575
+        },
+        {
+          "query": "how does a discriminated union pick the correct variant by its discriminator key",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how are default values applied when input is undefined",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "where is ZodError defined and how does it format collected issues",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "where do default english error messages live for built-in issue codes",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [
+            9
+          ],
+          "ndcg10": 0.3010299956639812
+        },
+        {
+          "query": "how do you set a custom global error map for all schemas",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how is a ZodIssue created and added during parsing of a single field",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "what does parse() return on success and where is it implemented",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does safeParse differ from parse at the return-type level",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "where is the .catch() fallback handler implemented for failed schemas",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does .pipe() chain two schemas so the output of one becomes the input of the next",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            4
+          ],
+          "ndcg10": 0.43067655807339306
+        },
+        {
+          "query": "how does ParseStatus accumulate validity across nested object fields",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        },
+        {
+          "query": "how is deepPartial computed at the type level for nested object schemas",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        },
+        {
+          "query": "how does ZodLazy support self-referencing recursive schemas",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        }
+      ],
+      "meanNdcg10": 0.6590082948831388,
+      "scored": 20,
+      "skipped": 0
+    },
+    {
+      "repo": "requests",
+      "language": "python",
+      "queries": [
+        {
+          "query": "how do high-level functions like requests.get and requests.post dispatch to a session",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            4
+          ],
+          "ndcg10": 0.43067655807339306
+        },
+        {
+          "query": "how is the Session class organized and what request-state does it persist",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            2
+          ],
+          "ndcg10": 0.6309297535714575
+        },
+        {
+          "query": "how does the HTTP adapter actually send requests over the wire to urllib3",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "where are the Request, PreparedRequest, and Response models defined",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how is HTTP basic auth implemented and applied to an outgoing request",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how are cookies persisted across multiple requests within a single session",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        },
+        {
+          "query": "how do redirect chains get followed automatically",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how can I register a hook to inspect every response before it returns",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how is response content streamed and decoded chunk by chunk",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "what exceptions can a request raise and how are they organized in a hierarchy",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how does a connection timeout get translated into a Timeout exception",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does raise_for_status decide which status codes are errors",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [
+            2
+          ],
+          "ndcg10": 0.6309297535714575
+        },
+        {
+          "query": "how is an SSL verification failure surfaced to the caller",
+          "category": "error-path",
+          "nRelevant": 2,
+          "ranks": [
+            2,
+            4
+          ],
+          "ndcg10": 0.6509209298071326
+        },
+        {
+          "query": "where are the top-level functions get post put delete head options defined",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how are HTTP status code names like ok and not_found exposed as a lookup table",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "where is the public package surface area and what does the package export",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how is environment-derived proxy configuration resolved from env vars and netrc",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        },
+        {
+          "query": "how is a PreparedRequest built from a Request and merged with session defaults",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how is a multipart form-data body assembled from files and fields",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does the case-insensitive header dictionary preserve original casing",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        }
+      ],
+      "meanNdcg10": 0.592172849751172,
+      "scored": 20,
+      "skipped": 0
+    },
+    {
+      "repo": "gson",
+      "language": "java",
+      "queries": [
+        {
+          "query": "how does Gson convert between Java objects and JSON at a high level",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            7
+          ],
+          "ndcg10": 0.3333333333333333
+        },
+        {
+          "query": "how do you configure Gson with custom adapters, naming policies, and serialization options",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            2
+          ],
+          "ndcg10": 0.6309297535714575
+        },
+        {
+          "query": "how is reflection used to bind json keys to Java fields on arbitrary classes",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [
+            6
+          ],
+          "ndcg10": 0.3562071871080222
+        },
+        {
+          "query": "how is the in-memory json tree of JsonElement subtypes structured",
+          "category": "architecture",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how does the streaming JsonReader tokenize input one token at a time",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how does the streaming writer emit pretty-printed json with indentation",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how is the SerializedName annotation honored when reading json into a field",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            3
+          ],
+          "ndcg10": 0.5
+        },
+        {
+          "query": "how is the JsonAdapter annotation discovered on a class or field and applied",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            5
+          ],
+          "ndcg10": 0.38685280723454163
+        },
+        {
+          "query": "how are enum constants serialized using their @SerializedName overrides",
+          "category": "behavior",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "what exceptions does parsing throw and how are they related",
+          "category": "error-path",
+          "nRelevant": 2,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 0.6131471927654584
+        },
+        {
+          "query": "how does the stream reader signal malformed json to the caller",
+          "category": "error-path",
+          "nRelevant": 2,
+          "ranks": [
+            8,
+            1
+          ],
+          "ndcg10": 0.8065735963827293
+        },
+        {
+          "query": "how is an underlying IOException wrapped into a json exception",
+          "category": "error-path",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "where is the entry point that exposes toJson and fromJson",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            5
+          ],
+          "ndcg10": 0.38685280723454163
+        },
+        {
+          "query": "how do I parse a json string into a JsonElement tree",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "how do I represent a generic type at runtime so it survives erasure for deserialization",
+          "category": "api",
+          "nRelevant": 1,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 1
+        },
+        {
+          "query": "what user-facing annotations does gson provide to control serialization",
+          "category": "api",
+          "nRelevant": 3,
+          "ranks": [
+            10,
+            5
+          ],
+          "ndcg10": 0.3171937659698004
+        },
+        {
+          "query": "how does a typed object flow through the right TypeAdapter at runtime",
+          "category": "data-flow",
+          "nRelevant": 2,
+          "ranks": [
+            1
+          ],
+          "ndcg10": 0.6131471927654584
+        },
+        {
+          "query": "how are Java collections like List and Set turned into json arrays",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [],
+          "ndcg10": 0
+        },
+        {
+          "query": "how are Java maps with non-string keys handled during serialization",
+          "category": "data-flow",
+          "nRelevant": 1,
+          "ranks": [
+            2
+          ],
+          "ndcg10": 0.6309297535714575
+        },
+        {
+          "query": "how is a JsonElement tree converted to and from the streaming reader and writer",
+          "category": "data-flow",
+          "nRelevant": 2,
+          "ranks": [],
+          "ndcg10": 0
+        }
+      ],
+      "meanNdcg10": 0.52875836949684,
+      "scored": 20,
+      "skipped": 0
+    }
+  ],
+  "overallMeanNdcg10": 0.5933131713770503,
+  "totalScored": 60
+}

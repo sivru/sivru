@@ -1,0 +1,30 @@
+{
+  "name": "sivru-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast code search for coding agents + agent session observability layer.",
+  "license": "MIT",
+  "homepage": "https://github.com/sivru/sivru",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sivru/sivru.git"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "bench": "pnpm --filter benchmarks run bench",
+    "bench:tthw": "pnpm --filter sivru run bench:tthw",
+    "bench:agent": "pnpm --filter benchmarks run bench:agent"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

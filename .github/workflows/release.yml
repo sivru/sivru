@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Lock-down: only this workflow can write to the npm registry. The default
+# CI workflow has read-only contents and never sees the NPM_TOKEN secret.
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the provenance attestation can reference the
+          # exact commit the tag points at.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      # `pnpm publish -r` walks the workspace topologically, skipping any
+      # package marked `private: true`, so observe-ui (Vite app, not a
+      # library) and benchmarks (internal-only) stay unpublished. The
+      # `--no-git-checks` is required because tag-triggered runs check
+      # out the tag in detached-HEAD state and pnpm refuses to publish
+      # otherwise.
+      - name: Publish
+        run: pnpm publish -r --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

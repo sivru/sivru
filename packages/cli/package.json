@@ -1,0 +1,33 @@
+{
+  "name": "sivru",
+  "version": "0.1.0",
+  "description": "Sivru CLI + MCP server — fast code search for coding agents.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/sivru/sivru",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sivru/sivru.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "sivru": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "echo 'TODO: configure eslint in W1'",
+    "prepublishOnly": "pnpm --filter @sivru/search build && pnpm --filter @sivru/observe build && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sivru/observe": "workspace:*",
+    "@sivru/search": "workspace:*"
+  }
+}

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  background: #0f1115;
+}
+
+body {
+  @apply bg-sivru-bg text-sivru-text font-sans antialiased;
+}
+
+/* Respect reduced-motion: kill transitions/animations entirely. We don't
+   ship anything fancier than hover color transitions, but the override
+   covers any future polish. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,391 @@
+{
+  "adapter": "sivru-bm25-realworld-vitest",
+  "tasks": [
+    {
+      "taskId": "vitest-1",
+      "repo": "vitest",
+      "query": "how does the test runner discover test files",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "discover",
+        "runner",
+        "files"
+      ],
+      "sivru": {
+        "tokens": 2314,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/guide/profiling-test-performance.md",
+          "docs/guide/profiling-test-performance.md",
+          "docs/guide/filtering.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 6815,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          ".claude/skills/typo-checker/SKILL.md",
+          ".github/actions/setup-playwright/action.yml"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 4501,
+      "pctTokensSaved": 66.0454878943507
+    },
+    {
+      "taskId": "vitest-2",
+      "repo": "vitest",
+      "query": "where is the snapshot serializer implemented",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "implemented",
+        "serializer",
+        "snapshot"
+      ],
+      "sivru": {
+        "tokens": 1910,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/guide/snapshot.md",
+          "docs/guide/snapshot.md",
+          "packages/vitest/src/types/global.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 7574,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          ".claude/skills/typo-checker/SKILL.md",
+          "AGENTS.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 5664,
+      "pctTokensSaved": 74.78214945867441
+    },
+    {
+      "taskId": "vitest-3",
+      "repo": "vitest",
+      "query": "how does vi.mock work under the hood",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "vi.mock",
+        "under",
+        "work"
+      ],
+      "sivru": {
+        "tokens": 2427,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/api/vi.md",
+          "docs/api/vi.md",
+          "docs/api/vi.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 6838,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          ".github/ISSUE_TEMPLATE/bug_report.yml",
+          ".github/PULL_REQUEST_TEMPLATE.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 4411,
+      "pctTokensSaved": 64.50716583796432
+    },
+    {
+      "taskId": "vitest-4",
+      "repo": "vitest",
+      "query": "what is the entry point for the CLI",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "entry",
+        "point",
+        "CLI"
+      ],
+      "sivru": {
+        "tokens": 1795,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "AGENTS.md",
+          "docs/guide/profiling-test-performance.md",
+          "packages/expect/src/types.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 9500,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          ".github/workflows/ci.yml",
+          "AGENTS.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 7705,
+      "pctTokensSaved": 81.10526315789474
+    },
+    {
+      "taskId": "vitest-5",
+      "repo": "vitest",
+      "query": "where is the watch mode implemented",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "implemented",
+        "watch",
+        "mode"
+      ],
+      "sivru": {
+        "tokens": 1732,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "packages/vitest/src/node/config/resolveConfig.ts",
+          "docs/guide/cli-generated.md",
+          "packages/vitest/src/node/cli/cli-config.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 8349,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          "AGENTS.md",
+          "README.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 6617,
+      "pctTokensSaved": 79.25500059887412
+    },
+    {
+      "taskId": "vitest-6",
+      "repo": "vitest",
+      "query": "how does the worker pool spawn isolated test contexts",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "isolated",
+        "contexts",
+        "worker"
+      ],
+      "sivru": {
+        "tokens": 2338,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/guide/improving-performance.md",
+          "docs/guide/lifecycle.md",
+          "docs/guide/parallelism.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 15691,
+        "turns": 4,
+        "filesRead": [
+          "AGENTS.md",
+          "docs/.vitepress/config.ts",
+          "docs/api/advanced/metadata.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 13353,
+      "pctTokensSaved": 85.09973870371552
+    },
+    {
+      "taskId": "vitest-7",
+      "repo": "vitest",
+      "query": "where is concurrent test scheduling handled",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "concurrent",
+        "scheduling",
+        "handled"
+      ],
+      "sivru": {
+        "tokens": 2306,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "packages/pretty-format/src/plugins/DOMElement.ts",
+          "docs/guide/parallelism.md",
+          "packages/ui/client/components/artifacts/Artifacts.vue"
+        ]
+      },
+      "baseline": {
+        "tokens": 15652,
+        "turns": 4,
+        "filesRead": [
+          "README.md",
+          "docs/.vitepress/config.ts",
+          "docs/api/advanced/artifacts.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 13346,
+      "pctTokensSaved": 85.26705852287247
+    },
+    {
+      "taskId": "vitest-8",
+      "repo": "vitest",
+      "query": "how does the reporter API work",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "reporter",
+        "API",
+        "work"
+      ],
+      "sivru": {
+        "tokens": 1714,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/guide/using-plugins.md",
+          "docs/api/vi.md",
+          "docs/guide/profiling-test-performance.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 6891,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          ".github/ISSUE_TEMPLATE/bug_report.yml",
+          ".github/PULL_REQUEST_TEMPLATE.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 5177,
+      "pctTokensSaved": 75.12697721665941
+    },
+    {
+      "taskId": "vitest-9",
+      "repo": "vitest",
+      "query": "where is the coverage adapter for v8 implemented",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "implemented",
+        "coverage",
+        "adapter"
+      ],
+      "sivru": {
+        "tokens": 1741,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/config/coverage.md",
+          "docs/guide/coverage.md",
+          "docs/config/coverage.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 8974,
+        "turns": 4,
+        "filesRead": [
+          ".claude/agents/vitest-test-writer.md",
+          "AGENTS.md",
+          "CONTRIBUTING.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 7233,
+      "pctTokensSaved": 80.5995096946735
+    },
+    {
+      "taskId": "vitest-10",
+      "repo": "vitest",
+      "query": "how are test.each tables parsed and expanded",
+      "expectedFiles": [],
+      "baselineKeywords": [
+        "test.each",
+        "expanded",
+        "tables"
+      ],
+      "sivru": {
+        "tokens": 1764,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "docs/api/test.md",
+          "docs/api/test.md",
+          "docs/api/test.md"
+        ]
+      },
+      "baseline": {
+        "tokens": 33458,
+        "turns": 4,
+        "filesRead": [
+          "docs/api/browser/locators.md",
+          "docs/api/expect.md",
+          "docs/api/test.md"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 31694,
+      "pctTokensSaved": 94.72771833343296
+    }
+  ],
+  "summary": {
+    "totalTasks": 10,
+    "sivruTokensTotal": 20041,
+    "baselineTokensTotal": 119742,
+    "tokensSavedTotal": 99701,
+    "pctTokensSavedMean": 78.65160694191123,
+    "pctTokensSavedMedian": 79.9272551467738,
+    "sivruRecallAt3": 0,
+    "baselineRecallAt3": 0,
+    "avgSivruTurns": 1,
+    "avgBaselineTurns": 4,
+    "bootstrap": {
+      "iterations": 2000,
+      "seed": 3083393505,
+      "pctTokensSavedMean": {
+        "p05": 74.05053952005882,
+        "p50": 78.6414553148691,
+        "p95": 83.18645118911547
+      },
+      "pctTokensSavedMedian": {
+        "p05": 74.78214945867441,
+        "p50": 79.9272551467738,
+        "p95": 83.18616084038361
+      },
+      "sivruRecallAt3": {
+        "p05": 0,
+        "p50": 0,
+        "p95": 0
+      },
+      "baselineRecallAt3": {
+        "p05": 0,
+        "p50": 0,
+        "p95": 0
+      }
+    }
+  }
+}

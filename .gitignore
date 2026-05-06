@@ -1,0 +1,53 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Sivru runtime caches (when implementation lands)
+.cache/
+
+# Claude Code per-user settings (keep .claude/settings.json shared, ignore local)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/*.lock
+
+# Local-only reference dirs (rename a local clone to one of these to
+# keep it out of git, or use .git/info/exclude for a per-clone ignore)
+_local/
+_upstream/
+vendor-upstream/
+
+# W0 benchmark corpus — locally cloned repos at pinned SHAs (run
+# `pnpm --filter @sivru/benchmarks fetch-corpus`); never committed.
+benchmarks/corpus/
+
+# OpenAI / model keys (defense in depth)
+openai.json
+*.safetensors
+
+# Internal planning artifacts — not for public consumption
+DESIGN.md
+docs/planning/
+docs/internal/

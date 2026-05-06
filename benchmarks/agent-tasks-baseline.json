@@ -1,0 +1,781 @@
+{
+  "adapter": "sivru-bm25",
+  "tasks": [
+    {
+      "taskId": "gson-1",
+      "repo": "gson",
+      "query": "how does Gson convert between Java objects and JSON at a high level",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/Gson.java"
+      ],
+      "baselineKeywords": [
+        "Gson",
+        "Java",
+        "convert"
+      ],
+      "sivru": {
+        "tokens": 2370,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/JsonPrimitive.java",
+          "gson/src/main/java/com/google/gson/JsonObject.java",
+          "gson/src/main/java/com/google/gson/JsonArray.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 6046,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/ExclusionStrategy.java",
+          "gson/src/main/java/com/google/gson/FieldNamingPolicy.java",
+          "gson/src/main/java/com/google/gson/FieldNamingStrategy.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 3676,
+      "pctTokensSaved": 60.800529275554084
+    },
+    {
+      "taskId": "requests-1",
+      "repo": "requests",
+      "query": "how do high-level functions like requests.get and requests.post dispatch to a session",
+      "expectedFiles": [
+        "src/requests/api.py"
+      ],
+      "baselineKeywords": [
+        "requests.post",
+        "requests.get",
+        "functions"
+      ],
+      "sivru": {
+        "tokens": 2292,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "src/requests/sessions.py",
+          "src/requests/__init__.py",
+          "src/requests/sessions.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 12389,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/__init__.py",
+          "src/requests/_internal_utils.py",
+          "src/requests/models.py"
+        ],
+        "grepHits": 5,
+        "grepTruncated": false,
+        "recallAt3": false
+      },
+      "tokensSaved": 10097,
+      "pctTokensSaved": 81.49971749132294
+    },
+    {
+      "taskId": "zod-1",
+      "repo": "zod",
+      "query": "where are all the schema types like ZodString, ZodObject, ZodArray defined",
+      "expectedFiles": [
+        "src/types.ts"
+      ],
+      "baselineKeywords": [
+        "ZodString",
+        "ZodObject",
+        "ZodArray"
+      ],
+      "sivru": {
+        "tokens": 1604,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/types.ts",
+          "src/types.ts",
+          "src/standard-schema.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 4736,
+        "turns": 4,
+        "filesRead": [
+          "src/__tests__/catch.test.ts",
+          "src/__tests__/default.test.ts",
+          "src/__tests__/firstparty.test.ts"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 3132,
+      "pctTokensSaved": 66.13175675675676
+    },
+    {
+      "taskId": "gson-2",
+      "repo": "gson",
+      "query": "how do you configure Gson with custom adapters, naming policies, and serialization options",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/GsonBuilder.java"
+      ],
+      "baselineKeywords": [
+        "serialization",
+        "configure",
+        "Gson"
+      ],
+      "sivru": {
+        "tokens": 3087,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/GsonBuilder.java",
+          "gson/src/main/java/com/google/gson/Gson.java",
+          "gson/src/main/java/com/google/gson/GsonBuilder.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 6010,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/ExclusionStrategy.java",
+          "gson/src/main/java/com/google/gson/FieldNamingPolicy.java",
+          "gson/src/main/java/com/google/gson/FieldNamingStrategy.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 2923,
+      "pctTokensSaved": 48.635607321131445
+    },
+    {
+      "taskId": "requests-2",
+      "repo": "requests",
+      "query": "how is the Session class organized and what request-state does it persist",
+      "expectedFiles": [
+        "src/requests/sessions.py"
+      ],
+      "baselineKeywords": [
+        "Session",
+        "organized",
+        "request"
+      ],
+      "sivru": {
+        "tokens": 2544,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/requests/sessions.py",
+          "src/requests/sessions.py",
+          "src/requests/adapters.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 3743,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/__init__.py",
+          "src/requests/__version__.py",
+          "src/requests/_internal_utils.py"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 1199,
+      "pctTokensSaved": 32.03312850654555
+    },
+    {
+      "taskId": "zod-2",
+      "repo": "zod",
+      "query": "how is the public z.* api exposed and re-exported as a single namespace",
+      "expectedFiles": [
+        "src/external.ts",
+        "src/index.ts"
+      ],
+      "baselineKeywords": [
+        "namespace",
+        "exported",
+        "exposed"
+      ],
+      "sivru": {
+        "tokens": 1582,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "src/standard-schema.ts",
+          "src/types.ts",
+          "src/standard-schema.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 995,
+        "turns": 4,
+        "filesRead": [
+          "src/helpers/enumUtil.ts",
+          "src/helpers/errorUtil.ts",
+          "src/helpers/partialUtil.ts"
+        ],
+        "grepHits": 7,
+        "grepTruncated": false,
+        "recallAt3": false
+      },
+      "tokensSaved": -587,
+      "pctTokensSaved": -58.99497487437186
+    },
+    {
+      "taskId": "gson-3",
+      "repo": "gson",
+      "query": "how is reflection used to bind json keys to Java fields on arbitrary classes",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"
+      ],
+      "baselineKeywords": [
+        "reflection",
+        "Java",
+        "arbitrary"
+      ],
+      "sivru": {
+        "tokens": 2681,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/ReflectionAccessFilter.java",
+          "gson/src/main/java/com/google/gson/ReflectionAccessFilter.java",
+          "gson/src/main/java/com/google/gson/ReflectionAccessFilter.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 19948,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/FieldNamingPolicy.java",
+          "gson/src/main/java/com/google/gson/FieldNamingStrategy.java",
+          "gson/src/main/java/com/google/gson/Gson.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 17267,
+      "pctTokensSaved": 86.56005614597954
+    },
+    {
+      "taskId": "requests-3",
+      "repo": "requests",
+      "query": "how does the HTTP adapter actually send requests over the wire to urllib3",
+      "expectedFiles": [
+        "src/requests/adapters.py"
+      ],
+      "baselineKeywords": [
+        "requests",
+        "adapter",
+        "urllib3"
+      ],
+      "sivru": {
+        "tokens": 2487,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/requests/adapters.py",
+          "src/requests/adapters.py",
+          "src/requests/adapters.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 3662,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/__init__.py",
+          "src/requests/__version__.py",
+          "src/requests/_internal_utils.py"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 1175,
+      "pctTokensSaved": 32.08629164391043
+    },
+    {
+      "taskId": "zod-3",
+      "repo": "zod",
+      "query": "where is the standard schema spec adapter implemented",
+      "expectedFiles": [
+        "src/standard-schema.ts"
+      ],
+      "baselineKeywords": [
+        "implemented",
+        "standard",
+        "adapter"
+      ],
+      "sivru": {
+        "tokens": 1369,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/standard-schema.ts",
+          "src/standard-schema.ts",
+          "src/types.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 41761,
+        "turns": 4,
+        "filesRead": [
+          "src/__tests__/standard-schema.test.ts",
+          "src/standard-schema.ts",
+          "src/types.ts"
+        ],
+        "grepHits": 16,
+        "grepTruncated": false,
+        "recallAt3": true
+      },
+      "tokensSaved": 40392,
+      "pctTokensSaved": 96.72182179545509
+    },
+    {
+      "taskId": "gson-4",
+      "repo": "gson",
+      "query": "how is the in-memory json tree of JsonElement subtypes structured",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/JsonElement.java"
+      ],
+      "baselineKeywords": [
+        "JsonElement",
+        "structured",
+        "subtypes"
+      ],
+      "sivru": {
+        "tokens": 2294,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/TypeAdapter.java",
+          "gson/src/main/java/com/google/gson/JsonParser.java",
+          "gson/src/main/java/com/google/gson/JsonParser.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 33055,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/Gson.java",
+          "gson/src/main/java/com/google/gson/GsonBuilder.java",
+          "gson/src/main/java/com/google/gson/JsonArray.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 30761,
+      "pctTokensSaved": 93.06005142943579
+    },
+    {
+      "taskId": "requests-4",
+      "repo": "requests",
+      "query": "where are the Request, PreparedRequest, and Response models defined",
+      "expectedFiles": [
+        "src/requests/models.py"
+      ],
+      "baselineKeywords": [
+        "PreparedRequest",
+        "Response",
+        "Request"
+      ],
+      "sivru": {
+        "tokens": 2072,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "src/requests/sessions.py",
+          "src/requests/utils.py",
+          "src/requests/sessions.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 5036,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/__init__.py",
+          "src/requests/_internal_utils.py",
+          "src/requests/_types.py"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 2964,
+      "pctTokensSaved": 58.85623510722796
+    },
+    {
+      "taskId": "zod-4",
+      "repo": "zod",
+      "query": "how is the parse pipeline wired together internally with ParseStatus and ParseContext",
+      "expectedFiles": [
+        "src/helpers/parseUtil.ts"
+      ],
+      "baselineKeywords": [
+        "ParseContext",
+        "ParseStatus",
+        "internally"
+      ],
+      "sivru": {
+        "tokens": 1729,
+        "turns": 1,
+        "recallAt3": false,
+        "topFiles": [
+          "src/types.ts",
+          "src/types.ts",
+          "src/types.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 42090,
+        "turns": 3,
+        "filesRead": [
+          "src/helpers/parseUtil.ts",
+          "src/types.ts"
+        ],
+        "grepHits": 43,
+        "grepTruncated": false,
+        "recallAt3": true
+      },
+      "tokensSaved": 40361,
+      "pctTokensSaved": 95.89213589926348
+    },
+    {
+      "taskId": "gson-5",
+      "repo": "gson",
+      "query": "how does the streaming JsonReader tokenize input one token at a time",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+      ],
+      "baselineKeywords": [
+        "JsonReader",
+        "streaming",
+        "tokenize"
+      ],
+      "sivru": {
+        "tokens": 2442,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/stream/JsonReader.java",
+          "gson/src/main/java/com/google/gson/Gson.java",
+          "gson/src/main/java/com/google/gson/Gson.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 30300,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/Gson.java",
+          "gson/src/main/java/com/google/gson/GsonBuilder.java",
+          "gson/src/main/java/com/google/gson/JsonDeserializer.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 27858,
+      "pctTokensSaved": 91.94059405940594
+    },
+    {
+      "taskId": "requests-5",
+      "repo": "requests",
+      "query": "how is HTTP basic auth implemented and applied to an outgoing request",
+      "expectedFiles": [
+        "src/requests/auth.py"
+      ],
+      "baselineKeywords": [
+        "implemented",
+        "outgoing",
+        "applied"
+      ],
+      "sivru": {
+        "tokens": 2592,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/requests/auth.py",
+          "src/requests/sessions.py",
+          "src/requests/models.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 4169,
+        "turns": 3,
+        "filesRead": [
+          "src/requests/auth.py",
+          "src/requests/status_codes.py"
+        ],
+        "grepHits": 2,
+        "grepTruncated": false,
+        "recallAt3": true
+      },
+      "tokensSaved": 1577,
+      "pctTokensSaved": 37.82681698248981
+    },
+    {
+      "taskId": "zod-5",
+      "repo": "zod",
+      "query": "how does .refine() add a custom validation predicate to a schema",
+      "expectedFiles": [
+        "src/types.ts"
+      ],
+      "baselineKeywords": [
+        ".refine",
+        "validation",
+        "predicate"
+      ],
+      "sivru": {
+        "tokens": 1778,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/__tests__/refine.test.ts",
+          "src/types.ts",
+          "src/types.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 5785,
+        "turns": 4,
+        "filesRead": [
+          "src/ZodError.ts",
+          "src/__tests__/all-errors.test.ts",
+          "src/__tests__/array.test.ts"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 4007,
+      "pctTokensSaved": 69.26534140017286
+    },
+    {
+      "taskId": "gson-6",
+      "repo": "gson",
+      "query": "how does the streaming writer emit pretty-printed json with indentation",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/stream/JsonWriter.java"
+      ],
+      "baselineKeywords": [
+        "indentation",
+        "streaming",
+        "printed"
+      ],
+      "sivru": {
+        "tokens": 2667,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/stream/JsonWriter.java",
+          "gson/src/main/java/com/google/gson/stream/JsonWriter.java",
+          "gson/src/main/java/com/google/gson/GsonBuilder.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 3116,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/JsonDeserializer.java",
+          "gson/src/main/java/com/google/gson/JsonSerializer.java",
+          "gson/src/main/java/com/google/gson/JsonStreamParser.java"
+        ],
+        "grepHits": 9,
+        "grepTruncated": false,
+        "recallAt3": false
+      },
+      "tokensSaved": 449,
+      "pctTokensSaved": 14.409499358151475
+    },
+    {
+      "taskId": "requests-6",
+      "repo": "requests",
+      "query": "how are cookies persisted across multiple requests within a single session",
+      "expectedFiles": [
+        "src/requests/cookies.py"
+      ],
+      "baselineKeywords": [
+        "persisted",
+        "requests",
+        "cookies"
+      ],
+      "sivru": {
+        "tokens": 2266,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/requests/sessions.py",
+          "src/requests/sessions.py",
+          "src/requests/cookies.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 3648,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/__init__.py",
+          "src/requests/__version__.py",
+          "src/requests/_internal_utils.py"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 1382,
+      "pctTokensSaved": 37.88377192982456
+    },
+    {
+      "taskId": "zod-6",
+      "repo": "zod",
+      "query": "how does async parsing differ from sync parsing under the hood",
+      "expectedFiles": [
+        "src/types.ts",
+        "src/helpers/parseUtil.ts"
+      ],
+      "baselineKeywords": [
+        "parsing",
+        "differ",
+        "async"
+      ],
+      "sivru": {
+        "tokens": 1732,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/types.ts",
+          "src/types.ts",
+          "src/types.ts"
+        ]
+      },
+      "baseline": {
+        "tokens": 6089,
+        "turns": 4,
+        "filesRead": [
+          "src/__tests__/array.test.ts",
+          "src/__tests__/async-parsing.test.ts",
+          "src/__tests__/async-refinements.test.ts"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 4357,
+      "pctTokensSaved": 71.55526359008047
+    },
+    {
+      "taskId": "gson-7",
+      "repo": "gson",
+      "query": "how is the SerializedName annotation honored when reading json into a field",
+      "expectedFiles": [
+        "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"
+      ],
+      "baselineKeywords": [
+        "SerializedName",
+        "annotation",
+        "honored"
+      ],
+      "sivru": {
+        "tokens": 2329,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "gson/src/main/java/com/google/gson/annotations/SerializedName.java",
+          "gson/src/main/java/com/google/gson/annotations/SerializedName.java",
+          "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"
+        ]
+      },
+      "baseline": {
+        "tokens": 5172,
+        "turns": 4,
+        "filesRead": [
+          "gson/src/main/java/com/google/gson/ExclusionStrategy.java",
+          "gson/src/main/java/com/google/gson/FieldAttributes.java",
+          "gson/src/main/java/com/google/gson/FieldNamingStrategy.java"
+        ],
+        "grepHits": 100,
+        "grepTruncated": true,
+        "recallAt3": false
+      },
+      "tokensSaved": 2843,
+      "pctTokensSaved": 54.969064191802005
+    },
+    {
+      "taskId": "requests-7",
+      "repo": "requests",
+      "query": "how do redirect chains get followed automatically",
+      "expectedFiles": [
+        "src/requests/sessions.py"
+      ],
+      "baselineKeywords": [
+        "automatically",
+        "redirect",
+        "followed"
+      ],
+      "sivru": {
+        "tokens": 1932,
+        "turns": 1,
+        "recallAt3": true,
+        "topFiles": [
+          "src/requests/sessions.py",
+          "src/requests/sessions.py",
+          "src/requests/sessions.py"
+        ]
+      },
+      "baseline": {
+        "tokens": 11686,
+        "turns": 4,
+        "filesRead": [
+          "src/requests/_types.py",
+          "src/requests/adapters.py",
+          "src/requests/api.py"
+        ],
+        "grepHits": 79,
+        "grepTruncated": false,
+        "recallAt3": false
+      },
+      "tokensSaved": 9754,
+      "pctTokensSaved": 83.46739688516173
+    }
+  ],
+  "summary": {
+    "totalTasks": 20,
+    "sivruTokensTotal": 43849,
+    "baselineTokensTotal": 249436,
+    "tokensSavedTotal": 205587,
+    "pctTokensSavedMean": 57.730005244765,
+    "pctTokensSavedMedian": 63.46614301615542,
+    "sivruRecallAt3": 0.65,
+    "baselineRecallAt3": 0.15,
+    "avgSivruTurns": 1,
+    "avgBaselineTurns": 3.9,
+    "bootstrap": {
+      "iterations": 2000,
+      "seed": 3083393505,
+      "pctTokensSavedMean": {
+        "p05": 44.035207875843675,
+        "p50": 58.21251348120627,
+        "p95": 70.11615825160135
+      },
+      "pctTokensSavedMedian": {
+        "p05": 48.635607321131445,
+        "p50": 63.46614301615542,
+        "p95": 81.49971749132294
+      },
+      "sivruRecallAt3": {
+        "p05": 0.45,
+        "p50": 0.65,
+        "p95": 0.8
+      },
+      "baselineRecallAt3": {
+        "p05": 0.05,
+        "p50": 0.15,
+        "p95": 0.3
+      }
+    }
+  }
+}

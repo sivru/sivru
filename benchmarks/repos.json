@@ -1,0 +1,23 @@
+[
+  {
+    "name": "zod",
+    "language": "typescript",
+    "url": "https://github.com/colinhacks/zod",
+    "revision": "00d7bf33af96befc452c9ca53f036b35dd45a95c",
+    "benchmark_root": "src"
+  },
+  {
+    "name": "requests",
+    "language": "python",
+    "url": "https://github.com/psf/requests",
+    "revision": "f7822f7c4185b45527f171095c4edf8777efe51b",
+    "benchmark_root": "src/requests"
+  },
+  {
+    "name": "gson",
+    "language": "java",
+    "url": "https://github.com/google/gson",
+    "revision": "8260eddffe413c132b3a38e68446da6bd083220d",
+    "benchmark_root": "gson/src/main/java"
+  }
+]
