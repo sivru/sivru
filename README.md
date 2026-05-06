@@ -7,6 +7,9 @@
 
 > **Status: 0.1.0.** Engine, CLI, MCP server, and observe-ui ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
 
+> **"Anthropic chose not to use RAG for code search. Why does this exist?"**
+> Sivru is designed to complement agentic search, not replace it — read [`WHY-SIVRU.md`](WHY-SIVRU.md) for the honest argument and where this is and isn't the right tool.
+
 ---
 
 ## What's here
@@ -183,6 +186,7 @@ Sivru is pre-1.0 — this is the moment to influence the surface. PRs welcome.
 - Path from clone to merged PR: [`CONTRIBUTING.md`](CONTRIBUTING.md) (30-minute walkthrough).
 - 30,000-foot system diagram + per-package map: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - Three benchmarks, methodology, raw data: [`BENCHMARKS.md`](BENCHMARKS.md).
+- Why this exists when Anthropic chose grep + Read: [`WHY-SIVRU.md`](WHY-SIVRU.md).
 - Recipes:
   - [Add a language to the chunker](docs/recipes/add-a-language.md)
   - [Plug in a custom embedding model](docs/recipes/swap-embedder.md)
