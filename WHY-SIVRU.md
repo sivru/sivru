@@ -11,6 +11,14 @@ Short answer: **sivru isn't competing with agentic search. It's a
 tool the agent calls when agentic search is the wrong shape for the
 question.**
 
+> **A note on terminology.** When this doc says "RAG" it means the
+> contested usage from the Anthropic-vs-RAG debate: *indexed
+> retrieval* — embeddings, vector lookups, chunking, top-k.
+> Strictly, sivru is the retrieval component; the generation happens
+> in the agent. The full system (sivru + Claude Code) is
+> retrieval-augmented generation. Calling sivru itself "RAG" is
+> loose, but it matches how the term is used in this conversation.
+
 ## The case for agentic search
 
 Anthropic's reasoning is correct, and we don't argue with it:
