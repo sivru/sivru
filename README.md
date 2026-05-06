@@ -74,26 +74,30 @@ custom queries, and what to do when ground truth is sparse:
 ## 60-second install
 
 ```bash
-git clone https://github.com/sivru/sivru.git
-cd sivru
-
-# pnpm 9.x is required. We don't use corepack — install directly:
-npm install -g pnpm@9.15.0    # one-time
-
-pnpm install
-pnpm build
-
-# Optional: put `sivru` on your PATH so you can run it from any directory.
-# `~/Library/pnpm` is already on PATH if you ran `pnpm setup` once.
-chmod +x packages/cli/dist/index.js
-ln -sf "$PWD/packages/cli/dist/index.js" ~/Library/pnpm/sivru
+# Install the CLI globally:
+npm install -g sivru
 sivru version    # → sivru 0.1.0
 
-# Hook into Claude Code
-claude mcp add sivru -s user -- node $PWD/packages/cli/dist/index.js mcp
+# Or run without installing:
+npx -y sivru help
+
+# Wire into Claude Code (one-time):
+claude mcp add sivru -s user -- npx -y sivru mcp
 ```
 
-The rest of this README assumes the symlink. Drop `sivru` and use `node $PWD/packages/cli/dist/index.js …` if you skipped that step.
+That's it. The rest of this README assumes you ran the global install or
+have `npx sivru` working.
+
+### From source (contributors only)
+
+```bash
+git clone https://github.com/sivru/sivru.git
+cd sivru
+npm install -g pnpm@9.15.0    # one-time
+pnpm install
+pnpm build
+node packages/cli/dist/index.js version
+```
 
 ## Search a repo
 
