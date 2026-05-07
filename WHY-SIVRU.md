@@ -105,6 +105,27 @@ The MCP integration supports both. `sivru.search` is one tool the
 agent can call; the agent can still call `Grep` and `Read` whenever
 it wants. **They're complementary, not exclusive.**
 
+## Local-first AND extensible-by-default
+
+Every feature with a registry, ruleset, or catalog follows three layers:
+
+1. **Built-in defaults** for out-of-the-box use.
+2. **Declarative JSON override** at `~/.config/sivru/<feature>.json`
+   (user-global) and `.sivru/<feature>.json` (per-project). No code
+   needed for common tweaks.
+3. **Code-level extension** at `.sivru/<feature>/*.ts` for the cases the
+   JSON can't express.
+
+Today this applies to embedders (`bm25`, `potion`, `minilm`, `bge-small`,
+`jina-code`, `nomic-embed` built in; any HuggingFace model via
+`hf:owner/model`; user-defined providers via the `EmbeddingProvider`
+interface) and rerankers (`ms-marco-minilm`, `bge-reranker-base`, plus
+`hf:owner/model`). The same pattern applies to every new feature on the
+roadmap (failure-mode detection rules, memory-audit checks, skill
+recommendations) — see [ROADMAP.md](ROADMAP.md).
+
+You can swap any layer without forking sivru.
+
 ## What we don't claim
 
 - We don't claim RAG is better than agentic search. It isn't, on

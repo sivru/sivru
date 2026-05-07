@@ -111,6 +111,30 @@ Code under `packages/observe/` MUST NOT make network calls. There's a
 static lint rule + a runtime fetch-spy test enforcing this. If your work
 in `observe/` needs to talk to anything, talk to the maintainer first.
 
+### Extensibility (the three-layer rule)
+
+Sivru is local-first AND extensible-by-default. Any feature with a
+registry, ruleset, catalog, or set of named choices ships three layers:
+
+1. **Built-in defaults** — work out of the box, shipped in the package.
+2. **Declarative override** — JSON / YAML at `~/.config/sivru/<feature>.json`
+   (user-global) and `.sivru/<feature>.json` (per-project, overrides
+   user-global). Common tweaks without writing code.
+3. **Code-level extension** — `~/.config/sivru/<feature>/*.ts` or
+   `.sivru/<feature>/*.ts`, dynamically loaded. Full expressiveness.
+
+Existing features that follow this shape:
+
+- **Embedders**: built-in catalog at `packages/cli/src/lib/model-catalog.ts`,
+  config override at `~/.config/sivru/config.json` (`embedder` key),
+  code extension via the `EmbeddingProvider` interface +
+  `hf:owner/model-name` escape hatch in `--embed=`.
+- **Rerankers**: same pattern as embedders.
+
+If you're adding a new feature that *could* take user input, you must
+expose at least the JSON layer in the same release. The TS-extension
+layer can land later if there's demand.
+
 ### Commits
 
 Conventional-ish prefixes (`feat`, `fix`, `docs`, `chore`, `BREAKING:`).
