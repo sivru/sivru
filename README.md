@@ -71,7 +71,9 @@ in the **Bench** tab of `sivru observe`. Full methodology, how to add
 custom queries, and what to do when ground truth is sparse:
 [BENCHMARKS.md §Benchmark 3](BENCHMARKS.md#benchmark-3--personal-bench-your-data).
 
-## 60-second install
+## Install
+
+### From npm (recommended)
 
 ```bash
 # Install the CLI globally:
@@ -80,24 +82,74 @@ sivru version    # → sivru 0.1.0
 
 # Or run without installing:
 npx -y @sivru/cli help
+```
 
-# Wire into Claude Code (one-time):
+The package on npm is `@sivru/cli`; the binary it installs is
+`sivru`. The rest of this README assumes the global install (or
+`npx -y @sivru/cli` for one-off invocations).
+
+### Wire into Claude Code
+
+```bash
 claude mcp add sivru -s user -- npx -y @sivru/cli mcp
 ```
 
-The package on npm is `@sivru/cli`; the command it installs is
-`sivru`. The rest of this README assumes the global install or
-`npx -y @sivru/cli` is working.
+Restart Claude Code. The agent now has `mcp__sivru__search` and
+`mcp__sivru__find_related` tools available alongside `Grep` / `Read`.
 
-### From source (contributors only)
+### From source (hacking on sivru)
+
+If you want to read or modify the source, run a local build, and have
+Claude Code (or your shell) use that local build:
 
 ```bash
 git clone https://github.com/sivru/sivru.git
 cd sivru
-npm install -g pnpm@9.15.0    # one-time
+
+# pnpm 9.x is required (we don't use corepack):
+npm install -g pnpm@9.15.0
+
+# Install + build all packages:
 pnpm install
 pnpm build
-node packages/cli/dist/index.js version
+
+# Expose the local build as the global `sivru` command:
+pnpm --filter @sivru/cli link --global
+
+# Verify — should print the version AND show the path to YOUR local build:
+sivru version
+which sivru     # …/sivru/packages/cli/dist/index.js (your local path, not npm)
+```
+
+If `sivru` isn't on `PATH` after the link, run `pnpm setup` once
+(adds pnpm's global bin dir to your shell startup file), then open a
+new shell.
+
+#### Claude Code with a local build
+
+Use the linked `sivru` directly — **don't use `npx -y @sivru/cli`**, that
+would fetch from npm and bypass your local build:
+
+```bash
+claude mcp add sivru -s user -- sivru mcp
+```
+
+#### Iterating
+
+After every change, rebuild the affected package:
+
+```bash
+pnpm --filter @sivru/cli build      # if you touched packages/cli/
+pnpm build                          # if you touched any of search / observe
+```
+
+The global `sivru` command picks up the change automatically (the link
+points at `packages/cli/dist/`).
+
+#### Unlink later
+
+```bash
+pnpm --filter @sivru/cli unlink --global
 ```
 
 ## Search a repo
