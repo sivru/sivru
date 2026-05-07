@@ -7,7 +7,10 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-(Nothing yet — point ad-hoc commits here as they land.)
+Targeting **0.2.0 — Tree-sitter chunker**. See
+[ROADMAP.md](ROADMAP.md) for the version-by-version plan.
+
+Ad-hoc commits between releases land here.
 
 ## [0.1.0] — 2026-05-05
 
