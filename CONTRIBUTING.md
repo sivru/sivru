@@ -144,6 +144,40 @@ to `main`.
 
 ---
 
+## Branches + design docs
+
+For anything bigger than a typo fix or a single-file refactor:
+
+1. **Branch off main.** `git checkout -b feat/<short-name>` (or
+   `fix/`, `docs/`, `chore/` as appropriate). Don't push directly to
+   `main`.
+2. **Open a draft PR early.** Even if the work isn't ready, the draft
+   PR makes CI fire and gives a place to discuss approach. Promote to
+   "Ready for review" when you're ready.
+3. **Write a design doc** for non-trivial features. Use
+   [`docs/design/TEMPLATE.md`](docs/design/TEMPLATE.md). Save it as
+   `docs/design/NNNN-<short-name>.md` (next unused four-digit number).
+   Include it in the same PR as the implementation, or as a
+   standalone PR if you want feedback on the shape before coding.
+
+When a design doc is required:
+
+- New public API surface (anything in a package's `index.ts`).
+- New architectural modules (a new directory under `src/`).
+- Changes to `BuildIndexOptions` / `EmbeddingProvider` /
+  `CrossEncoder` / MCP tool surface.
+- Anything where >1 reasonable approach exists and it's worth
+  recording why we picked one.
+
+When a design doc is **not** required:
+
+- Typo fixes, doc tweaks, dependency bumps.
+- Single-file refactors that preserve behaviour.
+- Bug fixes that don't change a public contract.
+
+If unsure: ask in the issue. Better to skip a doc on something
+trivial than write one that gets in the way.
+
 ## Pull request flow
 
 1. **Open an issue first** for non-trivial changes — link it from the PR.
