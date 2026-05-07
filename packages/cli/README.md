@@ -8,19 +8,21 @@ binary; one MCP server. Both local. Both MCP-native.
 ## Install
 
 ```bash
-npm install -g sivru
+npm install -g @sivru/cli
 ```
+
+The package is `@sivru/cli`; the command it installs is `sivru`.
 
 Or run without installing:
 
 ```bash
-npx -y sivru help
+npx -y @sivru/cli help
 ```
 
 ## Wire into Claude Code
 
 ```bash
-claude mcp add sivru -s user -- npx -y sivru mcp
+claude mcp add sivru -s user -- npx -y @sivru/cli mcp
 ```
 
 The agent can now call `mcp__sivru__search` and `mcp__sivru__find_related`

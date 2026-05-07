@@ -75,18 +75,19 @@ custom queries, and what to do when ground truth is sparse:
 
 ```bash
 # Install the CLI globally:
-npm install -g sivru
+npm install -g @sivru/cli
 sivru version    # → sivru 0.1.0
 
 # Or run without installing:
-npx -y sivru help
+npx -y @sivru/cli help
 
 # Wire into Claude Code (one-time):
-claude mcp add sivru -s user -- npx -y sivru mcp
+claude mcp add sivru -s user -- npx -y @sivru/cli mcp
 ```
 
-That's it. The rest of this README assumes you ran the global install or
-have `npx sivru` working.
+The package on npm is `@sivru/cli`; the command it installs is
+`sivru`. The rest of this README assumes the global install or
+`npx -y @sivru/cli` is working.
 
 ### From source (contributors only)
 
