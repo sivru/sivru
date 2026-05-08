@@ -126,6 +126,55 @@ recommendations) — see [ROADMAP.md](ROADMAP.md).
 
 You can swap any layer without forking sivru.
 
+## What sivru is for, longer term
+
+Code search is the visible product. The deeper bet:
+
+> Code creation is becoming easy. Code comprehension is becoming
+> hard. The gap shows up in production incidents, scaling failures,
+> security audits, and refactors nobody dares to start.
+
+Sivru sits exactly between the agent that writes code and the system
+that has to live with it. v0.1 ships search + observability;
+v0.5–v0.10 add comprehension primitives (low-context-edit signals,
+`sivru explain`, repo Map view). All descriptive by default,
+customizable to your team's policy.
+
+## Sivru is the runtime. Skills are the playbook.
+
+Skills are prompts: instructions Claude reads. They're how you teach
+the agent *when* to take an action. Skills are the right primitive
+for documenting workflows, conventions, and decision rules.
+
+Skills cannot run a search index, observe sessions, render a UI, or
+do static analysis. Sivru can. So sivru is the **runtime** that
+ships the capabilities, and `@sivru/skill` (v0.4) ships the
+**playbook** that tells Claude when to call those capabilities.
+Together they're a coaching system; alone, neither is.
+
+This places sivru downstream of the skill ecosystem, not in
+competition with it. Anyone building skills against the runtime is
+welcome.
+
+## What sivru sees, and doesn't
+
+Sivru reads the agent's session jsonl files (`~/.claude/projects/`)
+and the local git repo. From those it can infer what the agent did,
+what files were read, what tools were called, what changed.
+
+Sivru does **not** see:
+
+- PR reviews on github.com or any other web tool
+- Code read in another editor (VS Code, Cursor) without Claude Code open
+- Pair-programming or whiteboard discussions
+- Slack / email / Linear discussion of code
+
+So when sivru ships a "low-context edit" signal in v0.8, it measures
+what *the agent* read before editing — not what *the human* did. The
+limitation is real; the framing is honest. A future opt-in
+`@sivru/github` bridge package could close the human-review gap, but
+it's not on the v0.x roadmap.
+
 ## What we don't claim
 
 - We don't claim RAG is better than agentic search. It isn't, on

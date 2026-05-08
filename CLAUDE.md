@@ -3,6 +3,19 @@
 Auto-loaded by Claude Code when working under this directory. Read in
 full before doing anything.
 
+> **Read these first for strategic context** before reasoning about
+> features, roadmap, or design decisions. They contain the WHY this
+> file does not:
+>
+> - [`ROADMAP.md`](ROADMAP.md) — version-by-version plan + the seven
+>   project principles
+> - [`WHY-SIVRU.md`](WHY-SIVRU.md) — long-term direction, what sivru
+>   sees and doesn't, runtime-vs-skills positioning
+> - [`docs/design/`](docs/design/) — per-version design docs
+>   (Stub → Draft → Accepted → Implemented)
+> - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system map
+> - [`CHANGELOG.md`](CHANGELOG.md) — what's shipped
+
 ## What sivru is
 
 Code search and session observability for coding agents. Two products
