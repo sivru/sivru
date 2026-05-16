@@ -1,14 +1,36 @@
 # sivru
 
-**Code search and session observability for coding agents — both local, both MCP-native.**
+**The comprehension layer for AI-written code.** Local, MCP-native.
 
-- **Search** — agents call sivru via MCP and get ranked code chunks back in milliseconds, instead of looping through `ripgrep + Read`. Hybrid BM25 + semantic + optional cross-encoder rerank.
-- **Observe + self-benchmark** — reads your Claude Code session history, shows what the agent's actually doing, and lets you benchmark embedders + rerankers on YOUR repos.
+Code creation is becoming cheap. Code comprehension is becoming
+expensive — and as agents write more of every codebase, the gap shows
+up as incidents nobody can diagnose, refactors nobody dares start, and
+agents confidently "fixing" things that were deliberate.
+
+Sivru keeps a codebase comprehensible — to the agents writing it and
+the humans accountable for it — by making comprehension a durable,
+queryable asset of the repo itself. The goal, the uniqueness, and the
+test every release must pass: [`GOALS.md`](GOALS.md).
+
+**Today (0.1.0)** that starts with two instruments, both shipping
+end-to-end:
+
+- **Search** — agents call sivru via MCP and get ranked code chunks
+  back in milliseconds instead of looping through `ripgrep + Read`.
+  Hybrid BM25 + semantic + optional cross-encoder rerank. On how this
+  squares with Anthropic's "agentic search wins for code" —
+  [`WHY-SIVRU.md`](WHY-SIVRU.md), the honest defense of one
+  instrument.
+- **Observe + self-benchmark** — reads your Claude Code session
+  history, shows what the agent is actually doing, and benchmarks
+  embedders + rerankers on YOUR repos.
+
+**Next**, the roadmap builds the comprehension layer proper: authored
+`@sivru` context blocks (decisions recorded with a lifetime), the
+`sivru explain` primitive, an interactive codebase explainer, and a
+coaching loop that catches low-context edits. See [`ROADMAP.md`](ROADMAP.md).
 
 > **Status: 0.1.0.** Engine, CLI, MCP server, and observe-ui ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
-
-> **"Anthropic chose not to use RAG for code search. Why does this exist?"**
-> Sivru is designed to complement agentic search, not replace it — read [`WHY-SIVRU.md`](WHY-SIVRU.md) for the honest argument and where this is and isn't the right tool.
 
 ---
 

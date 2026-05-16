@@ -1,15 +1,23 @@
-# Why does sivru exist?
+# Why sivru ships a search instrument
+
+> **Scope.** This document defends one *instrument*, not the project.
+> Sivru's goal is comprehension — see [`GOALS.md`](GOALS.md). If you
+> are asking "why does sivru exist at all," that is GOALS.md. This
+> doc answers the narrower, reasonable objection: *given that
+> Anthropic found agentic search beats indexed retrieval for code,
+> why does sivru's search exist?*
 
 Anthropic's Claude Code team explicitly chose **not** to use RAG /
 vector search for code. Boris Cherny, Claude Code's lead, said it
 plainly: "early versions of Claude Code used RAG + a local vector db,
 but we found pretty quickly that agentic search generally works
-better." If Anthropic looked at this and said no, why is sivru saying
-yes?
+better." If Anthropic looked at this and said no, why does sivru ship
+a retrieval layer at all?
 
-Short answer: **sivru isn't competing with agentic search. It's a
-tool the agent calls when agentic search is the wrong shape for the
-question.**
+Short answer: **sivru's search isn't competing with agentic search.
+It's a tool the agent calls when agentic search is the wrong shape
+for the question — and it is one instrument of the comprehension
+goal, not the goal itself.**
 
 > **A note on terminology.** When this doc says "RAG" it means the
 > contested usage from the Anthropic-vs-RAG debate: *indexed
@@ -126,19 +134,18 @@ recommendations) — see [ROADMAP.md](ROADMAP.md).
 
 You can swap any layer without forking sivru.
 
-## What sivru is for, longer term
+## Search is one instrument; the goal is comprehension
 
-Code search is the visible product. The deeper bet:
+Everything above defends *search*. Search is not why sivru exists —
+it is the first instrument of a larger goal: keeping a codebase
+comprehensible to the agents writing it and the humans accountable
+for it, as AI drives the cost of producing code toward zero.
 
-> Code creation is becoming easy. Code comprehension is becoming
-> hard. The gap shows up in production incidents, scaling failures,
-> security audits, and refactors nobody dares to start.
-
-Sivru sits exactly between the agent that writes code and the system
-that has to live with it. v0.1 ships search + observability;
-v0.5–v0.10 add comprehension primitives (low-context-edit signals,
-`sivru explain`, repo Map view). All descriptive by default,
-customizable to your team's policy.
+The goal in full, what makes it unique, and the test every release
+must pass against it: [`GOALS.md`](GOALS.md). The version-by-version
+plan, with each release classed as Foundation / Spine / Supporting /
+Proof: [`ROADMAP.md`](ROADMAP.md). Search is a Supporting instrument
+there — load-bearing, but not the spine.
 
 ## Sivru is the runtime. Skills are the playbook.
 

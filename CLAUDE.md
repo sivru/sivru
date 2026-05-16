@@ -7,10 +7,13 @@ full before doing anything.
 > features, roadmap, or design decisions. They contain the WHY this
 > file does not:
 >
+> - [`GOALS.md`](GOALS.md) — the north star: the goal, what's unique,
+>   and the goal test every release must pass. Read this first.
 > - [`ROADMAP.md`](ROADMAP.md) — version-by-version plan + the seven
->   project principles
-> - [`WHY-SIVRU.md`](WHY-SIVRU.md) — long-term direction, what sivru
->   sees and doesn't, runtime-vs-skills positioning
+>   project principles + the goal-test classification
+> - [`WHY-SIVRU.md`](WHY-SIVRU.md) — the honest competitive defense of
+>   search (one instrument), what sivru sees and doesn't,
+>   runtime-vs-skills positioning
 > - [`docs/design/`](docs/design/) — per-version design docs
 >   (Stub → Draft → Accepted → Implemented)
 > - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system map
