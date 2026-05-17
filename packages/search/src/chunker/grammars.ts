@@ -25,7 +25,7 @@ export type NodeRule =
   | { readonly type: string; readonly when: (node: SyntaxNode) => boolean };
 
 /** Value node types that make a `lexical_declaration` worth chunking. */
-const FUNCTION_VALUE_TYPES = new Set([
+export const FUNCTION_VALUE_TYPES = new Set([
   "arrow_function",
   "function_expression",
   "function",
@@ -111,24 +111,21 @@ export function isChunkableLanguage(
 // --- Memoised loading -------------------------------------------------
 
 let parserInitPromise: Promise<void> | null = null;
-let sharedParser: Parser | null = null;
-// Keyed by WASM filename so `javascript` and `jsx` share one load.
+// Both keyed by WASM filename so `javascript` and `jsx` share one entry.
 const grammarCache = new Map<string, Promise<Parser.Language>>();
+const parserCache = new Map<string, Promise<Parser>>();
 
 function initParser(): Promise<void> {
   if (parserInitPromise === null) parserInitPromise = Parser.init();
   return parserInitPromise;
 }
 
-/**
- * The process-wide `Parser` instance. One parser, reused with
- * `setLanguage()` per file — `parse()` is synchronous so there is no
- * cross-file interleaving. Created after `Parser.init()` resolves.
- */
-export async function getParser(): Promise<Parser> {
-  await initParser();
-  if (sharedParser === null) sharedParser = new Parser();
-  return sharedParser;
+function wasmFileFor(language: string): string {
+  const wasmFile = GRAMMAR_WASM[language];
+  if (wasmFile === undefined) {
+    throw new Error(`SIVRU-E1001: no bundled tree-sitter grammar for language "${language}"`);
+  }
+  return wasmFile;
 }
 
 /**
@@ -138,11 +135,8 @@ export async function getParser(): Promise<Parser> {
  * @throws if `language` has no bundled grammar (`SIVRU-E1001`) or the
  *   WASM fails to load (`SIVRU-E1002`).
  */
-export async function loadGrammar(language: string): Promise<Parser.Language> {
-  const wasmFile = GRAMMAR_WASM[language];
-  if (wasmFile === undefined) {
-    throw new Error(`SIVRU-E1001: no bundled tree-sitter grammar for language "${language}"`);
-  }
+function loadGrammar(language: string): Promise<Parser.Language> {
+  const wasmFile = wasmFileFor(language);
   let cached = grammarCache.get(wasmFile);
   if (cached === undefined) {
     cached = (async () => {
@@ -156,6 +150,31 @@ export async function loadGrammar(language: string): Promise<Parser.Language> {
       }
     })();
     grammarCache.set(wasmFile, cached);
+  }
+  return cached;
+}
+
+/**
+ * A `Parser` with `language`'s grammar already set, memoised per grammar.
+ *
+ * One parser per language — never a shared parser swapped via
+ * `setLanguage()`. Concurrent `chunkFile` calls for different languages
+ * therefore cannot race: each call parses with its own dedicated parser,
+ * and `parse()` itself is synchronous.
+ *
+ * @throws `SIVRU-E1001` (no grammar) / `SIVRU-E1002` (WASM load failed).
+ */
+export async function getParser(language: string): Promise<Parser> {
+  const wasmFile = wasmFileFor(language);
+  let cached = parserCache.get(wasmFile);
+  if (cached === undefined) {
+    cached = (async () => {
+      const grammar = await loadGrammar(language);
+      const parser = new Parser();
+      parser.setLanguage(grammar);
+      return parser;
+    })();
+    parserCache.set(wasmFile, cached);
   }
   return cached;
 }

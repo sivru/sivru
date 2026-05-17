@@ -187,6 +187,40 @@ describe("treeSitterChunks — lexical_declaration predicate", () => {
     expect(syms).not.toContain("NUMBER");
     expect(syms).not.toContain("re");
   });
+
+  it("names the function declarator in a mixed multi-declarator statement", async () => {
+    // The declaration is whitelisted because `build` is a function — the
+    // symbol name must be `build`, not the leading non-function `NUM`.
+    const src = "const NUM = 1, build = () => 42;\n";
+    const chunks = await treeSitterChunks("m.ts", src, "typescript");
+    const lex = chunks.find((c) => c.nodeType === "lexical_declaration");
+    expect(lex?.symbolName).toBe("build");
+  });
+});
+
+describe("treeSitterChunks — concurrency", () => {
+  it("chunks multiple languages concurrently without parser cross-talk", async () => {
+    // One parser per language: a parallel run must never parse a file with
+    // another language's grammar. Each result must be correct for its lang.
+    const [ts, py, go, java] = await Promise.all([
+      treeSitterChunks(
+        "a.ts",
+        "export function alpha(x: number) {\n  return x + 1;\n}\n",
+        "typescript",
+      ),
+      treeSitterChunks("b.py", "def beta(x):\n    return x + 1\n", "python"),
+      treeSitterChunks("c.go", "package m\nfunc Gamma() int {\n\treturn 1\n}\n", "go"),
+      treeSitterChunks(
+        "D.java",
+        "class D {\n    int delta() {\n        return 1;\n    }\n}\n",
+        "java",
+      ),
+    ]);
+    expect(ts.some((c) => c.nodeType === "function_declaration" && c.symbolName === "alpha")).toBe(true);
+    expect(py.some((c) => c.nodeType === "function_definition" && c.symbolName === "beta")).toBe(true);
+    expect(go.some((c) => c.nodeType === "function_declaration" && c.symbolName === "Gamma")).toBe(true);
+    expect(java.some((c) => c.nodeType === "method_declaration" && c.symbolName === "delta")).toBe(true);
+  });
 });
 
 describe("treeSitterChunks — gap-fill coverage", () => {

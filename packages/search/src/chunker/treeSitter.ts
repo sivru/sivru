@@ -2,7 +2,9 @@
 // definition (function / class / method), and gap-fills every line range
 // no node covers so the file is always indexed in full. See DESIGN-0001.
 //
-// Coverage invariant: every source line lands in exactly one chunk.
+// Coverage invariant: every source line lands in at least one chunk
+// (line windows overlap, as in line-fallback — the guarantee is "never
+// zero", so no code is silently dropped).
 //   - Whitelisted AST nodes (grammars.ts) → `kind: "tree-sitter"` chunks,
 //     carrying `nodeType` + `symbolName`, with the leading doc comment
 //     attached.
@@ -14,9 +16,9 @@
 import type { Chunk, ChunkOptions } from "../types.js";
 import {
   CONTAINER_TYPES,
+  FUNCTION_VALUE_TYPES,
   NODE_TYPES_TO_CHUNK,
   getParser,
-  loadGrammar,
   type NodeRule,
   type SyntaxNode,
 } from "./grammars.js";
@@ -86,11 +88,18 @@ function symbolNameOf(node: SyntaxNode): string | undefined {
   // `lexical_declaration` / `type_declaration` carry the name one level
   // down, on the declarator / spec.
   if (node.type === "lexical_declaration") {
+    // The declaration was whitelisted because *some* declarator holds a
+    // function — name that one, not a leading non-function declarator.
+    let firstName: string | undefined;
     for (const d of node.namedChildren) {
       if (d.type !== "variable_declarator") continue;
       const n = d.childForFieldName("name");
-      if (n !== null) return n.text;
+      if (n === null) continue;
+      if (firstName === undefined) firstName = n.text;
+      const value = d.childForFieldName("value");
+      if (value !== null && FUNCTION_VALUE_TYPES.has(value.type)) return n.text;
     }
+    return firstName;
   }
   if (node.type === "type_declaration") {
     for (const s of node.namedChildren) {
@@ -170,11 +179,15 @@ export async function treeSitterChunks(
     throw new Error(`SIVRU-E1001: no node-type whitelist for language "${language}"`);
   }
 
-  const parser = await getParser();
-  parser.setLanguage(await loadGrammar(language));
+  // One parser per language (grammars.ts) — never a shared parser, so a
+  // concurrent chunkFile call for another language cannot interfere.
+  const parser = await getParser(language);
 
   const tree = parser.parse(content);
   try {
+    if (!tree) {
+      throw new Error(`SIVRU-E1003: tree-sitter returned no tree for "${filePath}"`);
+    }
     const nodes: SyntaxNode[] = [];
     collectChunkNodes(tree.rootNode, rules, nodes);
     const comments = indexComments(tree.rootNode, lines);
@@ -193,7 +206,10 @@ export async function treeSitterChunks(
           ),
           totalLines,
         );
-        const startLine = Math.max(1, attachLeadingComment(rawStart, comments));
+        const startLine = Math.min(
+          totalLines,
+          Math.max(1, attachLeadingComment(rawStart, comments)),
+        );
         return { startLine, endLine, nodeType: node.type, symbolName: symbolNameOf(node) };
       })
       .sort((a, b) => a.startLine - b.startLine);
@@ -206,8 +222,10 @@ export async function treeSitterChunks(
       nodeType: string,
       symbolName: string | undefined,
     ): void => {
+      // `symbolName` is optional (anonymous nodes have none); `nodeType` is
+      // always present on a tree-sitter chunk.
       const extra = {
-        ...(nodeType !== undefined ? { nodeType } : {}),
+        nodeType,
         ...(symbolName !== undefined ? { symbolName } : {}),
       };
       if (endLine - startLine + 1 > MAX_NODE_LINES) {
@@ -264,6 +282,7 @@ export async function treeSitterChunks(
     chunks.sort((a, b) => a.startLine - b.startLine);
     return chunks;
   } finally {
-    tree.delete();
+    // `?.` so a null tree (the SIVRU-E1003 path) doesn't mask the throw.
+    tree?.delete();
   }
 }
