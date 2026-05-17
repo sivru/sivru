@@ -192,6 +192,25 @@ Top-level definitions and methods are the right grain. Loops and ifs
 are excluded — they fragment a function into tiny context-free
 chunks.
 
+### Collection rule — outermost node, descend into containers
+
+The tree is walked top-down. When a whitelisted node is reached:
+
+- If it is a **container type** (`class_declaration`,
+  `class_definition`) *and* holds whitelisted descendants, it is **not**
+  emitted as one chunk — the walk descends and chunks its members
+  (methods, constructors) individually. The container's own
+  scaffolding (declaration line, fields, blank lines) falls to
+  gap-fill. This keeps a large class from becoming one giant chunk and
+  gives method-level granularity for retrieval and the v0.6 layer.
+- Otherwise the node is emitted as one chunk and the walk does **not**
+  descend into it — a function's inner functions stay in one chunk.
+
+A container with no whitelisted members (a class of only fields) is
+emitted whole. Because the walk recurses through non-whitelisted nodes,
+`export`-wrapped declarations are found without special handling.
+Chunks never overlap between distinct symbols.
+
 ### Full line coverage — gap-fill (D3)
 
 A node-whitelist chunker only emits chunks for code *inside*
@@ -208,11 +227,14 @@ The tree-sitter chunker therefore emits **both**:
 2. **Line-fallback chunks** for every line range no node chunk
    covers.
 
-Every line lands in exactly one chunk. Ordering matters and is fixed:
+Every line lands in **at least one** chunk — no line is ever dropped.
+(Line windows overlap by design, as in the line-fallback chunker, so
+a line may appear in two adjacent windows; the guarantee is "never
+zero".) Ordering matters and is fixed:
 
 ```
 parse
-  → collect whitelisted nodes
+  → collect whitelisted nodes (outermost; descend into containers)
   → attach leading doc comment to each node  (extends node startLine up)
   → cap oversized nodes (D5)
   → compute line ranges NOT covered by any node chunk
@@ -220,7 +242,7 @@ parse
   → merge, sort by startLine
 ```
 
-Doc-comment attachment runs **before** gap-fill so the "exactly once"
+Doc-comment attachment runs **before** gap-fill so the coverage
 invariant is unambiguous: an attached comment belongs to the node
 chunk, and gap-fill never re-covers it.
 
@@ -328,8 +350,8 @@ mid-implementation. The roadmap's per-doc `Targets:` reconciliation
   each with a node-type whitelist tested against a committed fixture.
 - `chunkFile()` is async; grammar loading is internal and memoized;
   there is no separate preload step.
-- Every line of every covered-language file lands in exactly one
-  chunk (node chunks + gap-fill line chunks).
+- Every line of every covered-language file lands in at least one
+  chunk (node chunks + gap-fill line chunks) — no line dropped.
 - No chunk exceeds the oversized-node cap.
 - Tree-sitter chunks set `kind: "tree-sitter"`, `nodeType`, and
   `symbolName` (where the node is named); line/gap chunks leave them
@@ -355,7 +377,7 @@ mid-implementation. The roadmap's per-doc `Targets:` reconciliation
   `symbolName`, doc-comment attachment (incl. a license-header-not-
   attached edge case).
 - **Property test — full coverage:** a mostly-top-level-code fixture
-  → assert every source line is in exactly one chunk.
+  → assert every source line is covered by at least one chunk.
 - **Property test — cap:** a big-function fixture → assert split,
   every sub-chunk under the cap, `nodeType`/`symbolName` preserved.
 - **`lexical_declaration` predicate:** a file with top-level

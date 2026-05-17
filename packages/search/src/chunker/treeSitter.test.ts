@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import type { Chunk } from "../types.js";
+import { buildIndex } from "../search.js";
 import { treeSitterChunks } from "./treeSitter.js";
+
+const fixturesDir = fileURLToPath(new URL("./__fixtures__", import.meta.url));
 
 function fixture(rel: string): string {
   return readFileSync(fileURLToPath(new URL(`./__fixtures__/${rel}`, import.meta.url)), "utf8");
@@ -241,5 +244,50 @@ describe("treeSitterChunks — edge cases", () => {
     const src = "export const App = () => <div className=\"x\">hi</div>;\n";
     const chunks = await treeSitterChunks("App.tsx", src, "tsx");
     expect(chunks.some((c) => c.symbolName === "App")).toBe(true);
+  });
+
+  it("parses jsx (via the JavaScript grammar)", async () => {
+    const src = [
+      "function Button(props) {", // 1
+      "  const label = props.label;", // 2
+      "  return <button onClick={props.onClick}>{label}</button>;", // 3
+      "}", // 4
+    ].join("\n");
+    const chunks = await treeSitterChunks("Button.jsx", src, "jsx");
+    expect(
+      chunks.some(
+        (c) => c.kind === "tree-sitter" && c.symbolName === "Button" &&
+          c.nodeType === "function_declaration",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("buildIndex integration — tree-sitter chunks reach search results", () => {
+  it("indexes the mixed-language fixture tree end to end", async () => {
+    const index = await buildIndex(fixturesDir);
+    const hits = await index.searchBM25("fetch a user record by id", 10);
+    expect(hits.length).toBeGreaterThan(0);
+    // A tree-sitter node chunk, carrying its symbol identity, ranks for the query.
+    expect(
+      hits.some((h) => h.chunk.kind === "tree-sitter" && h.chunk.symbolName === "fetchUser"),
+    ).toBe(true);
+  });
+
+  it("carries nodeType + symbolName through to Python and Go results", async () => {
+    const index = await buildIndex(fixturesDir);
+    const py = await index.searchBM25("fetch_user store get", 10);
+    expect(
+      py.some((h) => h.chunk.language === "python" && h.chunk.symbolName === "fetch_user"),
+    ).toBe(true);
+    const go = await index.searchBM25("FetchUser Greet user", 10);
+    expect(
+      go.some(
+        (h) =>
+          h.chunk.language === "go" &&
+          h.chunk.kind === "tree-sitter" &&
+          h.chunk.nodeType !== undefined,
+      ),
+    ).toBe(true);
   });
 });
