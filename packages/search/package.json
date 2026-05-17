@@ -18,20 +18,27 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-grammars.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "echo 'TODO: configure eslint in W1'",
-    "prepublishOnly": "tsc -p tsconfig.json"
+    "prepublishOnly": "tsc -p tsconfig.json && node scripts/copy-grammars.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",
-    "ignore": "^6.0.2"
+    "ignore": "^6.0.2",
+    "web-tree-sitter": "0.24.7"
+  },
+  "devDependencies": {
+    "tree-sitter-wasms": "0.1.13"
   }
 }

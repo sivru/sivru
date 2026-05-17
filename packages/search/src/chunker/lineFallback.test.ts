@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lineFallbackChunks } from "./lineFallback.js";
+import { lineFallbackChunks, windowLines } from "./lineFallback.js";
 
 const filePath = "src/example.ts";
 
@@ -87,5 +87,48 @@ describe("lineFallbackChunks", () => {
       expect(chunk.language).toBe("python");
       expect(chunk.kind).toBe("line");
     }
+  });
+});
+
+describe("windowLines", () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `l${i + 1}`);
+
+  it("windows a sub-range with absolute 1-based line numbers", () => {
+    const chunks = windowLines(lines, filePath, "go", 10, 14, 50, 5);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.startLine).toBe(10);
+    expect(chunks[0]?.endLine).toBe(14);
+    expect(chunks[0]?.content).toBe("l10\nl11\nl12\nl13\nl14");
+    expect(chunks[0]?.kind).toBe("line");
+    expect(chunks[0]?.language).toBe("go");
+  });
+
+  it("returns [] for an empty range (from > to)", () => {
+    expect(windowLines(lines, filePath, null, 12, 11, 50, 5)).toEqual([]);
+  });
+
+  it("splits a sub-range longer than maxLines into overlapping windows", () => {
+    // Range 1..30, maxLines 10, overlap 2 → step 8 → starts 1, 9, 17, 25.
+    const chunks = windowLines(lines, filePath, null, 1, 30, 10, 2);
+    expect(chunks.map((c) => [c.startLine, c.endLine])).toEqual([
+      [1, 10],
+      [9, 18],
+      [17, 26],
+      [25, 30],
+    ]);
+  });
+
+  it("covers every line of the windowed range", () => {
+    const chunks = windowLines(lines, filePath, null, 4, 27, 7, 1);
+    const covered = new Set<number>();
+    for (const c of chunks) {
+      for (let l = c.startLine; l <= c.endLine; l++) covered.add(l);
+    }
+    for (let l = 4; l <= 27; l++) expect(covered.has(l)).toBe(true);
+  });
+
+  it("rejects invalid window/overlap combinations", () => {
+    expect(() => windowLines(lines, filePath, null, 1, 5, 0, 0)).toThrow();
+    expect(() => windowLines(lines, filePath, null, 1, 5, 5, 5)).toThrow();
   });
 });
