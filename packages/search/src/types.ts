@@ -21,6 +21,19 @@ export type Chunk = {
    * `line` for the fixed-window fallback chunker.
    */
   kind: ChunkKind;
+  /**
+   * AST node type that produced this chunk (e.g. `function_declaration`,
+   * `class_definition`). Set by the tree-sitter chunker; `undefined` for
+   * line-fallback and gap-fill chunks. See DESIGN-0001.
+   */
+  nodeType?: string;
+  /**
+   * Symbol name extracted from the node's identifier child (e.g.
+   * `processPayment`). `undefined` for line/gap chunks and anonymous
+   * nodes. Captured so the v0.6 `@sivru`-block layer binds to symbols
+   * without re-parsing; also usable by ranking signals.
+   */
+  symbolName?: string;
 };
 
 export type SearchResult = {
