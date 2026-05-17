@@ -8,9 +8,43 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 ## [Unreleased]
 
 Targeting **0.2.0 — Tree-sitter chunker**. See
-[ROADMAP.md](ROADMAP.md) for the version-by-version plan.
+[ROADMAP.md](ROADMAP.md) and
+[DESIGN-0001](docs/design/0001-tree-sitter-chunker.md).
 
-Ad-hoc commits between releases land here.
+### Added
+
+- **Tree-sitter chunker** (`@sivru/search`). Files in TypeScript,
+  JavaScript, Python, Go, and Java (7 language ids incl. tsx/jsx) are
+  chunked on function / class / method boundaries instead of fixed
+  50-line windows. The AST view is the substrate the v0.6–0.8
+  authored-context layer extracts from; the retrieval gain ships with
+  it. Every other language keeps the line-window chunker.
+- `Chunk` gains `nodeType` (the AST node that produced the chunk) and
+  `symbolName` (its identifier) — populated by the tree-sitter path,
+  `undefined` for line/gap chunks.
+- The 6 grammar WASM files are bundled in the package; no runtime
+  download. `web-tree-sitter` and `tree-sitter-wasms` pinned exact.
+- `windowLines()` — a range-aware line-window primitive reused for
+  gap-fill and oversized-node splitting.
+
+### Changed
+
+- **BREAKING: `chunkFile()` is now async** (`Promise<Chunk[]>`). It
+  awaits grammar load (memoised after first use). Internal callers
+  already awaited; external callers must add `await`.
+- Chunking runs on the main thread — the `worker_threads` pool is
+  removed (`BuildIndexOptions.workers`, `WORKER_FILE_THRESHOLD`).
+  Tree-sitter parses in milliseconds per file and a worker pool cannot
+  share loaded grammars; one `Parser` is simpler and uses less memory.
+- `CACHE_FORMAT_VERSION` 1 → 2 — v0.1 indexes rebuild once on upgrade.
+- A tree-sitter file is always fully indexed: AST node chunks plus
+  line-fallback "gap" chunks over every range no node covers, so no
+  line is silently dropped. Oversized nodes are line-windowed.
+- Bench re-baselined on the 3-repo / 60-query corpus. BM25 NDCG@10
+  0.5933 → 0.6168 (**+0.024**). Hybrid 0.6013 → 0.5908 (**−0.011** —
+  within point-estimate noise on a small-function corpus; see the
+  bench-corpus TODO). Perf: 993 → 3531 chunks at flat build time
+  (570 → 585 ms) — tree-sitter parsing is not the bottleneck.
 
 ## [0.1.0] — 2026-05-05
 

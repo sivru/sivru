@@ -35,9 +35,9 @@
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            3
+            4
           ],
-          "ndcg10": 0.5
+          "ndcg10": 0.43067655807339306
         },
         {
           "query": "how does .refine() add a custom validation predicate to a schema",
@@ -51,10 +51,10 @@
           "category": "behavior",
           "nRelevant": 2,
           "ranks": [
-            4,
-            3
+            3,
+            1
           ],
-          "ndcg10": 0.5706417189553201
+          "ndcg10": 0.9197207891481876
         },
         {
           "query": "how does .transform() change the output type of a parsed value",
@@ -79,9 +79,9 @@
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            4
+            3
           ],
-          "ndcg10": 0.43067655807339306
+          "ndcg10": 0.5
         },
         {
           "query": "where is ZodError defined and how does it format collected issues",
@@ -97,16 +97,18 @@
           "category": "error-path",
           "nRelevant": 1,
           "ranks": [
-            1
+            6
           ],
-          "ndcg10": 1
+          "ndcg10": 0.3562071871080222
         },
         {
           "query": "how do you set a custom global error map for all schemas",
           "category": "error-path",
           "nRelevant": 1,
-          "ranks": [],
-          "ndcg10": 0
+          "ranks": [
+            10
+          ],
+          "ndcg10": 0.2890648263178879
         },
         {
           "query": "how is a ZodIssue created and added during parsing of a single field",
@@ -120,9 +122,9 @@
           "category": "api",
           "nRelevant": 1,
           "ranks": [
-            1
+            2
           ],
-          "ndcg10": 1
+          "ndcg10": 0.6309297535714575
         },
         {
           "query": "how does safeParse differ from parse at the return-type level",
@@ -165,9 +167,9 @@
           "category": "data-flow",
           "nRelevant": 1,
           "ranks": [
-            3
+            4
           ],
-          "ndcg10": 0.5
+          "ndcg10": 0.43067655807339306
         },
         {
           "query": "how does ZodLazy support self-referencing recursive schemas",
@@ -179,7 +181,7 @@
           "ndcg10": 1
         }
       ],
-      "meanNdcg10": 0.6048255558752481,
+      "meanNdcg10": 0.5826234256384295,
       "scored": 20,
       "skipped": 0
     },
@@ -192,18 +194,18 @@
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            3
+            5
           ],
-          "ndcg10": 0.5
+          "ndcg10": 0.38685280723454163
         },
         {
           "query": "how is the Session class organized and what request-state does it persist",
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            2
+            1
           ],
-          "ndcg10": 0.6309297535714575
+          "ndcg10": 1
         },
         {
           "query": "how does the HTTP adapter actually send requests over the wire to urllib3",
@@ -219,18 +221,18 @@
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            6
+            2
           ],
-          "ndcg10": 0.3562071871080222
+          "ndcg10": 0.6309297535714575
         },
         {
           "query": "how is HTTP basic auth implemented and applied to an outgoing request",
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            2
+            1
           ],
-          "ndcg10": 0.6309297535714575
+          "ndcg10": 1
         },
         {
           "query": "how are cookies persisted across multiple requests within a single session",
@@ -246,18 +248,18 @@
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            1
+            4
           ],
-          "ndcg10": 1
+          "ndcg10": 0.43067655807339306
         },
         {
           "query": "how can I register a hook to inspect every response before it returns",
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            3
+            2
           ],
-          "ndcg10": 0.5
+          "ndcg10": 0.6309297535714575
         },
         {
           "query": "how is response content streamed and decoded chunk by chunk",
@@ -273,9 +275,9 @@
           "category": "error-path",
           "nRelevant": 1,
           "ranks": [
-            6
+            1
           ],
-          "ndcg10": 0.3562071871080222
+          "ndcg10": 1
         },
         {
           "query": "how does a connection timeout get translated into a Timeout exception",
@@ -291,9 +293,9 @@
           "category": "error-path",
           "nRelevant": 1,
           "ranks": [
-            3
+            2
           ],
-          "ndcg10": 0.5
+          "ndcg10": 0.6309297535714575
         },
         {
           "query": "how is an SSL verification failure surfaced to the caller",
@@ -301,18 +303,18 @@
           "nRelevant": 2,
           "ranks": [
             2,
-            8
+            1
           ],
-          "ndcg10": 0.5802792108518124
+          "ndcg10": 1
         },
         {
           "query": "where are the top-level functions get post put delete head options defined",
           "category": "api",
           "nRelevant": 1,
           "ranks": [
-            1
+            3
           ],
-          "ndcg10": 1
+          "ndcg10": 0.5
         },
         {
           "query": "how are HTTP status code names like ok and not_found exposed as a lookup table",
@@ -344,9 +346,9 @@
           "category": "data-flow",
           "nRelevant": 1,
           "ranks": [
-            10
+            3
           ],
-          "ndcg10": 0.2890648263178879
+          "ndcg10": 0.5
         },
         {
           "query": "how is a multipart form-data body assembled from files and fields",
@@ -362,12 +364,12 @@
           "category": "data-flow",
           "nRelevant": 1,
           "ranks": [
-            1
+            4
           ],
-          "ndcg10": 1
+          "ndcg10": 0.43067655807339306
         }
       ],
-      "meanNdcg10": 0.717180895926433,
+      "meanNdcg10": 0.757049759204785,
       "scored": 20,
       "skipped": 0
     },
@@ -398,36 +400,32 @@
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            2
+            4
           ],
-          "ndcg10": 0.6309297535714575
+          "ndcg10": 0.43067655807339306
         },
         {
           "query": "how is the in-memory json tree of JsonElement subtypes structured",
           "category": "architecture",
           "nRelevant": 1,
           "ranks": [
-            9
+            10
           ],
-          "ndcg10": 0.3010299956639812
+          "ndcg10": 0.2890648263178879
         },
         {
           "query": "how does the streaming JsonReader tokenize input one token at a time",
           "category": "behavior",
           "nRelevant": 1,
-          "ranks": [
-            9
-          ],
-          "ndcg10": 0.3010299956639812
+          "ranks": [],
+          "ndcg10": 0
         },
         {
           "query": "how does the streaming writer emit pretty-printed json with indentation",
           "category": "behavior",
           "nRelevant": 1,
-          "ranks": [
-            2
-          ],
-          "ndcg10": 0.6309297535714575
+          "ranks": [],
+          "ndcg10": 0
         },
         {
           "query": "how is the SerializedName annotation honored when reading json into a field",
@@ -443,27 +441,27 @@
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            2
+            1
           ],
-          "ndcg10": 0.6309297535714575
+          "ndcg10": 1
         },
         {
           "query": "how are enum constants serialized using their @SerializedName overrides",
           "category": "behavior",
           "nRelevant": 1,
           "ranks": [
-            1
+            3
           ],
-          "ndcg10": 1
+          "ndcg10": 0.5
         },
         {
           "query": "what exceptions does parsing throw and how are they related",
           "category": "error-path",
           "nRelevant": 2,
           "ranks": [
-            1
+            2
           ],
-          "ndcg10": 0.6131471927654584
+          "ndcg10": 0.38685280723454163
         },
         {
           "query": "how does the stream reader signal malformed json to the caller",
@@ -486,9 +484,9 @@
           "category": "api",
           "nRelevant": 1,
           "ranks": [
-            6
+            2
           ],
-          "ndcg10": 0.3562071871080222
+          "ndcg10": 0.6309297535714575
         },
         {
           "query": "how do I parse a json string into a JsonElement tree",
@@ -503,18 +501,20 @@
           "query": "how do I represent a generic type at runtime so it survives erasure for deserialization",
           "category": "api",
           "nRelevant": 1,
-          "ranks": [],
-          "ndcg10": 0
+          "ranks": [
+            10
+          ],
+          "ndcg10": 0.2890648263178879
         },
         {
           "query": "what user-facing annotations does gson provide to control serialization",
           "category": "api",
           "nRelevant": 3,
           "ranks": [
-            2,
-            5
+            3,
+            4
           ],
-          "ndcg10": 0.4776237035032179
+          "ndcg10": 0.4367467095119258
         },
         {
           "query": "how does a typed object flow through the right TypeAdapter at runtime",
@@ -547,11 +547,11 @@
           "ndcg10": 0
         }
       ],
-      "meanNdcg10": 0.48176268695181523,
+      "meanNdcg10": 0.4328380942322182,
       "scored": 20,
       "skipped": 0
     }
   ],
-  "overallMeanNdcg10": 0.6012563795844988,
+  "overallMeanNdcg10": 0.5908370930251443,
   "totalScored": 60
 }
