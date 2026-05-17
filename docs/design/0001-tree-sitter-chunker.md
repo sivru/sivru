@@ -303,6 +303,25 @@ still drops inter-node lines. Rejected (D3).
   off `nodeType`/`symbolName` — defer to v0.3 unless signals are
   touched in v0.2.
 
+## Foundation reconciliation (before v0.6)
+
+This release is Foundation: it exists to be the AST substrate the
+v0.6–0.8 authored-context layer extracts from. Its own acceptance
+criteria are all retrieval/correctness — none of them verify the
+foundation actually serves the Spine. `nodeType` + `symbolName` (D9)
+are a deliberate, minimal forward bet, not a proof.
+
+So this is an explicit gate, not a hope: **when
+[DESIGN-0016](0016-sivru-annotation-blocks.md) is promoted from Stub
+to Draft (before v0.6 starts), it must be reconciled against the
+`Chunk` fields v0.2 actually shipped.** If v0.6 block extraction
+needs data v0.2 did not capture — doc-comment node ranges, a
+parent-symbol pointer, the identifier's own line range — that is
+recorded in DESIGN-0016 as an explicit, accepted v0.6 cost (a second
+parse pass, or a v0.2.x additive field), never discovered silently
+mid-implementation. The roadmap's per-doc `Targets:` reconciliation
+(principle 2) is the natural place to run this check.
+
 ## Acceptance criteria
 
 - 5 languages covered (TS, JS, Python, Go, Java; 7 language ids),
