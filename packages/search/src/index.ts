@@ -17,7 +17,9 @@ export type {
 export { walk } from "./walker/walk.js";
 export { chunkFile } from "./chunker/chunk.js";
 export { detectLanguage } from "./chunker/language.js";
-export { lineFallbackChunks } from "./chunker/lineFallback.js";
+export { lineFallbackChunks, windowLines } from "./chunker/lineFallback.js";
+export { treeSitterChunks } from "./chunker/treeSitter.js";
+export { isChunkableLanguage } from "./chunker/grammars.js";
 
 export { tokenize } from "./bm25/tokenizer.js";
 export type { TokenizeOptions } from "./bm25/tokenizer.js";

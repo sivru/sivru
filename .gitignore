@@ -43,6 +43,10 @@ vendor-upstream/
 # `pnpm --filter @sivru/benchmarks fetch-corpus`); never committed.
 benchmarks/corpus/
 
+# QA corpus — locally cloned public repos for `qa/chunker-qa.mjs`;
+# never committed (see qa/README.md).
+qa/corpus/
+
 # OpenAI / model keys (defense in depth)
 openai.json
 *.safetensors
