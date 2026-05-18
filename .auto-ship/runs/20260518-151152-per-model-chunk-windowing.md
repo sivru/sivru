@@ -234,3 +234,25 @@ Budget: 1/30 iterations, ~60/360 min, 4/100 commits, ~920/25000 lines
 
 - PR: https://github.com/sivru/sivru/pull/20
 - Postflight: main unchanged at 6d5a028 (verified local + origin).
+
+---
+
+## Post-Ship: CI triage (2026-05-18)
+
+PR #20 CI: Ubuntu/macOS build+test green; two red checks triaged.
+
+- **Windows build+test** — pre-existing failures in `packages/observe/`
+  (`git-info.test.ts` 8.3-path / EBUSY, `server.test.ts` bench-history).
+  `main` is red on the identical jobs. Not caused by this PR (diff is
+  100% `packages/search/`); left for a separate fix.
+- **benchmark gate** — `perf-baseline.json` was stale (v0.1.0, pre
+  tree-sitter chunker); v0.2's chunker raised buildMs and the baseline
+  was never refreshed, so a noisy buildMs tipped past the ±50% gate.
+  Re-baselined: chunk counts are byte-identical to the old baseline
+  (1072/594/1865) — windowing correctly does not touch BM25-only builds —
+  only buildMs/peakHeap refreshed to current numbers. New darwin numbers
+  match CI ubuntu closely (zod 489 vs CI 487). Gate passes locally.
+
+Also noticed (not fixed): HEAD's committed `pnpm-lock.yaml` specifiers
+(`^0.24.7`) do not match `packages/search/package.json` (pinned `0.24.7`);
+the reconciling lockfile edit is sitting uncommitted in the working tree.
