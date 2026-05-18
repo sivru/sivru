@@ -95,11 +95,11 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
       web-tree-sitter:
-        specifier: ^0.24.7
+        specifier: 0.24.7
         version: 0.24.7
     devDependencies:
       tree-sitter-wasms:
-        specifier: ^0.1.13
+        specifier: 0.1.13
         version: 0.1.13
 
 packages:
