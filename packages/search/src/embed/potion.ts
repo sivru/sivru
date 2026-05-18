@@ -407,9 +407,13 @@ export function createPotionProvider(
   }
 
   return {
+    id: modelId,
     get dim(): number {
       return currentDim;
     },
+    // potion is Model2Vec — mean-pooled static embeddings with no hard
+    // context window, so it declares neither `contextTokens` nor
+    // `countTokens` and chunk-windowing is skipped for it (DESIGN-0002 §1).
     async embed(text: string): Promise<Float32Array> {
       return embedOne(text);
     },
