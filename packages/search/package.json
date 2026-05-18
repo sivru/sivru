@@ -1,6 +1,6 @@
 {
   "name": "@sivru/search",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sivru search engine — gitignore-aware walker, code-aware chunker, BM25, cosine top-k, ranking signals, on-disk cache.",
   "license": "MIT",
   "type": "module",

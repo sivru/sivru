@@ -7,8 +7,12 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Targeting **0.2.0 — Tree-sitter chunker**. See
-[ROADMAP.md](ROADMAP.md) and
+Nothing yet. Next is **0.3.0 — per-model chunk-windowing**; see
+[ROADMAP.md](ROADMAP.md).
+
+## [0.2.0] — 2026-05-18
+
+The tree-sitter chunker. See
 [DESIGN-0001](docs/design/0001-tree-sitter-chunker.md).
 
 ### Added
