@@ -231,3 +231,6 @@ Budget: 1/30 iterations, ~60/360 min, 4/100 commits, ~920/25000 lines
 ### Error codes claimed
 - SIVRU-E1004 — rewindowForBudget: non-positive token budget
 - SIVRU-E1005 — transformers provider: countTokens() before tokenizer load
+
+- PR: https://github.com/sivru/sivru/pull/20
+- Postflight: main unchanged at 6d5a028 (verified local + origin).
