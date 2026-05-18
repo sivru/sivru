@@ -844,8 +844,12 @@ export async function buildIndex(
     // Re-window only the freshly re-chunked files (DESIGN-0002 §2). Kept
     // chunks were already windowed for this same embedder at build time —
     // the embedder is fixed for the index's lifetime — so they need no
-    // re-pass. The provider's tokenizer was primed during the build.
+    // re-pass. Prime the provider first: `resolveWindowParams` reads the
+    // tokenizer-derived budget, and an unprimed provider would report no
+    // budget and skip windowing silently — the truncation this guards
+    // against. The build already primed it; the call is then a no-op.
     if (provider !== null && freshChunks.length > 0) {
+      await provider.embed("");
       const wp = resolveWindowParams(provider);
       if (wp !== null) {
         freshChunks = rewindowForBudget(freshChunks, wp.budget, wp.countTokens);
