@@ -7,8 +7,30 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Nothing yet. Next is **0.3.0 — per-model chunk-windowing**; see
+Toward **0.3.0 — per-model chunk-windowing**; see
 [ROADMAP.md](ROADMAP.md).
+
+### Added
+
+- **Per-model chunk-windowing** (`@sivru/search`). Chunk size is now a
+  function of the embedder's token budget instead of a fixed line count.
+  A new `rewindowForBudget` post-pass re-splits any chunk that exceeds
+  the configured embedder's context window, so a short-context embedder
+  (MiniLM, BGE) no longer silently truncates a dense chunk down to its
+  first ~256 tokens. `chunkFile` itself is unchanged — it stays
+  embedder-agnostic; the post-pass owns token sizing. `buildIndex` and
+  `refreshStale` both run it; BM25-only builds and windowless embedders
+  (potion) behave exactly as in 0.2. See
+  [DESIGN-0002](docs/design/0002-per-model-chunk-windowing.md).
+
+### Changed
+
+- `EmbeddingProvider` gains three optional members: `id`,
+  `contextTokens`, and `countTokens`. Transformers.js providers populate
+  them from the loaded tokenizer; potion declares none (windowless).
+- The on-disk index cache key now includes the embedder id, and
+  `CACHE_FORMAT_VERSION` moves `2 → 3`. Chunk boundaries depend on the
+  embedder, so a 0.2 cache is rejected on read and rebuilt once.
 
 ## [0.2.0] — 2026-05-18
 
