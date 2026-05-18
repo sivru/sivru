@@ -5,8 +5,14 @@ export type EmbeddingProvider = {
    * Stable identifier for this provider + model pair. Used as the
    * embedder component of the on-disk cache key (DESIGN-0002 §4): chunk
    * boundaries now depend on the embedder, so two embedders must never
-   * share a cache entry. Conventionally the HF model id. Omit for ad-hoc
-   * providers — `buildIndex` then falls back to a generic `"embed"` tag.
+   * share a cache entry. Conventionally the HF model id.
+   *
+   * It must uniquely identify the *windowing behaviour* — model plus
+   * effective token budget. Two providers that would produce different
+   * chunk boundaries must not share an `id`, or one's cached chunk set
+   * is silently reused for the other. Omit for ad-hoc providers —
+   * `buildIndex` then falls back to a generic `"embed"` tag, so distinct
+   * id-less providers should not be used with the cache enabled.
    */
   readonly id?: string;
   /**

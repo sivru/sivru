@@ -39,10 +39,21 @@ const MAX_SANE_CONTEXT = 1_000_000;
 
 /**
  * Effective per-chunk content-token budget for a loaded tokenizer: the raw
- * context window minus the fixed special-token overhead. Returns `undefined`
- * when the config carries no usable window — windowing is then skipped.
+ * context window minus the fixed special-token overhead and the document
+ * instruction prefix. Returns `undefined` when the config carries no usable
+ * window — windowing is then skipped.
+ *
+ * `documentPrefix` matters because the document encode path embeds
+ * `prefix + content` (asymmetric models like Nomic/E5 prepend e.g.
+ * `"search_document: "`). Those prefix tokens occupy window space, so the
+ * per-chunk *content* budget must exclude them — otherwise a chunk windowed
+ * to exactly the budget would still overflow the real window once the
+ * prefix is prepended, and the tokenizer would silently truncate it.
  */
-function effectiveContextTokens(tok: TransformersTokenizer): number | undefined {
+function effectiveContextTokens(
+  tok: TransformersTokenizer,
+  documentPrefix: string,
+): number | undefined {
   const rawMax = tok.model_max_length;
   if (
     typeof rawMax !== "number" ||
@@ -55,7 +66,11 @@ function effectiveContextTokens(tok: TransformersTokenizer): number | undefined 
   // Counting the specials added to empty input gives the fixed
   // [CLS]/[SEP]-style overhead exactly (DESIGN-0002 D6).
   const specialOverhead = tok.encode("", { add_special_tokens: true }).length;
-  const budget = rawMax - specialOverhead;
+  const prefixOverhead =
+    documentPrefix.length > 0
+      ? tok.encode(documentPrefix, { add_special_tokens: false }).length
+      : 0;
+  const budget = rawMax - specialOverhead - prefixOverhead;
   return budget > 0 ? budget : undefined;
 }
 
@@ -158,7 +173,7 @@ export function createTransformersProvider(
       mod.env.cacheDir = cacheDir;
       const pipe = await mod.pipeline("feature-extraction", modelId, { dtype });
       tokenizer = pipe.tokenizer;
-      contextTokensValue = effectiveContextTokens(pipe.tokenizer);
+      contextTokensValue = effectiveContextTokens(pipe.tokenizer, prefixes.document);
       return pipe;
     })();
     return pipelinePromise;
@@ -197,7 +212,7 @@ export function createTransformersProvider(
     countTokens(text: string): number {
       if (tokenizer === null) {
         throw new Error(
-          "SIVRU-E1004: transformers provider countTokens() called before " +
+          "SIVRU-E1005: transformers provider countTokens() called before " +
             "the tokenizer loaded — embed() (or a prime call) must run first",
         );
       }

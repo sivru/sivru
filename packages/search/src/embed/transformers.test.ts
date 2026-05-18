@@ -45,9 +45,9 @@ describe("createTransformersProvider (offline shape)", () => {
     expect(p.contextTokens).toBeUndefined();
   });
 
-  it("countTokens throws SIVRU-E1004 before the tokenizer is primed", () => {
+  it("countTokens throws SIVRU-E1005 before the tokenizer is primed", () => {
     const p = createTransformersProvider();
-    expect(() => p.countTokens?.("hello")).toThrow(/SIVRU-E1004/);
+    expect(() => p.countTokens?.("hello")).toThrow(/SIVRU-E1005/);
   });
 });
 
