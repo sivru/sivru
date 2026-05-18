@@ -32,7 +32,6 @@ import { tokenize } from "./bm25/tokenizer.js";
 import { cosineTopK, packMatrix } from "./vector/cosine.js";
 import { reciprocalRankFusion } from "./ranking/rrf.js";
 import { applySignals } from "./ranking/signals.js";
-import { createWorkerPool } from "./workers/pool.js";
 import { computeStateId } from "./cache/state-id.js";
 import { createIndexCache } from "./cache/index.js";
 import type { Bm25Index } from "./bm25/index.js";
@@ -192,12 +191,6 @@ export type BuildIndexOptions = {
    */
   rerank?: RerankOptions;
   /**
-   * Parallelize chunking via the `worker_threads` pool. Default `true` once
-   * the file count exceeds `WORKER_FILE_THRESHOLD`. Set to `false` to force
-   * single-threaded chunking (useful for small in-process tests).
-   */
-  workers?: boolean;
-  /**
    * Apply standard reranking signals — definition boost, multi-chunk file
    * boost, path penalties, identifier-stem matching. Defaults: ON for
    * `searchBM25`, OFF for `searchHybrid` (RRF already merges two rankers
@@ -221,9 +214,6 @@ export type BuildIndexOptions = {
 };
 
 const DEFAULT_BATCH_SIZE = 128;
-
-/** Below this file count, sync chunking is faster than spinning up workers. */
-const WORKER_FILE_THRESHOLD = 16;
 
 /**
  * Default embed filter — embed EVERYTHING. We deliberately don't skip
@@ -279,30 +269,18 @@ function resolveSignalConfig(option: BuildIndexOptions["signals"]): SignalConfig
   return option;
 }
 
+// Chunk files on the main thread. The tree-sitter chunker parses per file
+// in milliseconds — chunking is not the bottleneck, embedding is — and a
+// worker pool cannot share loaded grammars across threads. One serial
+// loop, single Parser, grammars memoised after first use (DESIGN-0001 D1).
 async function chunkFiles(
   files: readonly { filePath: string; content: string }[],
   chunkerOpts: ChunkOptions | undefined,
-  workersFlag: boolean | undefined,
 ): Promise<Chunk[]> {
-  const wantWorkers = workersFlag === undefined
-    ? files.length >= WORKER_FILE_THRESHOLD
-    : workersFlag;
   const chunks: Chunk[] = [];
-  if (wantWorkers && files.length > 0) {
-    const pool = createWorkerPool();
-    try {
-      const arrays = await Promise.all(
-        files.map((f) => pool.chunk(f.filePath, f.content, chunkerOpts)),
-      );
-      for (const arr of arrays) chunks.push(...arr);
-    } finally {
-      await pool.close();
-    }
-  } else {
-    for (const f of files) {
-      for (const c of chunkFile(f.filePath, f.content, chunkerOpts)) {
-        chunks.push(c);
-      }
+  for (const f of files) {
+    for (const c of await chunkFile(f.filePath, f.content, chunkerOpts)) {
+      chunks.push(c);
     }
   }
   return chunks;
@@ -367,20 +345,7 @@ export async function buildIndex(
       }
     }
     options.onProgress?.({ phase: "walked", totalChunks: files.length });
-    // When embeddings are enabled, force single-threaded chunking. Reason:
-    // onnxruntime-node (used by Transformers.js) has a known crash on
-    // Node < 22.11 when libuv has just terminated worker_threads —
-    // "mutex lock failed: Invalid argument" from libc++abi. Skipping the
-    // worker pool here costs maybe 1–3 seconds of chunking on a large
-    // repo and is paid once because the cache covers subsequent runs.
-    // Caller can still force workers explicitly with `workers: true`.
-    const workersFlag =
-      options.workers !== undefined
-        ? options.workers
-        : options.embed !== undefined
-          ? false
-          : undefined;
-    chunks = await chunkFiles(files, options.chunker, workersFlag);
+    chunks = await chunkFiles(files, options.chunker);
     options.onProgress?.({ phase: "chunked", totalChunks: chunks.length });
   } else {
     options.onProgress?.({
@@ -829,13 +794,7 @@ export async function buildIndex(
       if (removedSet.has(chunk.filePath)) continue;
       keptChunks.push(chunk);
     }
-    const freshChunks = await chunkFiles(
-      dirtyContents,
-      options.chunker,
-      // Force single-threaded for refresh — small file counts (typical:
-      // 1–5 files), worker pool spinup costs more than serial chunking.
-      false,
-    );
+    const freshChunks = await chunkFiles(dirtyContents, options.chunker);
     const nextChunks: Chunk[] = [...keptChunks, ...freshChunks];
 
     // 5. Rebuild bm25 from scratch over the new chunk list. In-memory,

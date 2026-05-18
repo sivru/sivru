@@ -19,8 +19,14 @@ import { join, resolve } from "node:path";
 
 import type { Chunk } from "../types.js";
 
-/** Bumped when the on-disk format changes incompatibly. */
-export const CACHE_FORMAT_VERSION = 1;
+/**
+ * Bumped when the on-disk format changes incompatibly.
+ *
+ * - v1: line-fallback chunks.
+ * - v2: tree-sitter chunker (DESIGN-0001) — chunk boundaries, `nodeType`,
+ *   and `symbolName` all change, so v1 caches must not be reused.
+ */
+export const CACHE_FORMAT_VERSION = 2;
 
 export type CacheKey = {
   /** Absolute path to the repo root. The cache is keyed by sha256(repoPath). */

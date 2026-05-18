@@ -131,6 +131,28 @@ describe("createIndexCache", () => {
     expect(loaded).toBeNull();
   });
 
+  it("rejects a v1 (line-fallback era) cache after the v2 bump", async () => {
+    // DESIGN-0001: the tree-sitter chunker changes chunk boundaries,
+    // `nodeType`, and `symbolName`, so a pre-tree-sitter v1 index must
+    // never be reused. CACHE_FORMAT_VERSION moved 1 -> 2 to force a
+    // one-time cold rebuild on upgrade.
+    expect(CACHE_FORMAT_VERSION).toBe(2);
+    const cache = createIndexCache({ cacheDir });
+    const dir = join(cacheDir, repoSlug(repoPath));
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "v1cache.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        chunks: makeChunks(),
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    const loaded = await cache.load({ repoPath, stateId: "v1cache" });
+    expect(loaded).toBeNull();
+  });
+
   it("handles two parallel save() calls for the same key without corrupting the file", async () => {
     const cache = createIndexCache({ cacheDir });
     const key: CacheKey = { repoPath, stateId: "parallel" };

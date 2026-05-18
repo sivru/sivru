@@ -1,14 +1,68 @@
 // Fixed-window line-based chunker.
 //
-// DESIGN.md §4.1 specifies 50-line windows with 5-line overlap as the
-// fallback when tree-sitter parsing is unavailable or fails. This module is
-// also the only chunker shipped in the W1 starter — tree-sitter integration
-// lands behind the same `chunkFile()` facade in a follow-up.
+// Two roles (DESIGN-0001):
+//   - `lineFallbackChunks` is the whole-file fallback when tree-sitter
+//     parsing is unavailable, fails, or the language has no grammar.
+//   - `windowLines` is the range-aware core. The tree-sitter chunker
+//     reuses it to gap-fill the line ranges no AST node covers and to
+//     split oversized nodes. One windowing implementation, not three.
 
 import type { Chunk, ChunkOptions } from "../types.js";
 
 const DEFAULT_MAX_LINES = 50;
 const DEFAULT_OVERLAP_LINES = 5;
+
+function assertWindowOpts(maxLines: number, overlap: number): void {
+  if (maxLines <= 0) {
+    throw new Error(`maxLines must be > 0 (got ${maxLines})`);
+  }
+  if (overlap < 0 || overlap >= maxLines) {
+    throw new Error(
+      `overlapLines must be in [0, ${maxLines}) (got ${overlap})`,
+    );
+  }
+}
+
+/**
+ * Window an inclusive 1-based line range `[from, to]` of `lines` into
+ * fixed-size overlapping chunks with `kind: "line"`.
+ *
+ * - `lines` is the whole file already split on `\n` (no trailing empty
+ *   element). `from`/`to` are absolute 1-based line numbers; emitted
+ *   `startLine`/`endLine` are absolute too.
+ * - Returns `[]` when `from > to` (empty range).
+ * - Window size and overlap are validated; overlap must be `< maxLines`.
+ */
+export function windowLines(
+  lines: readonly string[],
+  filePath: string,
+  language: string | null,
+  from: number,
+  to: number,
+  maxLines: number,
+  overlap: number,
+): Chunk[] {
+  assertWindowOpts(maxLines, overlap);
+  if (from > to) return [];
+
+  const step = maxLines - overlap;
+  const startIdx = from - 1; // 0-based, inclusive
+  const endIdx = to; // 0-based, exclusive
+  const chunks: Chunk[] = [];
+  for (let start = startIdx; start < endIdx; start += step) {
+    const end = Math.min(start + maxLines, endIdx);
+    chunks.push({
+      filePath,
+      startLine: start + 1,
+      endLine: end,
+      language,
+      content: lines.slice(start, end).join("\n"),
+      kind: "line",
+    });
+    if (end === endIdx) break;
+  }
+  return chunks;
+}
 
 /**
  * Split `content` into overlapping fixed-size line windows.
@@ -25,14 +79,9 @@ export function lineFallbackChunks(
 ): Chunk[] {
   const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
   const overlap = options.overlapLines ?? DEFAULT_OVERLAP_LINES;
-  if (maxLines <= 0) {
-    throw new Error(`maxLines must be > 0 (got ${maxLines})`);
-  }
-  if (overlap < 0 || overlap >= maxLines) {
-    throw new Error(
-      `overlapLines must be in [0, ${maxLines}) (got ${overlap})`,
-    );
-  }
+  // Validate before the empty-content short-circuit so bad options always
+  // throw, regardless of input.
+  assertWindowOpts(maxLines, overlap);
 
   if (content.length === 0) return [];
 
@@ -44,19 +93,5 @@ export function lineFallbackChunks(
   // treat them like empty content rather than emitting an empty chunk.
   if (lines.length === 0 || lines.every((l) => l === "")) return [];
 
-  const step = maxLines - overlap;
-  const chunks: Chunk[] = [];
-  for (let start = 0; start < lines.length; start += step) {
-    const end = Math.min(start + maxLines, lines.length);
-    chunks.push({
-      filePath,
-      startLine: start + 1,
-      endLine: end,
-      language,
-      content: lines.slice(start, end).join("\n"),
-      kind: "line",
-    });
-    if (end === lines.length) break;
-  }
-  return chunks;
+  return windowLines(lines, filePath, language, 1, lines.length, maxLines, overlap);
 }
