@@ -256,3 +256,25 @@ PR #20 CI: Ubuntu/macOS build+test green; two red checks triaged.
 Also noticed (not fixed): HEAD's committed `pnpm-lock.yaml` specifiers
 (`^0.24.7`) do not match `packages/search/package.json` (pinned `0.24.7`);
 the reconciling lockfile edit is sitting uncommitted in the working tree.
+
+## Post-Ship: code-review "fix all" pass (2026-05-18)
+
+User ran /code-review then asked to fix all findings. Addressed:
+
+- MAJOR — windower trusted cross-line token additivity. `splitChunk` now
+  re-verifies each assembled window against its real joined content
+  (`countTokens(windowContent(...))`) and shrinks until it fits. Goes
+  beyond design D4's "tokenize each line once" — deliberate, for the
+  budget guarantee to hold under non-additive tokenizers.
+- MINOR — `embed("")` prime could abort build/refresh. New
+  `primeAndResolveWindowParams` wraps the prime in try/catch.
+- MINOR — `charSplit` guess now adapts both ways (halve on overshoot,
+  double after headroom).
+- MINOR — `EST_CHARS_PER_TOKEN` split into `HEURISTIC_BYTES_PER_TOKEN`
+  and `CHARSPLIT_CHARS_PER_TOKEN`.
+- Test — added a non-additive-counter test exercising the re-verify.
+- NIT — removed the transient `.auto-ship/.current-journal` helper.
+
+Deferred register updated: 4 items resolved, 2 remain (sentinel
+`model_max_length` diagnostic; the `noUncheckedIndexedAccess` guard).
+Full repo build / typecheck / test green.

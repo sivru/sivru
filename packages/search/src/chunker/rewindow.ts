@@ -21,8 +21,11 @@ import type { Chunk } from "../types.js";
  */
 const OVERLAP_FRACTION = 0.12;
 
-/** Rough chars-per-token ratio used only to seed the char-split guess. */
-const EST_CHARS_PER_TOKEN = 3.5;
+/** Divisor for the byte-heuristic token estimate: `ceil(utf8Bytes / N)`. */
+const HEURISTIC_BYTES_PER_TOKEN = 3.5;
+
+/** Rough chars-per-token ratio used only to seed the char-split length guess. */
+const CHARSPLIT_CHARS_PER_TOKEN = 3.5;
 
 /**
  * Byte-heuristic token count: `ceil(utf8Bytes / 3.5)`. The `countTokens`
@@ -31,7 +34,7 @@ const EST_CHARS_PER_TOKEN = 3.5;
  * reduced budget (`0.85 × contextTokens`) to absorb the imprecision.
  */
 export function byteHeuristicTokenCount(text: string): number {
-  return Math.ceil(Buffer.byteLength(text, "utf8") / EST_CHARS_PER_TOKEN);
+  return Math.ceil(Buffer.byteLength(text, "utf8") / HEURISTIC_BYTES_PER_TOKEN);
 }
 
 /**
@@ -95,13 +98,16 @@ function splitChunk(
   };
   const out: Chunk[] = [];
 
+  const windowContent = (startIdx: number, endIdx: number): string =>
+    lines.slice(startIdx, endIdx + 1).join("\n");
+
   const emitWindow = (startIdx: number, endIdx: number): void => {
     out.push({
       filePath: chunk.filePath,
       startLine: chunk.startLine + startIdx,
       endLine: chunk.startLine + endIdx,
       language: chunk.language,
-      content: lines.slice(startIdx, endIdx + 1).join("\n"),
+      content: windowContent(startIdx, endIdx),
       kind: chunk.kind,
       ...extra,
     });
@@ -144,7 +150,16 @@ function splitChunk(
       sum += lineTokens[j] ?? 0;
       j += 1;
     }
-    const windowEnd = j - 1;
+    let windowEnd = j - 1;
+    // The greedy sum trusts token additivity across the newline join
+    // (DESIGN-0002 D6). A BPE / SentencePiece tokenizer can break that —
+    // a token spanning the join, or whitespace merging — so confirm the
+    // assembled window against its real joined content and shrink until it
+    // fits by `countTokens`'s own measure. `[i, i]` is always valid: line
+    // `i` was checked `<= budget` above.
+    while (windowEnd > i && countTokens(windowContent(i, windowEnd)) > budget) {
+      windowEnd -= 1;
+    }
     emitWindow(i, windowEnd);
     if (windowEnd >= lines.length - 1) break;
     // Seed the next window with trailing lines summing to <= overlapBudget.
@@ -181,29 +196,38 @@ function nextWindowStart(
  * Split a single over-budget line on character boundaries into pieces each
  * within `budget`. Mid-line splitting is banned for all normal code; this
  * exists solely so the "no chunk exceeds budget" guarantee holds
- * unconditionally (D7). Terminates: every piece advances `pos` by at least
- * one character.
+ * unconditionally (D7).
+ *
+ * The piece-length `guess` adapts both ways: it halves on a budget
+ * overshoot and doubles after a full-width piece fits with room to spare,
+ * so a bad initial estimate (e.g. a low-entropy blob) does not strand the
+ * rest of the line in tiny fragments. Terminates: every piece advances
+ * `pos` by at least one character.
  */
 function charSplit(
   line: string,
   budget: number,
   countTokens: (text: string) => number,
 ): string[] {
-  if (line.length === 0) return [""];
-  if (countTokens(line) <= budget) return [line];
+  if (line.length <= 1 || countTokens(line) <= budget) return [line];
   const pieces: string[] = [];
   let pos = 0;
-  let guess = Math.max(1, Math.floor(budget * EST_CHARS_PER_TOKEN));
+  let guess = Math.max(1, Math.floor(budget * CHARSPLIT_CHARS_PER_TOKEN));
   while (pos < line.length) {
     let piece = line.slice(pos, Math.min(line.length, pos + guess));
-    // Shrink until within budget — or down to a single char, which cannot
-    // be split further (a one-char token over budget is not real code).
-    while (piece.length > 1 && countTokens(piece) > budget) {
-      piece = piece.slice(0, Math.max(1, Math.floor(piece.length / 2)));
+    if (countTokens(piece) > budget) {
+      // Overshoot — halve until within budget, or down to a single char
+      // (a one-char token over budget is not real code).
+      while (piece.length > 1 && countTokens(piece) > budget) {
+        piece = piece.slice(0, Math.max(1, Math.floor(piece.length / 2)));
+      }
+      guess = Math.max(1, piece.length);
+    } else if (piece.length === guess) {
+      // A full-width piece fit with headroom — grow toward the budget.
+      guess = guess * 2;
     }
     pieces.push(piece);
     pos += piece.length;
-    guess = Math.max(1, piece.length);
   }
   return pieces;
 }

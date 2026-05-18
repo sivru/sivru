@@ -156,6 +156,34 @@ describe("rewindowForBudget", () => {
       expect(cur.startLine).toBeGreaterThan(prev.startLine);
     }
   });
+
+  it("re-verifies assembled windows against a non-additive token counter", () => {
+    // A tokenizer that is NOT additive across a newline join: each line
+    // break costs one extra token (BPE/SentencePiece can behave this way).
+    // Per-line sums then under-count an assembled window, so the windower
+    // must re-check the joined content and shrink until it really fits.
+    const nonAdditive = (text: string): number =>
+      text.split(/\s+/).filter((w) => w.length > 0).length +
+      (text.match(/\n/g)?.length ?? 0);
+
+    const lines = Array.from({ length: 30 }, () => "tok tok tok");
+    const budget = 20;
+    const startLine = 1;
+    const out = rewindowForBudget([chunkOf(lines, startLine)], budget, nonAdditive);
+
+    expect(out.length).toBeGreaterThan(1);
+    const covered = new Set<number>();
+    for (const sub of out) {
+      // The guarantee must hold by the counter's OWN measure — newline
+      // tokens included — not just the per-line sum.
+      expect(nonAdditive(sub.content)).toBeLessThanOrEqual(budget);
+      for (let ln = sub.startLine; ln <= sub.endLine; ln++) covered.add(ln);
+    }
+    // Shrinking a window must not drop a line — full coverage still holds.
+    for (let ln = startLine; ln < startLine + lines.length; ln++) {
+      expect(covered.has(ln)).toBe(true);
+    }
+  });
 });
 
 describe("byteHeuristicTokenCount", () => {

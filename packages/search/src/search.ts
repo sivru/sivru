@@ -281,6 +281,26 @@ function resolveWindowParams(
   };
 }
 
+/**
+ * Load the provider's tokenizer (via a throwaway `embed("")`) and resolve
+ * its windowing parameters. Returns `null` — windowing skipped — for a
+ * windowless embedder, and also when priming throws: a provider that
+ * cannot initialise cannot be windowed. On the cold build path the
+ * subsequent `embedAll` call surfaces the same failure with a real error;
+ * on `refreshStale` it degrades to a non-fatal skip rather than tanking an
+ * otherwise-successful refresh.
+ */
+async function primeAndResolveWindowParams(
+  provider: EmbeddingProvider,
+): Promise<{ budget: number; countTokens: (text: string) => number } | null> {
+  try {
+    await provider.embed("");
+  } catch {
+    return null;
+  }
+  return resolveWindowParams(provider);
+}
+
 function resolveCache(option: BuildIndexOptions["cache"]): IndexCache | null {
   if (option === undefined || option === false) return null;
   if (option === true) return createIndexCache();
@@ -386,10 +406,7 @@ export async function buildIndex(
     // hit reuses chunks already windowed for this embedder (the cache key
     // includes embedderId), so this pass runs on the cold path only.
     if (provider !== null && chunks.length > 0) {
-      // The windower needs the provider's tokenizer; prime it once. An
-      // `embed("")` call is the established priming idiom in this function.
-      await provider.embed("");
-      const wp = resolveWindowParams(provider);
+      const wp = await primeAndResolveWindowParams(provider);
       if (wp !== null) {
         chunks = rewindowForBudget(chunks, wp.budget, wp.countTokens);
       }
@@ -844,13 +861,10 @@ export async function buildIndex(
     // Re-window only the freshly re-chunked files (DESIGN-0002 §2). Kept
     // chunks were already windowed for this same embedder at build time —
     // the embedder is fixed for the index's lifetime — so they need no
-    // re-pass. Prime the provider first: `resolveWindowParams` reads the
-    // tokenizer-derived budget, and an unprimed provider would report no
-    // budget and skip windowing silently — the truncation this guards
-    // against. The build already primed it; the call is then a no-op.
+    // re-pass. `primeAndResolveWindowParams` loads the tokenizer the
+    // windower needs (a no-op once the build warmed the provider).
     if (provider !== null && freshChunks.length > 0) {
-      await provider.embed("");
-      const wp = resolveWindowParams(provider);
+      const wp = await primeAndResolveWindowParams(provider);
       if (wp !== null) {
         freshChunks = rewindowForBudget(freshChunks, wp.budget, wp.countTokens);
       }
