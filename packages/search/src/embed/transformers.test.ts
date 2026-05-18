@@ -35,6 +35,20 @@ describe("createTransformersProvider (offline shape)", () => {
     const p = createTransformersProvider({ dim: 384 });
     expect(p.dim).toBe(384);
   });
+
+  it("exposes the model id and a lazily-resolved windowing contract", () => {
+    const p = createTransformersProvider({ model: "Xenova/all-MiniLM-L6-v2" });
+    // `id` is the cache-key embedder component (DESIGN-0002 §4).
+    expect(p.id).toBe("Xenova/all-MiniLM-L6-v2");
+    expect(typeof p.countTokens).toBe("function");
+    // The tokenizer is loaded lazily; the budget is unknown until then.
+    expect(p.contextTokens).toBeUndefined();
+  });
+
+  it("countTokens throws SIVRU-E1004 before the tokenizer is primed", () => {
+    const p = createTransformersProvider();
+    expect(() => p.countTokens?.("hello")).toThrow(/SIVRU-E1004/);
+  });
 });
 
 describe.skipIf(!RUN_NETWORK)("createTransformersProvider (network)", () => {
@@ -60,6 +74,27 @@ describe.skipIf(!RUN_NETWORK)("createTransformersProvider (network)", () => {
       const a = await p.embed("the quick brown fox");
       const b = await p.embed("a totally unrelated sentence about databases");
       expect(arraysEqual(a, b)).toBe(false);
+    },
+    NETWORK_TIMEOUT_MS,
+  );
+
+  it(
+    "exposes a content-token counter and a sane context budget after priming",
+    async () => {
+      const p = createTransformersProvider();
+      await p.embed(""); // prime the tokenizer
+      // Effective budget is positive and well under the sanity ceiling.
+      expect(p.contextTokens).toBeGreaterThan(0);
+      expect(p.contextTokens ?? Infinity).toBeLessThan(1_000_000);
+      // Content tokens: empty -> 0, and additive across a newline join (D6).
+      expect(p.countTokens?.("")).toBe(0);
+      const a = p.countTokens?.("function processPayment() {}") ?? 0;
+      const b = p.countTokens?.("return total;") ?? 0;
+      expect(a).toBeGreaterThan(0);
+      expect(b).toBeGreaterThan(0);
+      expect(
+        p.countTokens?.("function processPayment() {}\nreturn total;"),
+      ).toBe(a + b);
     },
     NETWORK_TIMEOUT_MS,
   );
