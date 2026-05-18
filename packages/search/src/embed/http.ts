@@ -254,6 +254,9 @@ export function createHttpEmbeddingProvider(
 
   const provider: EmbeddingProvider = {
     dim,
+    // The remote model's context window is unknown to this provider, so it
+    // declares no `contextTokens` and chunk-windowing is skipped for it.
+    id: model,
     async embed(text: string): Promise<Float32Array> {
       if (shape === "ollama") {
         return embedOllamaSingle(text);

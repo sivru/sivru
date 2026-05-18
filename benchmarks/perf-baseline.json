@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-05-17T18:26:05.332Z",
-  "version": "0.1.0",
+  "timestamp": "2026-05-18T14:44:13.657Z",
+  "version": "0.2.0",
   "node": "22.2.0",
   "platform": "darwin",
   "repos": [
@@ -8,27 +8,27 @@
       "repo": "zod",
       "language": "typescript",
       "chunks": 1072,
-      "buildMs": 323,
-      "peakHeapMiB": 0
+      "buildMs": 489,
+      "peakHeapMiB": 1.1
     },
     {
       "repo": "requests",
       "language": "python",
       "chunks": 594,
-      "buildMs": 80,
+      "buildMs": 110,
       "peakHeapMiB": 0
     },
     {
       "repo": "gson",
       "language": "java",
       "chunks": 1865,
-      "buildMs": 182,
-      "peakHeapMiB": 2.5
+      "buildMs": 309,
+      "peakHeapMiB": 3.4
     }
   ],
   "totals": {
     "chunks": 3531,
-    "buildMs": 585,
-    "peakHeapMiB": 2.5
+    "buildMs": 908,
+    "peakHeapMiB": 4.5
   }
 }

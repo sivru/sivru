@@ -19,6 +19,10 @@ export { chunkFile } from "./chunker/chunk.js";
 export { detectLanguage } from "./chunker/language.js";
 export { lineFallbackChunks, windowLines } from "./chunker/lineFallback.js";
 export { treeSitterChunks } from "./chunker/treeSitter.js";
+export {
+  rewindowForBudget,
+  byteHeuristicTokenCount,
+} from "./chunker/rewindow.js";
 export { isChunkableLanguage } from "./chunker/grammars.js";
 
 export { tokenize } from "./bm25/tokenizer.js";

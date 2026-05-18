@@ -11,6 +11,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { buildIndex } from "./search.js";
+import { createMockEmbeddingProvider } from "./embed/mock.js";
+
+/** Additive test token counter: whitespace-delimited word count. */
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter((w) => w.length > 0).length;
+}
 
 let scratch: string;
 
@@ -229,6 +235,42 @@ describe("refreshStale", () => {
       // 0 re-embeds for it. Total: should be small.
       expect(result.embedsRecomputed).toBeLessThanOrEqual(2);
       embedSpy.mockRestore();
+    });
+  });
+
+  describe("with chunk-windowing", () => {
+    it("re-windows a freshly re-chunked file to the embedder's token budget", async () => {
+      // Build with a small file that fits comfortably under the budget.
+      await fixture("big.ts", "function small() { return 1; }\n");
+      const budget = 25;
+      const provider = createMockEmbeddingProvider({
+        dim: 8,
+        id: "mock-window",
+        contextTokens: budget,
+        countTokens: wordCount,
+      });
+      const idx = await buildIndex(scratch, { embed: { provider } });
+
+      // Replace it with a function whose body far exceeds the budget. Every
+      // line carries the token `needle` so BM25 surfaces all sub-chunks.
+      const body = Array.from(
+        { length: 40 },
+        (_, i) => `  const needle${String(i)} = needle plus needle;`,
+      ).join("\n");
+      await fixture("big.ts", `function huge() {\n${body}\n}\n`);
+      await touchForward("big.ts");
+
+      const result = await idx.refreshStale();
+      expect(result.modified).toBe(1);
+
+      // The over-budget function must have been re-windowed: more than one
+      // chunk for the file, and every chunk within the embedder's budget.
+      const hits = await idx.searchBM25("needle", 200);
+      const fromBig = hits.filter((h) => h.chunk.filePath === "big.ts");
+      expect(fromBig.length).toBeGreaterThan(1);
+      for (const hit of fromBig) {
+        expect(wordCount(hit.chunk.content)).toBeLessThanOrEqual(budget);
+      }
     });
   });
 });

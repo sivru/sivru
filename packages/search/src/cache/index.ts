@@ -25,14 +25,23 @@ import type { Chunk } from "../types.js";
  * - v1: line-fallback chunks.
  * - v2: tree-sitter chunker (DESIGN-0001) — chunk boundaries, `nodeType`,
  *   and `symbolName` all change, so v1 caches must not be reused.
+ * - v3: per-model chunk-windowing (DESIGN-0002) — chunk boundaries now
+ *   depend on the embedder's token budget, and the cache key gains an
+ *   `embedderId` component. v2 caches are rejected and rebuilt once.
  */
-export const CACHE_FORMAT_VERSION = 2;
+export const CACHE_FORMAT_VERSION = 3;
 
 export type CacheKey = {
   /** Absolute path to the repo root. The cache is keyed by sha256(repoPath). */
   repoPath: string;
   /** Output of `computeStateId(repoPath)`. */
   stateId: string;
+  /**
+   * Embedder identity — `"bm25"` for a BM25-only build, the embedding
+   * provider's `id` otherwise. Chunk boundaries depend on the embedder
+   * (DESIGN-0002 §4), so two embedders must never share a cache entry.
+   */
+  embedderId: string;
 };
 
 export type CachedIndex = {
@@ -122,14 +131,21 @@ function sanitizeForFilename(s: string): string {
   return s.replace(/[<>:"/\\|?*]/g, "__");
 }
 
+// One cache file per (stateId, embedderId): same corpus state under two
+// embedders produces two distinct chunk sets (DESIGN-0002 §4), so they
+// must not share an on-disk entry.
+function entryStem(key: CacheKey): string {
+  return `${sanitizeForFilename(key.stateId)}__${sanitizeForFilename(key.embedderId)}`;
+}
+
 function entryPath(cacheDir: string, key: CacheKey): string {
-  return join(repoDir(cacheDir, key.repoPath), `${sanitizeForFilename(key.stateId)}.json`);
+  return join(repoDir(cacheDir, key.repoPath), `${entryStem(key)}.json`);
 }
 
 function tmpPath(cacheDir: string, key: CacheKey): string {
   return join(
     repoDir(cacheDir, key.repoPath),
-    `${sanitizeForFilename(key.stateId)}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`,
+    `${entryStem(key)}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`,
   );
 }
 

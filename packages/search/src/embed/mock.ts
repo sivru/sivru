@@ -6,6 +6,20 @@ export type MockProviderOptions = {
   dim?: number;
   /** Seed string mixed into the hash. Default `"sivru-mock-v1"`. */
   seed?: string;
+  /** Provider id used as the cache-key embedder component. Default `mock-<dim>`. */
+  id?: string;
+  /**
+   * Effective token budget to advertise via `EmbeddingProvider.contextTokens`.
+   * Set it — with or without `countTokens` — to exercise chunk-windowing
+   * against a deterministic fake embedder. Omit for a windowless mock.
+   */
+  contextTokens?: number;
+  /**
+   * Deterministic token counter exposed as `EmbeddingProvider.countTokens`.
+   * Omit (while setting `contextTokens`) to exercise the byte-heuristic
+   * windowing fallback.
+   */
+  countTokens?: (text: string) => number;
 };
 
 const DEFAULT_DIM = 64;
@@ -63,6 +77,13 @@ export function createMockEmbeddingProvider(
   }
   return {
     dim,
+    id: options?.id ?? `mock-${String(dim)}`,
+    ...(options?.contextTokens !== undefined
+      ? { contextTokens: options.contextTokens }
+      : {}),
+    ...(options?.countTokens !== undefined
+      ? { countTokens: options.countTokens }
+      : {}),
     async embed(text: string): Promise<Float32Array> {
       return deriveVector(seed, text, dim);
     },
