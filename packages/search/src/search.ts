@@ -26,6 +26,7 @@ import { promises as fsp } from "node:fs";
 import { resolve } from "node:path";
 
 import { chunkFile } from "./chunker/chunk.js";
+import { rewindowForBudget, byteHeuristicTokenCount } from "./chunker/rewindow.js";
 import { walk } from "./walker/walk.js";
 import { createBm25Index } from "./bm25/index.js";
 import { tokenize } from "./bm25/tokenizer.js";
@@ -257,6 +258,29 @@ async function embedAll(
   return out;
 }
 
+/**
+ * Resolve an embedder to its chunk-windowing parameters (DESIGN-0002 §1,
+ * D1), or `null` when the embedder is windowless (`contextTokens`
+ * undefined) and windowing must be skipped entirely. A provider with
+ * `contextTokens` but no `countTokens` falls back to the byte heuristic
+ * and a reduced budget (`0.85 ×`) that only this imprecise path needs.
+ */
+function resolveWindowParams(
+  provider: EmbeddingProvider,
+): { budget: number; countTokens: (text: string) => number } | null {
+  if (provider.contextTokens === undefined) return null;
+  if (provider.countTokens !== undefined) {
+    return {
+      budget: provider.contextTokens,
+      countTokens: provider.countTokens.bind(provider),
+    };
+  }
+  return {
+    budget: Math.max(1, Math.floor(provider.contextTokens * 0.85)),
+    countTokens: byteHeuristicTokenCount,
+  };
+}
+
 function resolveCache(option: BuildIndexOptions["cache"]): IndexCache | null {
   if (option === undefined || option === false) return null;
   if (option === true) return createIndexCache();
@@ -311,10 +335,19 @@ export async function buildIndex(
   // diff against on-disk state and identify modified files.
   let fileMtimes: Map<string, number> = new Map();
 
+  // The embedding provider, fixed for the index's lifetime. `null` for a
+  // BM25-only build. Read by the chunk-windower on the cold path and by the
+  // search / refresh closures further down.
+  const provider: EmbeddingProvider | null = options.embed?.provider ?? null;
+  // Embedder component of the cache key (DESIGN-0002 §4): `"bm25"` for a
+  // BM25-only build, the provider's `id` otherwise, with a generic fallback
+  // for ad-hoc providers that declare no id.
+  const embedderId = provider !== null ? provider.id ?? "embed" : "bm25";
+
   // Cache lookup. Even on miss the state_id is reused as the save key below.
   if (cache !== null) {
     const stateId = await computeStateId(root);
-    cacheKey = { repoPath: root, stateId };
+    cacheKey = { repoPath: root, stateId, embedderId };
     const loaded = await cache.load(cacheKey);
     if (loaded !== null) {
       chunks = loaded.chunks;
@@ -346,6 +379,21 @@ export async function buildIndex(
     }
     options.onProgress?.({ phase: "walked", totalChunks: files.length });
     chunks = await chunkFiles(files, options.chunker);
+    // Per-model chunk-windowing (DESIGN-0002): re-split any chunk that
+    // exceeds the embedder's token budget so neither BM25 nor the embedder
+    // ever indexes a truncated chunk — both consume this one chunk set
+    // (§5). Skipped for BM25-only builds and windowless embedders. A cache
+    // hit reuses chunks already windowed for this embedder (the cache key
+    // includes embedderId), so this pass runs on the cold path only.
+    if (provider !== null && chunks.length > 0) {
+      // The windower needs the provider's tokenizer; prime it once. An
+      // `embed("")` call is the established priming idiom in this function.
+      await provider.embed("");
+      const wp = resolveWindowParams(provider);
+      if (wp !== null) {
+        chunks = rewindowForBudget(chunks, wp.budget, wp.countTokens);
+      }
+    }
     options.onProgress?.({ phase: "chunked", totalChunks: chunks.length });
   } else {
     options.onProgress?.({
@@ -364,7 +412,6 @@ export async function buildIndex(
   );
 
   let matrix: CosineMatrix | null = null;
-  let provider: EmbeddingProvider | null = null;
   /** Maps cosine-matrix row index back to chunks[id]. */
   let embeddedChunkIds: number[] | null = null;
   /**
@@ -374,8 +421,7 @@ export async function buildIndex(
    */
   let embeddingsBuiltFresh = false;
 
-  if (options.embed !== undefined && chunks.length > 0) {
-    provider = options.embed.provider;
+  if (options.embed !== undefined && provider !== null && chunks.length > 0) {
     const batchSize = options.embed.batchSize ?? DEFAULT_BATCH_SIZE;
     const filter = options.embed.filter ?? defaultEmbedFilter;
 
@@ -794,7 +840,21 @@ export async function buildIndex(
       if (removedSet.has(chunk.filePath)) continue;
       keptChunks.push(chunk);
     }
-    const freshChunks = await chunkFiles(dirtyContents, options.chunker);
+    let freshChunks = await chunkFiles(dirtyContents, options.chunker);
+    // Re-window only the freshly re-chunked files (DESIGN-0002 §2). Kept
+    // chunks were already windowed for this same embedder at build time —
+    // the embedder is fixed for the index's lifetime — so they need no
+    // re-pass. Prime the provider first: `resolveWindowParams` reads the
+    // tokenizer-derived budget, and an unprimed provider would report no
+    // budget and skip windowing silently — the truncation this guards
+    // against. The build already primed it; the call is then a no-op.
+    if (provider !== null && freshChunks.length > 0) {
+      await provider.embed("");
+      const wp = resolveWindowParams(provider);
+      if (wp !== null) {
+        freshChunks = rewindowForBudget(freshChunks, wp.budget, wp.countTokens);
+      }
+    }
     const nextChunks: Chunk[] = [...keptChunks, ...freshChunks];
 
     // 5. Rebuild bm25 from scratch over the new chunk list. In-memory,

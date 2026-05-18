@@ -29,6 +29,22 @@ function repoSlug(p: string): string {
   return createHash("sha256").update(resolve(p)).digest("hex");
 }
 
+// Mirror of `sanitizeForFilename` (not exported) so tests that drop a
+// literal file on disk can name it the way the cache expects to find it.
+function sanitize(s: string): string {
+  return s.replace(/[<>:"/\\|?*]/g, "__");
+}
+
+/** On-disk entry filename for (stateId, embedderId) — see `entryStem`. */
+function entryFile(stateId: string, embedderId: string): string {
+  return `${sanitize(stateId)}__${sanitize(embedderId)}.json`;
+}
+
+/** A cache key. `embedderId` defaults to `"bm25"` (BM25-only build). */
+function keyOf(stateId: string, embedderId = "bm25"): CacheKey {
+  return { repoPath, stateId, embedderId };
+}
+
 function makeChunks(): Chunk[] {
   return [
     {
@@ -53,7 +69,7 @@ function makeChunks(): Chunk[] {
 describe("createIndexCache", () => {
   it("round-trips chunks through save -> load", async () => {
     const cache = createIndexCache({ cacheDir });
-    const key: CacheKey = { repoPath, stateId: "abc123" };
+    const key = keyOf("abc123");
     const chunks = makeChunks();
 
     await cache.save(key, { chunks });
@@ -69,7 +85,7 @@ describe("createIndexCache", () => {
 
   it("round-trips embeddings: same dim and Float32 values within 1e-7", async () => {
     const cache = createIndexCache({ cacheDir });
-    const key: CacheKey = { repoPath, stateId: "withvec" };
+    const key = keyOf("withvec");
     const dim = 4;
     const original = new Float32Array([
       0.1, -0.2, 0.3, 0.4,
@@ -95,7 +111,7 @@ describe("createIndexCache", () => {
 
   it("returns null on a missing key", async () => {
     const cache = createIndexCache({ cacheDir });
-    const loaded = await cache.load({ repoPath, stateId: "nope" });
+    const loaded = await cache.load(keyOf("nope"));
     expect(loaded).toBeNull();
   });
 
@@ -103,23 +119,22 @@ describe("createIndexCache", () => {
     const cache = createIndexCache({ cacheDir });
     const dir = join(cacheDir, repoSlug(repoPath));
     await mkdir(dir, { recursive: true });
-    const target = join(dir, "corrupt.json");
-    await writeFile(target, "{not valid json");
+    const fileName = entryFile("corrupt", "bm25");
+    await writeFile(join(dir, fileName), "{not valid json");
 
-    const loaded = await cache.load({ repoPath, stateId: "corrupt" });
+    const loaded = await cache.load(keyOf("corrupt"));
     expect(loaded).toBeNull();
 
     const remaining = await readdir(dir);
-    expect(remaining).not.toContain("corrupt.json");
+    expect(remaining).not.toContain(fileName);
   });
 
   it("returns null on format_version mismatch", async () => {
     const cache = createIndexCache({ cacheDir });
     const dir = join(cacheDir, repoSlug(repoPath));
     await mkdir(dir, { recursive: true });
-    const target = join(dir, "futureversion.json");
     await writeFile(
-      target,
+      join(dir, entryFile("futureversion", "bm25")),
       JSON.stringify({
         formatVersion: 9999,
         chunks: [],
@@ -127,35 +142,80 @@ describe("createIndexCache", () => {
       }),
     );
 
-    const loaded = await cache.load({ repoPath, stateId: "futureversion" });
+    const loaded = await cache.load(keyOf("futureversion"));
     expect(loaded).toBeNull();
   });
 
-  it("rejects a v1 (line-fallback era) cache after the v2 bump", async () => {
-    // DESIGN-0001: the tree-sitter chunker changes chunk boundaries,
-    // `nodeType`, and `symbolName`, so a pre-tree-sitter v1 index must
-    // never be reused. CACHE_FORMAT_VERSION moved 1 -> 2 to force a
+  it("rejects a formatVersion: 2 (pre-windowing) cache after the v3 bump", async () => {
+    // DESIGN-0002: per-model chunk-windowing makes chunk boundaries depend
+    // on the embedder's token budget, so a v2 (pre-windowing) index must
+    // never be reused. CACHE_FORMAT_VERSION moved 2 -> 3 to force a
     // one-time cold rebuild on upgrade.
-    expect(CACHE_FORMAT_VERSION).toBe(2);
+    expect(CACHE_FORMAT_VERSION).toBe(3);
     const cache = createIndexCache({ cacheDir });
     const dir = join(cacheDir, repoSlug(repoPath));
     await mkdir(dir, { recursive: true });
     await writeFile(
-      join(dir, "v1cache.json"),
+      join(dir, entryFile("v2cache", "bm25")),
       JSON.stringify({
-        formatVersion: 1,
+        formatVersion: 2,
         chunks: makeChunks(),
         createdAt: new Date().toISOString(),
       }),
     );
 
-    const loaded = await cache.load({ repoPath, stateId: "v1cache" });
+    const loaded = await cache.load(keyOf("v2cache"));
     expect(loaded).toBeNull();
+  });
+
+  it("keys entries by embedderId: two embedders, same state, distinct entries", async () => {
+    // DESIGN-0002 §4: chunk boundaries depend on the embedder, so the same
+    // corpus state under two embedders must produce two distinct cache
+    // entries that never collide.
+    const cache = createIndexCache({ cacheDir });
+    const stateId = "shared-state";
+    const minilmKey = keyOf(stateId, "Xenova/all-MiniLM-L6-v2");
+    const potionKey = keyOf(stateId, "minishlab/potion-retrieval-32M");
+
+    const minilmChunks: Chunk[] = [
+      {
+        filePath: "m.ts",
+        startLine: 1,
+        endLine: 1,
+        language: "typescript",
+        content: "minilm-windowed\n",
+        kind: "line",
+      },
+    ];
+    const potionChunks: Chunk[] = [
+      {
+        filePath: "p.ts",
+        startLine: 1,
+        endLine: 1,
+        language: "typescript",
+        content: "potion-windowed\n",
+        kind: "line",
+      },
+    ];
+
+    await cache.save(minilmKey, { chunks: minilmChunks });
+    await cache.save(potionKey, { chunks: potionChunks });
+
+    const loadedMinilm = await cache.load(minilmKey);
+    const loadedPotion = await cache.load(potionKey);
+
+    expect(loadedMinilm?.chunks).toEqual(minilmChunks);
+    expect(loadedPotion?.chunks).toEqual(potionChunks);
+
+    // Two separate files on disk — neither embedder overwrote the other.
+    const dir = join(cacheDir, repoSlug(repoPath));
+    const files = (await readdir(dir)).filter((n) => n.endsWith(".json"));
+    expect(files).toHaveLength(2);
   });
 
   it("handles two parallel save() calls for the same key without corrupting the file", async () => {
     const cache = createIndexCache({ cacheDir });
-    const key: CacheKey = { repoPath, stateId: "parallel" };
+    const key = keyOf("parallel");
 
     const a: Chunk[] = [
       {
@@ -196,7 +256,7 @@ describe("createIndexCache", () => {
 
   it("ignores `*.tmp.*` files when loading", async () => {
     const cache = createIndexCache({ cacheDir });
-    const key: CacheKey = { repoPath, stateId: "withtmp" };
+    const key = keyOf("withtmp");
 
     // Drop a sibling tmp file in the per-repo dir; it must not influence load.
     const dir = join(cacheDir, repoSlug(repoPath));
@@ -214,7 +274,7 @@ describe("createIndexCache", () => {
 
   it("evict(repoPath) removes the per-repo subdir; load returns null", async () => {
     const cache = createIndexCache({ cacheDir });
-    const key: CacheKey = { repoPath, stateId: "evictme" };
+    const key = keyOf("evictme");
 
     await cache.save(key, { chunks: makeChunks() });
     expect(await cache.load(key)).not.toBeNull();

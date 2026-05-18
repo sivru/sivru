@@ -32,6 +32,48 @@ const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_DTYPE: "fp32" | "fp16" | "q8" | "q4" = "fp32";
 const NORM_TOLERANCE = 1e-2;
 
+// Some HF tokenizer configs report a sentinel-huge `model_max_length`
+// (e.g. ~1e30) when no real window is set. Above this ceiling we treat the
+// embedder as windowless rather than guess a budget (DESIGN-0002 §1).
+const MAX_SANE_CONTEXT = 1_000_000;
+
+/**
+ * Effective per-chunk content-token budget for a loaded tokenizer: the raw
+ * context window minus the fixed special-token overhead and the document
+ * instruction prefix. Returns `undefined` when the config carries no usable
+ * window — windowing is then skipped.
+ *
+ * `documentPrefix` matters because the document encode path embeds
+ * `prefix + content` (asymmetric models like Nomic/E5 prepend e.g.
+ * `"search_document: "`). Those prefix tokens occupy window space, so the
+ * per-chunk *content* budget must exclude them — otherwise a chunk windowed
+ * to exactly the budget would still overflow the real window once the
+ * prefix is prepended, and the tokenizer would silently truncate it.
+ */
+function effectiveContextTokens(
+  tok: TransformersTokenizer,
+  documentPrefix: string,
+): number | undefined {
+  const rawMax = tok.model_max_length;
+  if (
+    typeof rawMax !== "number" ||
+    !Number.isFinite(rawMax) ||
+    rawMax <= 0 ||
+    rawMax > MAX_SANE_CONTEXT
+  ) {
+    return undefined;
+  }
+  // Counting the specials added to empty input gives the fixed
+  // [CLS]/[SEP]-style overhead exactly (DESIGN-0002 D6).
+  const specialOverhead = tok.encode("", { add_special_tokens: true }).length;
+  const prefixOverhead =
+    documentPrefix.length > 0
+      ? tok.encode(documentPrefix, { add_special_tokens: false }).length
+      : 0;
+  const budget = rawMax - specialOverhead - prefixOverhead;
+  return budget > 0 ? budget : undefined;
+}
+
 // Minimal structural typing for the bits of @huggingface/transformers we use,
 // so we don't need a top-level static import (lazy load via dynamic import).
 type FeatureExtractionOptions = {
@@ -44,10 +86,22 @@ type TransformersTensor = {
   readonly data: ArrayLike<number> & Iterable<number>;
 };
 
-type FeatureExtractionPipelineFn = (
+// The bits of the loaded tokenizer the windower needs. `encode` with
+// `add_special_tokens: false` yields content tokens (DESIGN-0002 D6);
+// `model_max_length` is the model's raw context window.
+type TransformersTokenizer = {
+  encode(text: string, options?: { add_special_tokens?: boolean }): number[];
+  model_max_length?: number;
+};
+
+// The feature-extraction pipeline is a callable that also exposes the
+// tokenizer it loaded — reused here for token counting.
+type FeatureExtractionPipelineFn = ((
   texts: string | string[],
   options?: FeatureExtractionOptions,
-) => Promise<TransformersTensor>;
+) => Promise<TransformersTensor>) & {
+  tokenizer: TransformersTokenizer;
+};
 
 type TransformersModule = {
   pipeline: (
@@ -105,6 +159,11 @@ export function createTransformersProvider(
 
   let currentDim = initialDim;
   let pipelinePromise: Promise<FeatureExtractionPipelineFn> | null = null;
+  // Captured once the pipeline loads. The chunk-windower reads both; they
+  // are `null` / `undefined` until the first embed() (or prime) call — see
+  // `EmbeddingProvider.contextTokens` / `countTokens`.
+  let tokenizer: TransformersTokenizer | null = null;
+  let contextTokensValue: number | undefined;
 
   async function getPipeline(): Promise<FeatureExtractionPipelineFn> {
     if (pipelinePromise) return pipelinePromise;
@@ -112,7 +171,10 @@ export function createTransformersProvider(
       mkdirSync(cacheDir, { recursive: true });
       const mod = (await import("@huggingface/transformers")) as unknown as TransformersModule;
       mod.env.cacheDir = cacheDir;
-      return mod.pipeline("feature-extraction", modelId, { dtype });
+      const pipe = await mod.pipeline("feature-extraction", modelId, { dtype });
+      tokenizer = pipe.tokenizer;
+      contextTokensValue = effectiveContextTokens(pipe.tokenizer, prefixes.document);
+      return pipe;
     })();
     return pipelinePromise;
   }
@@ -140,8 +202,21 @@ export function createTransformersProvider(
   }
 
   return {
+    id: modelId,
     get dim(): number {
       return currentDim;
+    },
+    get contextTokens(): number | undefined {
+      return contextTokensValue;
+    },
+    countTokens(text: string): number {
+      if (tokenizer === null) {
+        throw new Error(
+          "SIVRU-E1005: transformers provider countTokens() called before " +
+            "the tokenizer loaded — embed() (or a prime call) must run first",
+        );
+      }
+      return tokenizer.encode(text, { add_special_tokens: false }).length;
     },
     async embed(text: string): Promise<Float32Array> {
       // `embed` is the document-encoding path — used by buildIndex on
