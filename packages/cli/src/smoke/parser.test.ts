@@ -33,6 +33,23 @@ const GREP_TRANSCRIPT = [
   }),
 ].join("\n");
 
+const FIND_RELATED_TRANSCRIPT = [
+  JSON.stringify({ type: "system", subtype: "init" }),
+  JSON.stringify({
+    type: "assistant",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          name: "mcp__sivru__find_related",
+          input: { filePath: "src/x.ts", startLine: 1, endLine: 20 },
+        },
+      ],
+    },
+  }),
+].join("\n");
+
 const NO_TOOL_TRANSCRIPT = [
   JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } }),
   "this line is not json and must be tolerated",
@@ -68,10 +85,14 @@ describe("smoke parser — classifyTool", () => {
     expect(classifyTool("Grep")).toBe("grep");
   });
 
+  it("classifies the sivru find_related tool", () => {
+    expect(classifyTool("mcp__sivru__find_related")).toBe("find-related");
+  });
+
   it("classifies unrelated tools as other", () => {
     expect(classifyTool("Read")).toBe("other");
     expect(classifyTool("Bash")).toBe("other");
-    expect(classifyTool("mcp__sivru__find_related")).toBe("other");
+    expect(classifyTool("Glob")).toBe("other");
   });
 });
 
@@ -86,8 +107,17 @@ describe("smoke parser — firstRoutingChoice", () => {
     expect(firstRoutingChoice(parseToolUses(GREP_TRANSCRIPT))).toBe("grep");
   });
 
+  it("reports find-related when the agent used find_related", () => {
+    expect(firstRoutingChoice(parseToolUses(FIND_RELATED_TRANSCRIPT))).toBe(
+      "find-related",
+    );
+  });
+
   it("skips non-routing tools and reports the first routing one", () => {
     expect(firstRoutingChoice(["Read", "Bash", "Grep"])).toBe("grep");
+    expect(firstRoutingChoice(["Read", "mcp__sivru__find_related"])).toBe(
+      "find-related",
+    );
   });
 
   it("reports none when no routing tool was used", () => {

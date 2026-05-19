@@ -1,17 +1,24 @@
 // Parser for `claude` CLI stream-json output: extracts which tools an agent
 // invoked, so the §5 smoke runner can score routing correctness.
 //
-// SCHEMA ASSUMPTION — verify against the live `claude` CLI before trusting
-// any numbers (DESIGN-0003 §5: the harness is feasibility-risky):
-//   `claude -p <prompt> --output-format stream-json` emits newline-delimited
-//   JSON events. Assistant turns carry `message.content`, an array that may
-//   include `{ "type": "tool_use", "name": "<tool>" }` blocks. Claude Code's
-//   built-in grep tool is `Grep`; MCP tools are namespaced
-//   `mcp__<server>__<tool>` (so sivru's search is `mcp__sivru__search`).
+// SCHEMA — verified against `claude` 2.1.144 (2026-05-19):
+//   `claude -p <prompt> --output-format stream-json --verbose` emits
+//   newline-delimited JSON events. Assistant turns are `{ "type":
+//   "assistant", "message": { "role": "assistant", "content": [...] } }`,
+//   where `content` may include `{ "type": "tool_use", "name": "<tool>" }`
+//   blocks. Claude Code's grep tool is `Grep`; MCP tools are namespaced
+//   `mcp__<server>__<tool>`, so sivru's are `mcp__sivru__search` and
+//   `mcp__sivru__find_related`.
 //
+// Re-verify this schema if the harness is run against a much newer `claude`.
 // The parser tolerates non-JSON lines so a stray log line cannot crash it.
 
-export type ToolChoice = "sivru-search" | "grep" | "other" | "none";
+export type ToolChoice =
+  | "sivru-search"
+  | "find-related"
+  | "grep"
+  | "other"
+  | "none";
 
 type ContentBlock = { type?: string; name?: string };
 type StreamEvent = { type?: string; message?: { content?: ContentBlock[] } };
@@ -42,8 +49,11 @@ export function parseToolUses(streamJson: string): string[] {
 /** Classify one tool name into a routing category. */
 export function classifyTool(name: string): ToolChoice {
   const lower = name.toLowerCase();
-  if (lower.includes("sivru") && lower.includes("search")) {
-    return "sivru-search";
+  if (lower.includes("sivru")) {
+    if (lower.includes("find_related") || lower.includes("find-related")) {
+      return "find-related";
+    }
+    if (lower.includes("search")) return "sivru-search";
   }
   if (lower === "grep" || lower.includes("ripgrep")) {
     return "grep";
@@ -52,14 +62,20 @@ export function classifyTool(name: string): ToolChoice {
 }
 
 /**
- * The first routing-relevant tool (sivru-search or grep) the agent used.
- * `other` tools (Read, Bash, …) are skipped; `none` means the agent picked
- * no routing-relevant tool at all.
+ * The first routing-relevant tool the agent used: `sivru-search`, `grep`, or
+ * `find-related`. Non-routing tools (Read, Bash, …) are skipped; `none` means
+ * the agent picked no routing-relevant tool at all.
  */
 export function firstRoutingChoice(toolNames: readonly string[]): ToolChoice {
   for (const name of toolNames) {
     const choice = classifyTool(name);
-    if (choice === "sivru-search" || choice === "grep") return choice;
+    if (
+      choice === "sivru-search" ||
+      choice === "grep" ||
+      choice === "find-related"
+    ) {
+      return choice;
+    }
   }
   return "none";
 }

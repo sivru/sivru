@@ -38,11 +38,34 @@ function claudeAvailable(): boolean {
   }
 }
 
+// The agent can only route to a tool it is allowed to call. In headless
+// `claude -p` mode tool use is gated, so the harness must pass an explicit
+// allowlist — without it every prompt scores `none` and the test is dead.
+// Verified against claude 2.1.144: tools work with --allowedTools, do not
+// without it.
+const SMOKE_ALLOWED_TOOLS = [
+  "Grep",
+  "Read",
+  "Glob",
+  "mcp__sivru__search",
+  "mcp__sivru__find_related",
+];
+
 /** Drive one prompt through `claude` and return its raw stream-json output. */
 function runPrompt(prompt: string): string {
   return execFileSync(
     "claude",
-    ["-p", prompt, "--output-format", "stream-json", "--verbose"],
+    [
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--max-turns",
+      "6",
+      "--allowedTools",
+      ...SMOKE_ALLOWED_TOOLS,
+    ],
     { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
   );
 }
