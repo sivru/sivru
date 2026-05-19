@@ -42,8 +42,8 @@ export const ROUTING_CORPUS: readonly RoutingPrompt[] = [
     expected: "sivru-search",
   },
   {
-    id: "ident-parseconfig-callers",
-    prompt: "Find every call site of the function parseConfig.",
+    id: "ident-import-search",
+    prompt: 'Find every file that imports from "@sivru/search".',
     shape: "identifier",
     expected: "grep",
   },

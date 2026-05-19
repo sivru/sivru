@@ -78,6 +78,7 @@ const HELP_TEXT = [
   "  --project                   Install into <git repo root>/.claude/skills/",
   "                              instead of the default ~/.claude/skills/",
   "  --force                     Overwrite even a non-sivru file at the path",
+  "  --cwd <dir>                  Directory --project resolves the git root from",
   "",
   "Tracked at https://github.com/sivru/sivru",
 ].join("\n");

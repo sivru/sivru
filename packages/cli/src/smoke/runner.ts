@@ -62,6 +62,7 @@ async function main(): Promise<number> {
   process.stdout.write(`§5 routing smoke test — label: ${label}\n\n`);
 
   let correct = 0;
+  let failedRuns = 0;
   for (const item of ROUTING_CORPUS) {
     let choice: ToolChoice;
     try {
@@ -71,6 +72,7 @@ async function main(): Promise<number> {
         `  ${item.id}: claude run failed: ${(err as Error).message}\n`,
       );
       choice = "none";
+      failedRuns++;
     }
     const ok = choice === item.expected;
     if (ok) correct++;
@@ -85,6 +87,16 @@ async function main(): Promise<number> {
   process.stdout.write(
     `\nrouting correctness: ${correct}/${total} (${pct}%) — label ${label}\n`,
   );
+
+  // A run where some prompts errored is a broken harness, not a real
+  // result — exit non-zero so a wrapper can tell the two apart.
+  if (failedRuns > 0) {
+    process.stderr.write(
+      `\n${failedRuns}/${total} prompt(s) errored — the correctness number ` +
+        `above is unreliable. Treat this as a harness failure.\n`,
+    );
+    return 1;
+  }
   return 0;
 }
 

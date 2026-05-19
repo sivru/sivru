@@ -37,3 +37,24 @@ branch after the user asked to address all review findings:
   in `emitOversizeLine`.** `idx` is always in range, so the `?? ""` is
   never exercised at runtime — but it is required to satisfy
   `noUncheckedIndexedAccess`, so it is not removable dead code. Left as-is.
+
+## Run: .auto-ship/runs/20260519-174233-sivru-skill.md (2026-05-19)
+
+Code review of the v0.4 sivru-skill diff. CRITICAL/MAJOR: none.
+Fixed in-loop: hidden --cwd flag (now documented), smoke-corpus ambiguous
+caller prompt (reworded to an unambiguous import search), runner exit code
+on partial failure. Deferred minors/nits below.
+
+- packages/cli/src/commands/skill.ts:~248 — uninstall removes SKILL.md and
+  the empty sivru/ dir but leaves an empty .claude/skills/ (and .claude/)
+  behind. Minor litter; acceptable since other tools may share skills/.
+- packages/cli/src/commands/{skill,help}.test.ts — captureIO stdout/stderr
+  monkey-patch helper is duplicated across both test files. Could be a
+  shared test util. NIT.
+- packages/cli/src/smoke/parser.ts:~48 — classifyTool matches a "ripgrep"
+  substring, but Claude Code's tool is named "Grep" (Bash runs rg). The
+  ripgrep branch is harmless defensiveness, untested, likely never hit.
+- packages/cli/src/skill-asset.ts:~55 — looksLikeSivruSkill only checks
+  frontmatter name: sivru. A third-party skill also named "sivru" would
+  bypass the non-sivru-file guard. Extremely unlikely; content-hash/marker
+  safety is deliberately deferred to v0.6 (DESIGN-0003).

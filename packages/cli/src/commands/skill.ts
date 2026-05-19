@@ -271,6 +271,8 @@ const USAGE = [
   "  --project   Install into <git repo root>/.claude/skills/ instead of",
   "              the default ~/.claude/skills/",
   "  --force     Overwrite even a non-sivru file at the target path",
+  "  --cwd <dir> Directory --project resolves the git root from",
+  "              (default: the current directory)",
 ].join("\n");
 
 export async function runSkill(argv: readonly string[]): Promise<number> {
