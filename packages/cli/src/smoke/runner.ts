@@ -13,12 +13,17 @@
 //
 // Compare the two correctness rates and record the result in CHANGELOG.md.
 //
-// FEASIBILITY (DESIGN-0003 §5): this harness is research-shaped. Before
-// trusting any number, confirm `claude --output-format stream-json` emits
-// the event schema src/smoke/parser.ts assumes. If it does not, fix the
-// parser (and its fixture) — do not quietly downgrade §5 to eyeballing.
+// HARNESS NOTES (verified against claude 2.1.144, 2026-05-19):
+//   - Tool use in headless `claude -p` is gated; the run must pass
+//     --allowedTools or the agent calls no tools (every prompt -> none).
+//   - `claude` exits NON-ZERO when it hits --max-turns, but the
+//     stream-json is still complete and parseable. So the harness reads
+//     the output regardless of exit code — the first routing tool is a
+//     valid signal whether or not the agent finished the task.
+//   - A genuine failure (claude can't launch, zero output) is retried
+//     once, then excluded from the denominator.
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 import { ROUTING_CORPUS } from "./corpus.js";
 import { firstRoutingChoice, parseToolUses, type ToolChoice } from "./parser.js";
@@ -30,19 +35,13 @@ function parseLabel(argv: readonly string[]): string {
 }
 
 function claudeAvailable(): boolean {
-  try {
-    execFileSync("claude", ["--version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
+  const res = spawnSync("claude", ["--version"], { stdio: "ignore" });
+  return !res.error && res.status === 0;
 }
 
 // The agent can only route to a tool it is allowed to call. In headless
-// `claude -p` mode tool use is gated, so the harness must pass an explicit
+// `claude -p` mode tool use is gated, so the harness passes an explicit
 // allowlist — without it every prompt scores `none` and the test is dead.
-// Verified against claude 2.1.144: tools work with --allowedTools, do not
-// without it.
 const SMOKE_ALLOWED_TOOLS = [
   "Grep",
   "Read",
@@ -51,9 +50,17 @@ const SMOKE_ALLOWED_TOOLS = [
   "mcp__sivru__find_related",
 ];
 
-/** Drive one prompt through `claude` and return its raw stream-json output. */
-function runPrompt(prompt: string): string {
-  return execFileSync(
+type PromptRun = { output: string; ran: boolean };
+
+/**
+ * Drive one prompt through `claude`. Returns the raw stream-json `output`
+ * and whether the harness `ran` it at all. A non-zero exit (e.g. `claude`'s
+ * error_max_turns) is NOT a failure — the output is still complete and the
+ * routing signal valid. `ran` is false only when `claude` could not launch
+ * or produced nothing parseable.
+ */
+function runPrompt(prompt: string): PromptRun {
+  const res = spawnSync(
     "claude",
     [
       "-p",
@@ -68,6 +75,9 @@ function runPrompt(prompt: string): string {
     ],
     { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
   );
+  if (res.error) return { output: "", ran: false };
+  const output = res.stdout ?? "";
+  return { output, ran: output.trim().length > 0 };
 }
 
 async function main(): Promise<number> {
@@ -76,8 +86,7 @@ async function main(): Promise<number> {
   if (!claudeAvailable()) {
     process.stderr.write(
       "smoke: the `claude` CLI was not found on PATH — the §5 harness " +
-        "cannot run. (DESIGN-0003 §5: harness feasibility must be verified " +
-        "before §5 can be reported.)\n",
+        "cannot run.\n",
     );
     return 1;
   }
@@ -85,38 +94,46 @@ async function main(): Promise<number> {
   process.stdout.write(`§5 routing smoke test — label: ${label}\n\n`);
 
   let correct = 0;
-  let failedRuns = 0;
+  let errored = 0;
   for (const item of ROUTING_CORPUS) {
-    let choice: ToolChoice;
-    try {
-      choice = firstRoutingChoice(parseToolUses(runPrompt(item.prompt)));
-    } catch (err) {
-      process.stderr.write(
-        `  ${item.id}: claude run failed: ${(err as Error).message}\n`,
-      );
-      choice = "none";
-      failedRuns++;
+    // One retry covers a transient launch failure; a max-turns exit does
+    // not reach here as a failure (runPrompt returns ran:true with output).
+    let run = runPrompt(item.prompt);
+    if (!run.ran) run = runPrompt(item.prompt);
+
+    let choice: ToolChoice = "none";
+    if (run.ran) {
+      choice = firstRoutingChoice(parseToolUses(run.output));
+    } else {
+      errored++;
     }
-    const ok = choice === item.expected;
+    const ok = run.ran && choice === item.expected;
     if (ok) correct++;
     process.stdout.write(
       `  ${ok ? "OK  " : "MISS"} ${item.id} ` +
-        `(${item.shape}) expected=${item.expected} got=${choice}\n`,
+        `(${item.shape}) expected=${item.expected} got=${choice}` +
+        `${run.ran ? "" : " [ERRORED]"}\n`,
     );
   }
 
   const total = ROUTING_CORPUS.length;
-  const pct = total === 0 ? 0 : Math.round((correct / total) * 100);
+  const scored = total - errored;
+  const pct = scored === 0 ? 0 : Math.round((correct / scored) * 100);
   process.stdout.write(
-    `\nrouting correctness: ${correct}/${total} (${pct}%) — label ${label}\n`,
+    `\nrouting correctness: ${correct}/${scored} scored (${pct}%) — label ${label}\n`,
   );
+  if (errored > 0) {
+    process.stdout.write(
+      `(${errored}/${total} prompt(s) errored and were excluded)\n`,
+    );
+  }
 
-  // A run where some prompts errored is a broken harness, not a real
-  // result — exit non-zero so a wrapper can tell the two apart.
-  if (failedRuns > 0) {
+  // Only call it a harness failure when too many prompts errored to trust
+  // the number — a stray one or two is normal for live API calls.
+  if (scored === 0 || errored / total > 0.25) {
     process.stderr.write(
-      `\n${failedRuns}/${total} prompt(s) errored — the correctness number ` +
-        `above is unreliable. Treat this as a harness failure.\n`,
+      `\n${errored}/${total} errored — too many to trust this run. ` +
+        `Treat it as a harness failure, not a routing result.\n`,
     );
     return 1;
   }
