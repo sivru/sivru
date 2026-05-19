@@ -14,6 +14,7 @@ import {
   runObserve,
   runSearch,
   runSession,
+  runSkill,
   runVersion,
 } from "./commands/index.js";
 import { runMcp } from "./mcp-entry.js";
@@ -63,6 +64,9 @@ async function main(): Promise<number> {
 
     case "config":
       return runConfig(argv);
+
+    case "skill":
+      return runSkill(argv);
 
     case "help":
     case "--help":

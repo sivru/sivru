@@ -14,6 +14,7 @@ export { runDoctor } from "./doctor.js";
 export { runBenchPersonal } from "./bench-personal.js";
 export { runBenchModels } from "./bench-models.js";
 export { runConfig } from "./config.js";
+export { runSkill } from "./skill.js";
 
 export type Command =
   | "search"
@@ -25,5 +26,6 @@ export type Command =
   | "doctor"
   | "bench"
   | "config"
+  | "skill"
   | "version"
   | "help";
