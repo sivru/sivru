@@ -1,13 +1,16 @@
 # DESIGN-0003: the sivru skill
 
-**Status:** Accepted
+**Status:** Draft
 **Class:** Spine (per [GOALS.md](../../GOALS.md))
 **Targets:** v0.4.0
 **Issue:** filed when v0.4 work starts
 **Created:** 2026-05-08
-**Updated:** 2026-05-19 — Stub → Draft → Accepted through engineering
-review (decisions D1, D2, D4, D5 below). The review materially grew
-scope; see Effort.
+**Updated:** 2026-05-19 — revised back to Draft after CEO + engineering
+review (`/plan-ceo-review`, `/plan-eng-review`). The review cut scope:
+the install edit-safety subsystem moves to v0.6, the observe efficacy
+baseline to v0.5, and the §6 smoke test gains a real harness. See
+"Deferred to later versions" and Effort. Prior Accepted revision (the
+full installer subsystem) is superseded by this one.
 **Author:** @pochadri
 
 ## Problem
@@ -45,7 +48,8 @@ context. v0.4 therefore uses both channels:
   `sivru.search` and `sivru.find_related` (registered by the MCP
   server) carry the one-line routing hint. This is the reliable
   channel and it is cheap — a few lines in the MCP server's tool
-  registration.
+  registration. It is also the channel the engineering review found
+  carries most of v0.4's value, because it has no activation risk.
 
   ```
   sivru.search      — Semantic + lexical code search. Best for
@@ -77,32 +81,66 @@ new subcommand installs it:
   (or `.claude/skills/sivru/` with `--project`).
 - `sivru skill uninstall` removes it.
 
-Why bundled: the skill describes the MCP tool surface a given CLI
-version exposes — shipping them together keeps them in sync at install
-time, and the skill is meaningless without the CLI, so a separate
-package and second install buy nothing. (`> note:` overrides the
-roadmap's `@sivru/skill` package name, deliberately.)
+Why bundled: the skill describes the routing policy and the MCP tool
+surface; shipping them in one package keeps the install path simple,
+and the skill is meaningless without the CLI, so a separate package and
+second install buy nothing. (This deliberately overrides the roadmap's
+`@sivru/skill` package name.)
 
-### 3. Install without destroying user edits (D2)
+**Packaging (engineering review, finding A1).** The bundled `SKILL.md`
+is a **static asset** — static per CLI release, not interpolated per
+install; two installs from the same CLI version produce a
+byte-identical file. `@sivru/cli` builds with plain `tsc`, which emits
+only compiled `.js` into `dist/`, and `package.json` `files` is
+`["dist", "README.md"]`. A raw `SKILL.md` would therefore be **silently
+dropped from the published npm package**. So:
 
-The skill is the customization layer — users are expected to edit
-their copy. So `sivru skill install` must not silently clobber edits:
+- the `SKILL.md` asset is added to `package.json` `files`;
+- `sivru skill install` resolves it at runtime relative to the package
+  root via `import.meta.url`, not via a source-tree path;
+- CI runs `npm pack` and asserts the tarball contains `SKILL.md`, so a
+  wrong `files` entry fails CI rather than failing users after
+  `npm install -g`.
 
-- On install it writes the `SKILL.md` **and** a version marker
-  (`.sivru-skill-version` — the sivru version + a content hash of
-  exactly what was written).
-- On re-install: hash the existing file with **line-ending-normalised
-  content** (so a CRLF / trailing-newline / whitespace change is not
-  mistaken for an edit — finding #4). If it matches the marker's
-  recorded hash, the file is pristine → update in place. If it
-  differs, the user edited it → do **not** overwrite; write the new
-  version as `SKILL.md.new`, leave the marker, and report it.
-- `--force` overwrites outright (the "just give me the latest" path).
-- The marker stores only the **last-written** hash — no registry of
-  all historical versions is needed.
-- Before treating a hash mismatch as a user edit, check the file even
-  looks like the sivru skill (frontmatter `name`); a stray unrelated
-  file at the path is reported, not adopted (finding #8).
+### 3. Install — minimal, `--force` by default (D2, revised)
+
+The skill is the customization layer — users may edit their copy. v0.4
+ships the **minimal** installer; the edit-preservation subsystem
+(marker file, content hashing, `SKILL.md.new` dead-drop) is deferred to
+v0.6, where the `@sivru`-authoring content gives users a real reason to
+edit (see "Deferred to later versions").
+
+`sivru skill install`:
+
+- Resolves the target scope: default `~/.claude/skills/sivru/`;
+  `--project` writes `.claude/skills/sivru/` **at the git repo root**
+  (not the current working directory — running it from a subdirectory
+  still targets the repo-root `.claude/`; reuse `doctor.ts`'s
+  `resolveRepoRoot`).
+- Reads the bundled `SKILL.md` asset (§2). If the asset is missing,
+  fail loud — "install is corrupt; reinstall `@sivru/cli`" — never
+  write a stub.
+- Ensures the target directory exists (`mkdir -p`; surfaces a named
+  error on `EACCES`, fails clean on `ENOSPC` with no partial stub).
+- Overwrites by default. If a file already exists at the path and its
+  content **differs** from what would be written, print a one-line
+  notice ("note: your edited SKILL.md was overwritten"); if identical,
+  stay silent. The difference check is a best-effort raw content
+  compare — it is only a cosmetic notice, install proceeds either way,
+  so a CRLF-only false notice is acceptable until v0.6's normalised
+  hashing lands.
+- **Scope-collision notice (engineering review, finding 4 / open
+  question #2).** If a copy already exists in the *other* scope
+  (user-scope when installing `--project`, or vice versa), print a
+  one-line note so a shadowed or stale copy is visible. No change to
+  Claude Code's own precedence; the `doctor` double-install check ships
+  with the deferred `doctor` work in v0.6.
+
+`sivru skill uninstall` removes the installed `SKILL.md` (and its
+directory if empty). It is idempotent — an already-absent file is
+reported as success, not an error.
+
+`sivru help` lists the `skill` subcommand.
 
 ### 4. The `SKILL.md` content — one canonical policy
 
@@ -112,40 +150,92 @@ it names the cases where Grep beats `sivru.search`. That honesty is in
 mild tension with the feature's goal (it hands the agent its trained
 default), and the choice is deliberate: a skill that oversold sivru to
 capture tool-calls would violate the project's honesty principle, and
-the §6 smoke test measures whether honest framing still shifts
-routing. If it does not, revisit then — do not pre-emptively shade the
-truth.
+the §5 smoke test measures whether honest framing still routes
+correctly. If it does not, revisit then — do not pre-emptively shade
+the truth.
 
-**One canonical source (finding #6).** The routing policy is currently
-stated in `WHY-SIVRU.md`, will be in the `SKILL.md`, the MCP tool
-descriptions, and the skill README. The `SKILL.md` body is canonical;
-the MCP descriptions are a deliberate one-line compression; the README
-and `WHY-SIVRU.md` link to it rather than restate it, so they cannot
-drift.
+**One canonical source.** The routing policy is canonically the
+`SKILL.md` body. The MCP tool descriptions are a deliberate one-line
+compression of it; the README and `WHY-SIVRU.md` **link** to it rather
+than restate it, so they cannot drift.
 
-### 5. Staleness — `sivru doctor` (findings #3, #5)
+**Drift guard (engineering review, finding 5).** Because the MCP
+description strings are code that can silently fall out of sync with
+the canonical body, a unit test asserts each description still contains
+its routing hint — the `search` description names the
+grep-for-identifiers case, the `find_related` description names the
+after-edit case. A substring check, not semantic equivalence: it guards
+against the hint being deleted, which is the realistic failure.
 
-The installed `SKILL.md` is a static copy. The CLI moves on — new MCP
-tools, renamed tools — and nothing re-runs `install`, so the copy goes
-stale **silently**. `sivru doctor` gains two checks:
-
-- the installed skill's marker version is behind the running CLI →
-  warn, suggest `sivru skill install`;
-- a `SKILL.md.new` is sitting unmerged next to the active skill →
-  surface it so the dead-drop from §3 actually gets reconciled.
-
-### 6. In-cycle efficacy smoke test (D5)
+### 5. In-cycle efficacy smoke test (D5, revised)
 
 v0.4's value rests on "the routing guidance changes agent behaviour."
 The full A/B proof is the v0.16 skill-efficacy bench, but shipping a
 Spine release with that hypothesis 100% unverified for ~12 releases is
-not acceptable. v0.4 includes a **smoke test**: a handful of
-routing-decision prompts (e.g. *"where is retry backoff handled"* →
-should pick `sivru.search`; *"find every call site of parseConfig"* →
-should pick Grep), run with the guidance present vs absent, checked
-for a routing shift. Not the v0.16 harness — a rough confidence check,
-and the seed corpus for it. The result is recorded in the v0.4
-changelog.
+not acceptable. v0.4 includes a **smoke test** — a rough confidence
+check and the seed corpus for the v0.16 harness.
+
+**Harness (engineering review, finding A2 — gates the section).** The
+smoke test must actually run a model; it is not a human eyeballing
+prompts. It does so by **shelling out to the `claude` CLI** in
+print / JSON output mode, with the sivru skill installed:
+
+- a small corpus of routing-decision prompts, each labelled with the
+  correct tool for its query shape (e.g. *"where is retry backoff
+  handled"* → behavioural → `sivru.search`; *"find every call site of
+  parseConfig"* → identifier → Grep);
+- each prompt is run through `claude` with the skill+MCP guidance
+  present and again with it absent;
+- the runner reads structured `tool_use` events from `claude`'s
+  JSON / stream-json output to determine which tool was picked — it
+  does **not** scrape prose text.
+
+Driving `claude` with the skill installed means the smoke test also
+exercises **activation** — whether the frontmatter `description`
+actually makes Claude Code load the skill body. That was a separate
+un-budgeted concern; the harness folds it in.
+
+If a runnable harness turns out not to be feasible inside v0.4's
+budget, this section must say so honestly rather than ship a test that
+cannot execute. The harness is research-shaped; treat its feasibility
+as the first thing to verify.
+
+**Success metric (engineering review, finding 1).** Success is
+**routing correctness** — "picked the correct tool for the query
+shape" — *not* "shifted toward sivru". A shift toward `sivru.search` on
+an identifier-shaped query is a regression, not a win. The result is
+recorded in the v0.4 changelog; it is a confidence check, not a hard
+CI gate.
+
+## Deferred to later versions
+
+The CEO + engineering review cut the following out of v0.4. They are
+recorded here so the cut is explicit and the work is not lost.
+
+- **v0.6 — install edit-safety subsystem.** A marker file
+  (`.sivru-skill-version`, carrying a bundled-content hash and an
+  install timestamp), normalised-content hashing (so a CRLF /
+  trailing-newline change is not mistaken for a user edit), a
+  pristine-vs-edited re-install decision, and a `SKILL.md.new`
+  dead-drop when the user has edited their copy. Rebuilt in v0.6
+  alongside the `@sivru`-block authoring content that gives users a
+  reason to edit the skill. When this lands: a sivru-looking file with
+  no marker is treated as user-owned (write `SKILL.md.new`, never
+  clobber).
+- **v0.6 — `sivru doctor` checks.** Warn on a stale installed skill —
+  comparing the **bundled content hash**, not the CLI version number,
+  so a no-op version bump does not fire a spurious warning — surface a
+  pending `SKILL.md.new`, and flag a double-install across scopes.
+- **v0.6 — `sivru skill diff`.** Unified diff between an installed,
+  user-edited `SKILL.md` and the version `@sivru/cli` would write,
+  reconciling the `SKILL.md.new` dead-drop.
+- **v0.5 — observe efficacy baseline.** An `observe`-based baseline
+  routing-rate over local session jsonl. Deferred because a baseline
+  with no with/without comparison drives no v0.4 decision; it belongs
+  in the release that can trend against it.
+- **No version yet — tool-neutral routing rules.** Emitting Cursor
+  (`.cursor/rules`) and Codex (`AGENTS.md`) variants from the same
+  canonical policy. Tracked in `TODOS.md`.
 
 ## Alternatives considered
 
@@ -163,6 +253,11 @@ room for the find_related workflow, the `observe` pointer, or the v0.6
 `@sivru`-block authoring the skill is meant to grow into. Rejected
 (D4) — the tool descriptions are the floor, the skill is the depth.
 
+**Full install edit-safety subsystem in v0.4.** The prior Accepted
+revision shipped the marker / hashing / `SKILL.md.new` / `doctor`
+subsystem in v0.4. The CEO review cut it: it preserves edits nobody has
+made on the skill's first release. Moved to v0.6 (see "Deferred").
+
 **`postinstall` hook auto-writing `~/.claude/skills/`.** npm
 postinstall writing outside the package dir is a silent footgun. An
 explicit `sivru skill install` is predictable. Rejected.
@@ -170,64 +265,81 @@ explicit `sivru skill install` is predictable. Rejected.
 ## Open questions
 
 - **How prescriptive the routing rules are** — settle the exact
-  wording against the §6 smoke-test prompts during implementation.
-- **`sivru skill install` default scope** — user (`~/.claude/skills/`)
-  by default, `--project` opt-in. Confirm no surprise if both exist.
+  wording of the `SKILL.md` body and the frontmatter `description`
+  against the §5 smoke-test prompts during implementation.
+
+(Open question #2 from the prior revision — `install` default scope —
+is resolved: user scope by default, `--project` opt-in, and the §3
+scope-collision notice makes a double-install visible.)
 
 ## Acceptance criteria
 
 - The one-line routing hint is in the `sivru.search` /
-  `sivru.find_related` MCP tool `description` strings (always-on).
+  `sivru.find_related` MCP tool `description` strings (always-on), and
+  a unit test asserts each description still contains its hint (§4).
 - `SKILL.md` ships inside `@sivru/cli`, Claude Code skill format, with
   a frontmatter `description` written to trigger on the general
-  code-search/navigate situation.
-- `sivru skill install` writes the skill + a version marker;
-  `--project` variant; `uninstall` removes it; `sivru help` lists the
-  `skill` subcommand.
-- Re-install: a pristine file (normalised-hash match) updates in
-  place; a user-edited file is preserved and the update written as
-  `SKILL.md.new`; `--force` overwrites; a non-sivru file at the path
-  is reported, not adopted.
-- `sivru doctor` warns on a stale installed skill and on a pending
-  `SKILL.md.new`.
+  code-search/navigate situation. It is in `package.json` `files`, and
+  a CI `npm pack` check confirms it is in the published tarball.
+- `sivru skill install` writes the skill (resolving the bundled asset
+  via `import.meta.url`); `--project` writes to the git repo root;
+  `uninstall` removes it idempotently; `sivru help` lists the `skill`
+  subcommand.
+- Install overwrites by default; an existing file whose content
+  differs triggers a one-line "overwritten" notice; a copy in the
+  other scope triggers a one-line collision notice.
+- Install error paths are explicit: missing bundled asset fails loud,
+  `EACCES` gives a named error, `ENOSPC` fails clean with no stub.
 - The routing policy has one canonical home (`SKILL.md` body); README
-  and `WHY-SIVRU.md` reference it.
-- The §6 efficacy smoke test runs and its result is in the changelog.
+  and `WHY-SIVRU.md` reference it rather than restate it.
+- The §5 efficacy smoke test runs through the `claude` CLI with the
+  skill installed, scores routing **correctness** per query shape, and
+  its result is recorded in the changelog. If no runnable harness is
+  feasible in budget, §5 is amended to say so.
 
 ## Test plan
 
-- **Unit — `sivru skill install`.** Default path; `--project` path;
-  fresh install writes file + marker; pristine re-install updates;
-  user-edited file → `SKILL.md.new` written, original untouched;
-  `--force` overwrites an edited file; non-sivru file at the path is
-  reported; `uninstall` removes file + marker.
-- **Unit — normalised hashing.** A CRLF / trailing-newline-only
-  difference still counts as pristine (not a false "edited").
+- **Unit — `sivru skill install`.** Fresh install writes the file;
+  `--project` resolves to the git repo root from a subdirectory;
+  default overwrite; an existing differing file triggers the notice;
+  an identical file does not; a copy in the other scope triggers the
+  collision notice; a non-sivru file at the path is reported, not
+  adopted; missing bundled asset fails loud; `uninstall` removes the
+  file and is idempotent when the file is absent.
+- **Unit — packaging resolution (test gap 1).** Resolve the bundled
+  `SKILL.md` via the same `import.meta.url` logic the command uses and
+  assert it exists. Plus a CI `npm pack` step asserting the tarball
+  contains `SKILL.md`.
 - **Unit — skill format.** The shipped `SKILL.md` frontmatter parses
   and has the required fields.
-- **Unit — `sivru doctor`.** Stale-marker warning fires; pending
-  `SKILL.md.new` is surfaced.
 - **Unit — `sivru help`.** Lists the `skill` subcommand.
-- **Smoke test — efficacy (§6).** The routing-prompt set; routing
-  shift with vs without the guidance; recorded, not asserted as a
-  hard gate.
+- **Unit — MCP description drift (§4).** Each tool description string
+  contains its routing hint.
+- **Unit — smoke-runner parser (test gap 2).** A recorded `claude`
+  JSON output fixture; the tool-choice parser extracts the right tool.
+- **Smoke test — efficacy (§5).** The routing-prompt corpus run
+  through the `claude` CLI with the skill installed; routing
+  correctness per query shape with vs without the guidance; recorded,
+  not asserted as a hard gate.
 - **Review-gated — content.** Routing policy correct and honest;
   verified by reading.
 
 ## Effort
 
-The roadmap budgeted v0.4 at ~1 week. Engineering review grew it: D4
-adds MCP-tool-description changes, D5 adds the efficacy smoke test,
-and findings #3/#5/#8 add `doctor` checks and `uninstall`. Realistic
-estimate is now **~1.5–2 weeks**. This is a deliberate, reviewed
-expansion — the bare ~1-week version would have shipped a skill that
-mostly never loads and was never tested. Recorded here so the roadmap
-estimate is not silently wrong.
+The prior Accepted revision estimated ~1.5–2 weeks. The CEO review cut
+the install edit-safety subsystem (to v0.6) and the observe baseline
+(to v0.5); the engineering review added the packaging fix, the
+`claude`-CLI smoke harness, the drift test, and two test-coverage
+items. Revised estimate: **~1–1.5 weeks** human-team — the
+roadmap-facing number for the v0.4 slot — or **~1.5–2.5 days** with CC.
+Implementation tasks are tracked as T1–T7 from the engineering review.
 
 ## Customization shape
 
 The skill *is* the customization layer (per the three-layer rule, the
 declarative and code layers are N/A — a skill is prompt content).
-`sivru skill install` drops an editable file; §3 makes sure a later
-re-install never destroys those edits. Built-in default: the curated
+`sivru skill install` drops an editable file. In v0.4 a re-install
+overwrites by default and notices that it did; the re-install logic
+that *preserves* edits is the v0.6 edit-safety subsystem (see
+"Deferred to later versions"). Built-in default: the curated
 `SKILL.md`. Nothing here to over-engineer.
