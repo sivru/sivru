@@ -24,11 +24,18 @@ The sivru skill (v0.4). See
   `find_related` tool `description` strings now carry a one-line
   routing hint — the always-on channel, in the agent's context every
   turn. A drift-guard test keeps them in sync with `SKILL.md`.
-- **§5 routing-efficacy smoke harness** (`pnpm --filter @sivru/cli
-  smoke`). Runs a routing-prompt corpus through the `claude` CLI and
-  scores routing correctness. Built but kept out of CI (it makes live
-  `claude` calls); the live run and its recorded result are a manual
-  step — pending, see [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
+- **§5 routing-efficacy smoke test** — a 15-prompt routing testbench
+  (`pnpm --filter @sivru/cli smoke`, `packages/cli/src/smoke/`) run
+  through the `claude` CLI, scored on whether the agent picks the tool
+  that matches each query's shape (`sivru.search` for behavioural,
+  `grep` for identifiers, `find_related` after an edit). Kept out of
+  CI — it makes live `claude` calls. First measured result (claude
+  2.1.144, single run, n=15): routing correctness **53% without the
+  skill, 67% with it** (+14 points); behavioural-query routing to
+  `sivru.search` rose from 0/6 to 2/6. A rough confidence check, not a
+  gate — single-run and small-n, so read the gap as directional. The
+  skill helps; the numbers also say the routing wording still has room
+  to improve. See [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
 
 ### Changed
 

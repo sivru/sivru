@@ -40,8 +40,18 @@ pnpm --filter @sivru/cli smoke -- --label without-guidance
 ```
 
 Compare the two correctness rates. The gap is the skill's efficacy.
-Record the numbers in `CHANGELOG.md`. The runner needs the `claude`
-CLI and the sivru MCP server registered (`claude mcp add sivru`).
+Record the numbers in `CHANGELOG.md`.
+
+Two things the runner needs, both learned the hard way:
+
+- The sivru MCP server `claude` talks to must be **this repo's build**,
+  not a stale global install — otherwise the run silently tests old
+  tool descriptions. Register it with
+  `claude mcp add sivru -s user -- node <repo>/packages/cli/dist/index.js mcp`.
+- A single run at n=15 is **noisy** — LLM non-determinism shuffles a
+  prompt or two between runs. Treat one run's gap as directional, not
+  precise. For a real signal, run each label 3+ times and average, or
+  grow the corpus. This is the seam the v0.16 bench closes.
 
 ## Keep enhancing it — this is a living testbench
 
