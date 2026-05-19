@@ -49,6 +49,42 @@ jobs:
       - name: Test
         run: pnpm test
 
+  package-contents:
+    name: package contents (SKILL.md ships in @sivru/cli)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+      - name: Build
+        run: pnpm build
+
+      # The bundled SKILL.md is a non-compiled asset. `tsc` only emits .js
+      # into dist/, so SKILL.md ships only because package.json "files"
+      # lists it. This gate fails the PR if that entry is ever dropped —
+      # otherwise `sivru skill install` would break for every npm user and
+      # local dev would not notice (the source tree always has the file).
+      - name: Verify SKILL.md is in the @sivru/cli package tarball
+        run: |
+          cd packages/cli
+          npm pack --dry-run --json | node -e '
+            const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const files = (data[0]?.files ?? []).map((f) => f.path);
+            if (!files.includes("SKILL.md")) {
+              console.error("FAIL: SKILL.md missing from the @sivru/cli tarball");
+              console.error("tarball files: " + files.join(", "));
+              process.exit(1);
+            }
+            console.log("OK: SKILL.md is in the @sivru/cli tarball");
+          '
+
   benchmark-gate:
     name: benchmark gate (perf regression vs baseline)
     runs-on: ubuntu-latest

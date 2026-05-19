@@ -7,7 +7,33 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Nothing yet. See [ROADMAP.md](ROADMAP.md).
+The sivru skill (v0.4). See
+[DESIGN-0003](docs/design/0003-sivru-skill-package.md).
+
+### Added
+
+- **`sivru skill install` / `uninstall`** — installs a Claude Code
+  routing skill (`SKILL.md`) into `~/.claude/skills/sivru/`, or
+  `<repo>/.claude/skills/sivru/` with `--project`. The skill is the
+  policy layer: when to reach for `sivru.search` versus grep, and when
+  to run `find_related` after an edit. Install overwrites by default,
+  notices when it replaced an edited copy, refuses a non-sivru file
+  unless `--force`, and notes a cross-scope collision. The bundled
+  `SKILL.md` is the one canonical routing policy.
+- **Routing hints in the MCP tool descriptions.** The `search` and
+  `find_related` tool `description` strings now carry a one-line
+  routing hint — the always-on channel, in the agent's context every
+  turn. A drift-guard test keeps them in sync with `SKILL.md`.
+- **§5 routing-efficacy smoke harness** (`pnpm --filter @sivru/cli
+  smoke`). Runs a routing-prompt corpus through the `claude` CLI and
+  scores routing correctness. Built but kept out of CI (it makes live
+  `claude` calls); the live run and its recorded result are a manual
+  step — pending, see [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
+
+### Changed
+
+- `@sivru/cli` `package.json` `files` now includes `SKILL.md`, and a CI
+  job asserts the asset ships in the published tarball.
 
 ## [0.3.0] — 2026-05-19
 
