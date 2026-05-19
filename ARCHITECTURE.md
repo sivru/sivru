@@ -98,6 +98,8 @@ walk → chunk → tokenize → BM25 index ┐
 src/
 ├── index.ts                  → top-level dispatcher
 ├── mcp-entry.ts              → @modelcontextprotocol/sdk server
+├── skill-asset.ts            → resolve + read the bundled SKILL.md
+├── smoke/                    → §5 routing-efficacy testbench (corpus, parser, runner)
 ├── lib/
 │   ├── model-catalog.ts      → registered embedders + rerankers (with hf:* escape)
 │   ├── config.ts             → ~/.config/sivru/config.json (atomic-rename writes)
@@ -115,9 +117,14 @@ src/
     ├── bench-models.ts       (catalog list)
     ├── config.ts             (sivru config get/set/unset/list/path)
     ├── doctor.ts
+    ├── skill.ts               (skill install/uninstall — writes the bundled SKILL.md)
     ├── version.ts
     └── help.ts
 ```
+
+The bundled routing skill (`SKILL.md`) ships at the package root, not
+under `src/` — `sivru skill install` writes it into a Claude Code
+skills directory; `skill-asset.ts` resolves and reads it.
 
 The CLI is a thin dispatcher. Each subcommand exports `run<Name>(argv): Promise<number>`
 returning the exit code. The MCP server (`mcp-entry.ts`) wraps the same
@@ -125,6 +132,9 @@ search functions and exposes them to Claude Code as `mcp__sivru__search`
 and `mcp__sivru__find_related`. The MCP search response is a JSON
 envelope with measured `latencyMs` / `refreshMs` / per-result `score` /
 line range; the index is refreshed on every search via `refreshStale()`.
+Since v0.4 the two tool `description` strings also carry a one-line
+routing hint (when to prefer `sivru.search` over grep) — the always-on
+guidance channel; the fuller policy is the bundled `SKILL.md`.
 
 ### `@sivru/observe`
 
