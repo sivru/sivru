@@ -149,25 +149,58 @@ export function formatReport(report: Report): string {
   return lines.join("\n");
 }
 
+// Wrap an embedding provider so `contextTokens` always reads `undefined`,
+// while every other member (embed, countTokens, dim, ...) delegates to the
+// real provider. buildIndex then treats it as windowless and skips the
+// rewindow post-pass — the v0.2 (pre-windowing) arm of a bench A/B.
+function stripWindow(
+  provider: import("@sivru/search").EmbeddingProvider,
+): import("@sivru/search").EmbeddingProvider {
+  return new Proxy(provider, {
+    get(target, prop, receiver) {
+      if (prop === "contextTokens") return undefined;
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 // CLI entry point. Default mode is BM25 (fast, no model required); pass
-// `--hybrid` to fold in semantic cosine via the default Transformers.js
-// provider (downloads ~25 MB to ~/.cache/sivru/models/ on first run).
+// `--hybrid` to fold in semantic cosine. `--embed=<name>` picks the
+// hybrid embedder: `potion` (default, windowless Model2Vec) or `minilm`
+// (Transformers.js, 256-token window — downloads ~25 MB on first run).
+// `--no-window` strips the embedder's context window so per-model
+// chunk-windowing is skipped — the v0.2 (pre-windowing) behaviour, for
+// an A/B against a short-context embedder.
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
   const hybrid = argv.includes("--hybrid");
+  const noWindow = argv.includes("--no-window");
+  const embedName = (argv.find((a) => a.startsWith("--embed=")) ?? "--embed=potion")
+    .slice("--embed=".length);
 
   const { createSivruAdapter } = await import("./sivru-adapter.js");
   const corpusDir = resolve(ROOT, "benchmarks", "corpus");
 
-  const adapter = hybrid
-    ? createSivruAdapter({
-        corpusDir,
-        mode: "hybrid",
-        embed: (await import("@sivru/search")).createPotionProvider(),
-      })
-    : createSivruAdapter({ corpusDir });
-  const adapterName = hybrid ? "sivru-hybrid" : "sivru-bm25";
+  let adapter;
+  let adapterName: string;
+  if (hybrid) {
+    const search = await import("@sivru/search");
+    let embed =
+      embedName === "minilm"
+        ? search.createTransformersProvider()
+        : search.createPotionProvider();
+    // `--no-window`: force `contextTokens` undefined so buildIndex's
+    // resolveWindowParams returns null and the rewindow post-pass is
+    // skipped — reproduces the v0.2 truncating behaviour for an A/B.
+    if (noWindow) embed = stripWindow(embed);
+    adapter = createSivruAdapter({ corpusDir, mode: "hybrid", embed });
+    adapterName = `sivru-hybrid-${embedName}${noWindow ? "-nowindow" : ""}`;
+  } else {
+    adapter = createSivruAdapter({ corpusDir });
+    adapterName = "sivru-bm25";
+  }
 
   const report = await runBenchmark(adapter, adapterName);
   if (json) {
