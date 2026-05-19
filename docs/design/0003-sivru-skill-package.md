@@ -1,62 +1,156 @@
-# DESIGN-0003: `@sivru/skill` package
+# DESIGN-0003: the sivru skill
 
-**Status:** Stub
+**Status:** Draft
+**Class:** Spine (per [GOALS.md](../../GOALS.md))
 **Targets:** v0.4.0
-**Issue:** filed when v0.4 becomes next release
+**Issue:** filed when v0.4 work starts
 **Created:** 2026-05-08
+**Updated:** 2026-05-19 — promoted Stub → Draft for the v0.4.0 cycle.
+**Author:** @pochadri
 
 ## Problem
 
-Today, after `npm install -g @sivru/cli` + `claude mcp add sivru`,
-Claude has the sivru tool registered but no policy for *when* to
-call sivru.search vs Grep / Read. The agent figures out by trial and
-error, often defaulting to Grep first because that's what it's been
-trained on.
+After `npm install -g @sivru/cli` + `claude mcp add sivru`, Claude has
+the sivru MCP tools registered but **no policy for when to use them**.
+It figures out by trial and error, and usually reaches for Grep first —
+that is what it was trained on. So a developer installs sivru and the
+agent barely changes its behaviour.
 
-A SKILL.md teaches Claude when to reach for which tool. Sivru's
-runtime is more useful when paired with the skill that documents the
-playbook. Without the skill, sivru is "another tool"; with it,
-sivru becomes part of a documented workflow.
+A skill closes that gap: a `SKILL.md` that teaches the agent *when* to
+reach for `sivru.search` / `sivru.find_related` versus Grep / Read.
+Without it sivru is "another registered tool"; with it sivru is a
+documented workflow the agent actually follows.
 
-## Acceptance (from ROADMAP.md v0.4)
+This is **Spine**, not Supporting. The skill is where sivru's public
+framing turns from "a code-search MCP" into "the comprehension layer
+for AI-written code" — and from v0.6 on it is also where the agent
+learns to *author and read* `@sivru` annotation blocks. The skill is
+the playbook the runtime has been missing.
 
-- `@sivru/skill` published as a separate npm package, installable
-  via `npm install -g @sivru/skill` or copyable into
-  `~/.claude/skills/sivru/`
-- SKILL.md tells Claude:
-  - When to call sivru.search (natural-language, behavioral queries)
-  - When to call Grep instead (exact identifier lookups)
-  - When to call sivru.find_related (after editing)
-  - That sivru.observe exists for retrospective session analysis
-- README on the skill explains install + the runtime-vs-skill split
+## Proposal
 
-## Customization shape
+### 1. The skill ships inside `@sivru/cli`, installed by `sivru skill install`
 
-Per the three-layer rule (CONTRIBUTING.md):
+The roadmap sketched a separate `@sivru/skill` package. This design
+**supersedes that** — the skill ships *inside* `@sivru/cli`:
 
-1. **Built-in default:** the SKILL.md ships as a single file with
-   curated guidance.
-2. **Declarative override:** N/A — SKILL.md is itself the
-   declarative content. Users edit their local copy.
-3. **Code-level extension:** N/A — skills are prompt content, not
-   code.
+- A `SKILL.md` (+ its assets) lives in the `@sivru/cli` package.
+- A new CLI subcommand `sivru skill install` writes it to
+  `~/.claude/skills/sivru/SKILL.md` (or `.claude/skills/sivru/` in the
+  current repo with `--project`). Idempotent; re-running updates it.
 
-The skill IS the customization layer for this concept. Users can
-copy + edit; teams can ship their own variants.
+Why bundled, not a separate package:
+
+- **It kills the versioning problem.** The skill describes the MCP
+  tool surface that *a given CLI version* exposes. Ship them together
+  and the skill is always in sync with the tools the user actually
+  has. A separate package would drift — the central open question the
+  stub raised.
+- **One install.** The user installs `@sivru/cli` to get the MCP
+  server regardless; the skill rides along. No second package, no
+  fragile npm `postinstall` hook writing into `~/.claude/`.
+- **The skill is useless without the runtime.** It only tells Claude
+  when to call sivru tools — meaningless if sivru is not installed.
+  There is no audience for a skill-without-CLI, so a separate
+  lifecycle buys nothing.
+
+`> note for eng-review:` this overrides the roadmap's `@sivru/skill`
+package name. Flagged deliberately.
+
+### 2. What the SKILL.md teaches
+
+The skill follows the Claude Code skill format (frontmatter +
+markdown body). The body is a routing policy — short, concrete, and
+**honest about what sivru is bad at**:
+
+```
+Reach for sivru.search when:
+  - the query is natural-language or behavioural
+    ("where is auth refresh handled", "how does retry backoff work")
+  - you do not know the exact identifier or file
+Reach for Grep when:
+  - you know the exact identifier or string to find
+  - sivru's own benchmarks show grep wins exact-match lookups —
+    do NOT route those through sivru.search
+Reach for sivru.find_related after editing a symbol:
+  - to surface callers / tests / related code before you finish
+Know that sivru observe exists:
+  - a retrospective CLI/UI surface, not an in-session tool
+```
+
+The body is tool-neutral prose — only the install location
+(`~/.claude/skills/`) is Claude Code specific. Cursor / Codex
+equivalents are future work, gated on the v0.13–0.14 adapters.
+
+The skill must not overclaim (WHY-SIVRU's honesty rule): it tells the
+agent the cases where Grep beats `sivru.search`, not just where sivru
+wins.
+
+### 3. README — the runtime-vs-skill split
+
+The skill ships with a short README explaining the split: the CLI is
+the runtime (the MCP server, the index); the skill is the playbook
+(when to use it). Installing one without the other is half the
+product.
+
+## Alternatives considered
+
+**Separate `@sivru/skill` npm package.** The roadmap's sketch. Own
+lifecycle, but reintroduces skill-vs-MCP version drift and a second
+install for a skill that is meaningless without the CLI. Rejected
+(§1).
+
+**`postinstall` hook that writes `~/.claude/skills/` automatically.**
+Zero-command install, but npm postinstall writing outside the package
+dir is a footgun (silent, fails on restricted installs, surprises the
+user). An explicit `sivru skill install` is honest and predictable.
+
+**Just document "copy this file."** Cheapest, but a manual copy rots —
+nobody re-copies when the skill updates. The CLI subcommand makes
+update a re-run.
 
 ## Open questions
 
-- Should the skill ship inside the existing `@sivru/cli` package or
-  as a separate `@sivru/skill` package? Separate is cleaner
-  (skills follow their own lifecycle); bundled is one-step install.
-- How specific to make the "when to call X" rules? Too prescriptive
-  reads as opinionated; too vague reads as useless.
-- Should sivru ship a `claude skill add` command that installs it
-  via the CLI? Or just instructions to copy the file?
-- Versioning: when sivru's MCP surface changes (e.g., a new tool
-  ships), how does the skill stay in sync?
+- **How prescriptive should the routing rules be?** Too prescriptive
+  reads as opinionated and ages badly; too vague is useless. Settle
+  the specificity in eng-review against a few real example queries.
+- **`sivru skill install` default scope** — user (`~/.claude/skills/`)
+  or project (`.claude/skills/`)? Lean user-level default, `--project`
+  opt-in; confirm in eng-review.
+- **Does the skill claim efficacy?** Whether the skill *actually*
+  improves agent behaviour is the v0.16 skill-efficacy bench's job,
+  not a v0.4 claim. v0.4 ships the playbook; it does not benchmark it.
 
-## Status note
+## Acceptance criteria
 
-This is a Stub. Full design lands when v0.4 becomes the next
-release.
+- `SKILL.md` ships inside `@sivru/cli`, in the Claude Code skill
+  format (valid frontmatter + body).
+- `sivru skill install` writes it to `~/.claude/skills/sivru/`;
+  `--project` targets `.claude/skills/sivru/`; re-running updates in
+  place; the command is idempotent and reports the path written.
+- The routing policy covers all four cases: `sivru.search` vs Grep,
+  `sivru.find_related` after edits, and that `sivru observe` exists.
+- The skill names cases where Grep beats `sivru.search` — no
+  overclaiming.
+- A short README documents install + the runtime-vs-skill split.
+- `sivru help` lists the `skill` subcommand.
+
+## Test plan
+
+- **Unit — `sivru skill install`.** Writes the file to the right path;
+  `--project` variant; idempotent re-run; reports the path; refuses or
+  overwrites cleanly when the target exists.
+- **Unit — skill format.** The shipped `SKILL.md` frontmatter parses
+  and has the required fields.
+- **Review-gated — content.** The routing policy is correct and
+  honest; verified by reading, not asserted by a unit test.
+- **Out of scope — efficacy.** Whether the skill measurably improves
+  agent routing is the v0.16 skill-efficacy bench, not v0.4.
+
+## Customization shape
+
+The skill *is* the customization layer for this concept (per the
+three-layer rule, the declarative and code layers are N/A — a skill is
+prompt content). `sivru skill install` drops an editable file; a user
+or team edits their local copy or ships a variant. Built-in default:
+the curated `SKILL.md`. There is nothing to over-engineer here.
