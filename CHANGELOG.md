@@ -7,8 +7,12 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Toward **0.3.0 — per-model chunk-windowing**; see
-[ROADMAP.md](ROADMAP.md).
+Nothing yet. See [ROADMAP.md](ROADMAP.md).
+
+## [0.3.0] — 2026-05-19
+
+Per-model chunk-windowing. See
+[DESIGN-0002](docs/design/0002-per-model-chunk-windowing.md).
 
 ### Added
 
@@ -31,6 +35,23 @@ Toward **0.3.0 — per-model chunk-windowing**; see
 - The on-disk index cache key now includes the embedder id, and
   `CACHE_FORMAT_VERSION` moves `2 → 3`. Chunk boundaries depend on the
   embedder, so a 0.2 cache is rejected on read and rebuilt once.
+
+### Benchmarks
+
+- Windowing was validated with a MiniLM windowed-vs-truncated A/B on
+  the 60-query corpus. Honest result: windowing **lowers** MiniLM
+  hybrid NDCG@10 — 0.611 windowed vs 0.632 un-windowed (−0.021,
+  consistent across all three repos). A large chunk that MiniLM
+  truncates is embedded from its head (signature, declaration), which
+  retrieves well for natural-language queries; splitting it into
+  budget-sized fragments dilutes that. v0.3's value is **correctness**
+  — MiniLM no longer silently truncates, so its numbers are now
+  honest — not a quality gain. The default embedder (potion) is
+  windowless and unaffected; BM25 is unaffected.
+- This is the second release where smaller chunks cost hybrid NDCG
+  (0.2's tree-sitter chunker cost potion hybrid −0.011). The
+  chunk-size-vs-hybrid-retrieval-quality tradeoff is tracked in
+  [`TODOS.md`](TODOS.md) as a retrieval-architecture item.
 
 ## [0.2.0] — 2026-05-18
 

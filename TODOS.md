@@ -51,3 +51,35 @@ which currently consume the full chunk array.
 chunking.
 
 **Depends on:** nothing.
+
+## Chunk size vs. hybrid retrieval quality
+
+**What:** Smaller chunks consistently cost hybrid NDCG on the bench.
+v0.2's tree-sitter chunker cost potion hybrid −0.011; v0.3's per-model
+windowing cost MiniLM hybrid −0.021 (windowed 0.611 vs un-windowed
+0.632, all three repos). Investigate the retrieval architecture: how
+chunk scores aggregate to a file rank, RRF fusion behaviour when one
+file has many small chunks, and whether the file-level NDCG metric
+itself rewards few-large chunks. Decide a fix — chunk→file score
+aggregation, fusion tuning — or pull hierarchical retrieval (v0.19)
+forward.
+
+**Why:** two releases running, a chunking improvement that is correct
+(function boundaries; no silent truncation) has *lowered* hybrid
+retrieval quality. The pattern is now bigger than any one release. If
+sivru's chunks keep getting smaller (the comprehension layer wants
+symbol-level granularity) while hybrid retrieval keeps paying for it,
+the search instrument quietly degrades release over release.
+
+**Pros:** removes a recurring hidden tax on every chunker improvement;
+makes function-boundary chunking a retrieval win, not just a
+correctness one.
+**Cons:** likely a real retrieval-architecture change, not a tweak.
+
+**Context:** Surfaced by the v0.3.0 MiniLM bench A/B (see
+`CHANGELOG.md` `[0.3.0]` → Benchmarks). Related to the corpus-audit
+item above — confirm the effect is real signal, not a metric
+artifact, before committing to an architecture change.
+
+**Depends on:** nothing; should precede or absorb v0.19 (hierarchical
+retrieval).
