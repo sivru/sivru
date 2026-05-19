@@ -31,27 +31,39 @@ more."
 ## Running it
 
 ```bash
-sivru skill install
 pnpm --filter @sivru/cli build
-pnpm --filter @sivru/cli smoke -- --label with-guidance
 
+sivru skill install
+pnpm --filter @sivru/cli smoke -- --label with-guidance --repeat 3 --no-delegate
 sivru skill uninstall
-pnpm --filter @sivru/cli smoke -- --label without-guidance
+pnpm --filter @sivru/cli smoke -- --label without-guidance --repeat 3 --no-delegate
 ```
 
 Compare the two correctness rates. The gap is the skill's efficacy.
 Record the numbers in `CHANGELOG.md`.
 
-Two things the runner needs, both learned the hard way:
+### Flags
+
+- `--repeat N` — run every prompt N times, score over all trials. A
+  single n=15 run is noisy (LLM non-determinism shuffles a prompt or
+  two); `N>=3` is the trustworthy setting.
+- `--no-delegate` — block the Task/Agent sub-agent tools. **Use this
+  for any efficacy measurement.** Headless `claude` delegates a
+  codebase search to a sub-agent that runs in its own context and does
+  *not* carry the sivru skill — so a plain run measures delegation, not
+  the skill. A traced behavioural prompt with delegation on greps; the
+  same prompt with `--no-delegate` loads the skill and routes to
+  `sivru.search`. Without this flag the testbench understates the
+  skill (DESIGN-0003 §5, measured-result finding 2).
+
+### Two things the runner needs, both learned the hard way
 
 - The sivru MCP server `claude` talks to must be **this repo's build**,
   not a stale global install — otherwise the run silently tests old
   tool descriptions. Register it with
   `claude mcp add sivru -s user -- node <repo>/packages/cli/dist/index.js mcp`.
-- A single run at n=15 is **noisy** — LLM non-determinism shuffles a
-  prompt or two between runs. Treat one run's gap as directional, not
-  precise. For a real signal, run each label 3+ times and average, or
-  grow the corpus. This is the seam the v0.16 bench closes.
+- Run each label with `--repeat 3` or more. One run's gap is
+  directional, not precise. This is the seam the v0.16 bench closes.
 
 ## Keep enhancing it — this is a living testbench
 
