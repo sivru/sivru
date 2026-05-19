@@ -17,6 +17,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "qa": "pnpm -r build && pnpm -r typecheck && pnpm -r test",
     "lint": "pnpm -r lint",
     "bench": "pnpm --filter benchmarks run bench",
     "bench:tthw": "pnpm --filter sivru run bench:tthw",
