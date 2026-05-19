@@ -29,13 +29,19 @@ The sivru skill (v0.4). See
   through the `claude` CLI, scored on whether the agent picks the tool
   that matches each query's shape (`sivru.search` for behavioural,
   `grep` for identifiers, `find_related` after an edit). Kept out of
-  CI — it makes live `claude` calls. First measured result (claude
-  2.1.144, single run, n=15): routing correctness **53% without the
-  skill, 67% with it** (+14 points); behavioural-query routing to
-  `sivru.search` rose from 0/6 to 2/6. A rough confidence check, not a
-  gate — single-run and small-n, so read the gap as directional. The
-  skill helps; the numbers also say the routing wording still has room
-  to improve. See [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
+  CI — it makes live `claude` calls. Measured result (claude 2.1.144,
+  45 trials per arm — n=15 × 3 repeats, sub-agent delegation blocked so
+  the test isolates the skill from Claude Code's search-delegation):
+  routing correctness **56% without the skill, 76% with it** (+20
+  points). Behavioural-query routing to `sivru.search`: **0/18 trials
+  without the skill, 7/18 with it** — the skill is the entire reason
+  behavioural routing happens at all; the always-on tool descriptions
+  alone moved nothing. It works but is not yet consistent — 3 of 6
+  behavioural prompts move, 3 do not. In normal headless use Claude
+  Code delegates a codebase search to a sub-agent that does not carry
+  the skill; measured that way the gap is smaller (~67%). Closing the
+  delegation gap is v0.5+ work. A confidence check, not a gate. See
+  [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
 
 ### Changed
 

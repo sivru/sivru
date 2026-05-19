@@ -210,34 +210,41 @@ an identifier-shaped query is a regression, not a win. The result is
 recorded in the v0.4 changelog; it is a confidence check, not a hard
 CI gate.
 
-**Measured result (v0.4, claude 2.1.144, n=15, single run).** Routing
-correctness 53% without the skill, 67% with it (+14 points).
-Behavioural-query routing to `sivru.search`: 0/6 without the skill,
-2/6 with it. Two findings, both honest and both load-bearing for the
-next version:
+**Measured result (v0.4, claude 2.1.144).** Two A/B runs:
 
-1. **The §1 hypothesis is half wrong.** §1 expected the always-on MCP
+- *Headline, delegation on, single run, n=15:* routing correctness 53%
+  without the skill, 67% with it.
+- *Trustworthy, delegation blocked, n=15 × 3 = 45 trials per arm:* 56%
+  without the skill, **76% with it (+20 points)**. Behavioural-query
+  routing to `sivru.search`: **0/18 trials without the skill, 7/18
+  with it.** After-edit routing: 10/12 → 12/12. Identifier: 15/15 both
+  (already correct).
+
+Three findings, all honest and all load-bearing for the next version:
+
+1. **The §1 hypothesis is wrong.** §1 expected the always-on MCP
    descriptions to carry most of the value. They carried *none* of the
-   behavioural lift — 0/6 with the hint present and the skill absent.
-   Every point of behavioural movement came from the conditionally
-   loaded `SKILL.md`, the channel §1 rated less reliable. A one-line
-   tool-description hint did not overcome the trained grep default;
-   the fuller skill prose did, weakly. v0.5+ should treat the skill,
-   not the descriptions, as the primary lever.
-2. **The ceiling is sub-agent delegation, not the skill wording —
-   confirmed.** The §5 headline (2/6 behavioural with the skill) is
-   depressed by an artifact: on a behavioural query, headless `claude`
-   delegates the codebase search to a sub-agent (the Task tool), and
-   the sub-agent runs with its own context — it never carries the
-   sivru skill, so it greps. A follow-up trace with delegation blocked
-   (`--disallowedTools Task Agent`) showed the real picture: the main
-   agent loads the `sivru` skill and routes to `sivru.search` on 2 of
-   3 behavioural prompts. The skill works on the agent that reads it;
-   it just is not the agent doing the search. v0.5+ should address the
-   delegation directly — either the `SKILL.md` tells the agent not to
-   delegate a behavioural codebase search (do it directly so the skill
-   applies), or sivru's routing guidance has to reach sub-agents.
-   Wordsmithing the skill body in isolation will not move this.
+   behavioural lift — 0/18 trials with the hint present and the skill
+   absent. Every behavioural route came from the conditionally loaded
+   `SKILL.md`, the channel §1 rated less reliable. A one-line
+   tool-description hint does not overcome the trained grep default;
+   the fuller skill prose does. v0.5+ should treat the skill, not the
+   descriptions, as the primary lever.
+2. **The ceiling is sub-agent delegation — confirmed.** On a
+   behavioural query, headless `claude` delegates the codebase search
+   to a sub-agent (the Task tool) that runs in its own context and
+   never carries the sivru skill, so it greps. That is why the
+   delegation-on run scores lower (67% vs 76%). With delegation blocked
+   the main agent loads the `sivru` skill and routes correctly. v0.5+
+   must address delegation directly — either the `SKILL.md` tells the
+   agent not to delegate a behavioural codebase search, or sivru's
+   routing guidance has to reach sub-agents. Wordsmithing the skill
+   body in isolation will not move this.
+3. **The skill works but is inconsistent.** Even delegation-free,
+   behavioural routing is 39% (7/18) — 3 of 6 behavioural prompts move
+   reliably, 3 never do. That is a skill-activation / wording tuning
+   target, and the testbench (run with `--repeat`) is now trustworthy
+   enough to tune against.
 
 ## Deferred to later versions
 
