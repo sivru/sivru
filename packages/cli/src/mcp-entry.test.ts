@@ -10,7 +10,9 @@ import {
   _clearIndexCacheForTest,
   _indexBuildCountForTest,
   createMcpServer,
+  FIND_RELATED_TOOL_DESCRIPTION,
   findRelatedTool,
+  SEARCH_TOOL_DESCRIPTION,
   searchTool,
 } from "./mcp-entry.js";
 
@@ -64,12 +66,12 @@ describe("mcp-entry — tools/list", () => {
       expect(names).toEqual(["find_related", "search"]);
 
       const search = result.tools.find((t) => t.name === "search");
-      expect(search?.description).toMatch(/search a local code repository/i);
+      expect(search?.description).toMatch(/semantic \+ lexical code search/i);
       expect(search?.inputSchema.type).toBe("object");
       expect(search?.inputSchema.required).toEqual(["query"]);
 
       const findRelated = result.tools.find((t) => t.name === "find_related");
-      expect(findRelated?.description).toMatch(/find code chunks similar/i);
+      expect(findRelated?.description).toMatch(/find code related to a symbol/i);
       expect(findRelated?.description).not.toMatch(/not yet implemented/i);
       expect(findRelated?.inputSchema.required).toEqual([
         "filePath",
@@ -261,6 +263,21 @@ describe("mcp-entry — find_related tool", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toMatch(/top/);
+  });
+});
+
+describe("mcp-entry — routing-hint drift guard", () => {
+  // DESIGN-0003 §4 finding 5: the MCP tool descriptions are a one-line
+  // compression of the canonical SKILL.md routing policy, kept in sync by
+  // hand. These assertions fail CI if an edit deletes a routing hint.
+  it("search description keeps the grep-for-identifiers hint", () => {
+    expect(SEARCH_TOOL_DESCRIPTION).toMatch(/grep/i);
+    expect(SEARCH_TOOL_DESCRIPTION).toMatch(/natural-language or behavioural/i);
+  });
+
+  it("find_related description keeps the after-edit hint", () => {
+    expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/after editing/i);
+    expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/callers/i);
   });
 });
 

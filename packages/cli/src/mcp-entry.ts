@@ -34,8 +34,16 @@ const SERVER_VERSION = "0.0.0";
 // ---------------------------------------------------------------------------
 
 const SEARCH_TOOL_NAME = "search";
-const SEARCH_TOOL_DESCRIPTION =
-  "Search a local code repository. Returns ranked chunks with file path, line range, and a code preview. Defaults to hybrid mode (BM25 + semantic embeddings, RRF-merged) — pass `hybrid: false` to use BM25-only.";
+// The description carries the always-on routing hint (DESIGN-0003 §1): it is
+// the one channel always in the agent's context. The longer policy lives in
+// the bundled SKILL.md; mcp-entry.test.ts asserts this hint stays present.
+export const SEARCH_TOOL_DESCRIPTION =
+  "Semantic + lexical code search over a local repository. Best for " +
+  'natural-language or behavioural queries ("where is auth refresh handled", ' +
+  '"how does retry backoff work"). For an exact known identifier or string, ' +
+  "plain grep is faster and more precise. Returns ranked chunks with file " +
+  "path, line range, and a code preview; defaults to hybrid mode (BM25 + " +
+  "semantic embeddings, RRF-merged) — pass `hybrid: false` for BM25-only.";
 const SEARCH_INPUT_SCHEMA = {
   type: "object" as const,
   properties: {
@@ -48,8 +56,13 @@ const SEARCH_INPUT_SCHEMA = {
 };
 
 const FIND_RELATED_TOOL_NAME = "find_related";
-const FIND_RELATED_TOOL_DESCRIPTION =
-  "Find code chunks similar to a given file region. Returns ranked similar chunks based on the embedded representation of the source region (or BM25 lexical similarity when embeddings aren't available).";
+// Routing hint: the after-edit workflow. See SEARCH_TOOL_DESCRIPTION note.
+export const FIND_RELATED_TOOL_DESCRIPTION =
+  "Find code related to a symbol or file region — callers, tests, and " +
+  "similar code. Use it after editing a symbol, before you finish, to catch " +
+  "code your change may have affected. Returns ranked similar chunks from " +
+  "the embedded representation of the source region (or BM25 lexical " +
+  "similarity when embeddings aren't available).";
 const FIND_RELATED_INPUT_SCHEMA = {
   type: "object" as const,
   properties: {
