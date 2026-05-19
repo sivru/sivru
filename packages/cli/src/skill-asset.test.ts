@@ -23,6 +23,17 @@ describe("skill-asset", () => {
     expect(looksLikeSivruSkill(content)).toBe(true);
   });
 
+  it("the bundled skill frontmatter has the required Claude Code fields", () => {
+    // Skill-format check (DESIGN-0003 test plan): the frontmatter must
+    // parse and carry both `name` and `description`.
+    const content = readBundledSkill();
+    const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    expect(fm).not.toBeNull();
+    const frontmatter = fm?.[1] ?? "";
+    expect(frontmatter).toMatch(/^name:\s*\S/m);
+    expect(frontmatter).toMatch(/^description:\s*\S/m);
+  });
+
   it("looksLikeSivruSkill rejects unrelated content", () => {
     expect(looksLikeSivruSkill("just some notes\n")).toBe(false);
     expect(looksLikeSivruSkill("# a heading\n\nbody\n")).toBe(false);
