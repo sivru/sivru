@@ -41,3 +41,13 @@ export {
   extractImportedIdentifiers,
   extractImportSpecifier,
 } from "./resolvers/typescript.js";
+
+export {
+  buildSymbolIndex,
+  refreshSymbolIndex,
+  parseOneFile,
+} from "./symbol-index.js";
+export type {
+  BuildSymbolIndexOptions,
+  RefreshDelta,
+} from "./symbol-index.js";

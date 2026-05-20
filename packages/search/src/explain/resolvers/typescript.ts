@@ -124,10 +124,10 @@ export function extractImportedIdentifiers(importStmt: string): string[] {
   const stmt = importStmt.trim();
   // Side-effect import (no identifiers)
   if (/^import\s+["']/.test(stmt)) return [];
-  // Default import: `import Foo from '...'`
-  const def = stmt.match(/^import\s+([A-Za-z_$][\w$]*)\s+from/);
-  // Namespace import: `import * as Foo from '...'`
-  const ns = stmt.match(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from/);
+  // Default import: `import Foo from '...'` or `import Foo, { ... } from '...'`
+  const def = stmt.match(/^import\s+([A-Za-z_$][\w$]*)(?:\s*,|\s+from)/);
+  // Namespace import: `import * as Foo from '...'` or `import Default, * as Foo from '...'`
+  const ns = stmt.match(/\*\s+as\s+([A-Za-z_$][\w$]*)\s+from/);
   // Named imports: `import { a, b as c } from '...'` (single or multi line)
   const namedBraces = stmt.match(/^import\s+[\w$* ,{}\s]*\{([^}]*)\}/);
   const ids: string[] = [];
