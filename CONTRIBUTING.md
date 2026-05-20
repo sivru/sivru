@@ -99,6 +99,37 @@ New behavior requires a test. Vitest, ESM, no transformers. Place tests
 next to the source file (`foo.ts` + `foo.test.ts`). For CLI commands the
 shared pattern is `captureIO()` — see `packages/cli/src/commands/search.test.ts`.
 
+### QA
+
+`pnpm qa` is the deterministic gate — build, typecheck, and the full
+vitest suite across every package. It must pass before a PR; CI runs the
+same checks.
+
+Beyond unit tests, the sivru skill ships a **routing testbench** at
+`packages/cli/src/smoke/` — a corpus of labelled prompts that measures
+whether an agent picks the right tool (`sivru.search` for behavioural
+queries, `grep` for exact identifiers, `find_related` after an edit).
+It is not a pass/fail gate; it turns the skill's efficacy into a number.
+Run it as an A/B:
+
+```bash
+sivru skill install && pnpm --filter @sivru/cli build
+pnpm --filter @sivru/cli smoke -- --label with-guidance
+sivru skill uninstall
+pnpm --filter @sivru/cli smoke -- --label without-guidance
+```
+
+The gap between the two correctness rates is the skill's efficacy. It
+makes live `claude` calls, so it stays out of CI and is run by hand.
+When a real session shows the agent misrouting, add that prompt to
+`corpus.ts` — the testbench only earns its keep if it grows. Full
+detail in `packages/cli/src/smoke/TESTBENCH.md`.
+
+Generic browser QA does not apply here — sivru is a CLI plus an MCP
+server, with no web UI (the `observe-ui` dashboard is the lone
+exception). QA sivru by running `pnpm qa`, the routing testbench, and
+dogfooding the actual `sivru` binary.
+
 ### Comments
 
 Default to writing none. Add one only when the *why* is non-obvious —
@@ -159,6 +190,16 @@ For anything bigger than a typo fix or a single-file refactor:
    `docs/design/NNNN-<short-name>.md` (next unused four-digit number).
    Include it in the same PR as the implementation, or as a
    standalone PR if you want feedback on the shape before coding.
+
+   **Numbers are stable IDs, never renumbered** — same rule as
+   `SIVRU-ENNN` error codes. The number is identity, not ordering. A
+   new opportunity always gets the next free number, appended, even if
+   it conceptually belongs "between" two existing docs. Ordering lives
+   in the doc's `Targets:` field (which version it's slated for, free
+   of the filename number) and in [`ROADMAP.md`](ROADMAP.md), which is
+   the canonical *ordered* view. Capture new ideas low-friction as a
+   `Status: Stub` and flesh them out later — that's how this
+   directory's stubs were filled.
 
 When a design doc is required:
 

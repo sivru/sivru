@@ -87,15 +87,16 @@ in one npm package; one MCP server. Public pitch in
 
 ## What's pending
 
-See [`ROADMAP.md`](ROADMAP.md) for direction. Open work tracked on
-the [v0.2.0 milestone](https://github.com/sivru/sivru/milestone/2):
+See [`ROADMAP.md`](ROADMAP.md) for direction.
 
-- Tree-sitter chunker (line-fallback ships today)
-- Per-model chunk-windowing (stop silent truncation on short-context
-  embedders)
+- The sivru skill (v0.4) — routing policy + `sivru skill install`,
+  in progress
 - Embed code only; BM25-only-index docs and configs
 - Real-agent replay via the Anthropic SDK (opt-in)
 - `sivru completion` + `sivru bench tthw`
+
+(Shipped since this list was last cut: tree-sitter chunker — v0.2;
+per-model chunk-windowing — v0.3.)
 
 ## Don't do without asking
 

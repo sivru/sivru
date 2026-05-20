@@ -83,3 +83,37 @@ artifact, before committing to an architecture change.
 
 **Depends on:** nothing; should precede or absorb v0.19 (hierarchical
 retrieval).
+
+## Tool-neutral routing rules — Cursor + Codex
+
+**What:** Extend `sivru skill install` to also emit per-tool routing
+rule files from the same canonical policy — a Cursor `.cursor/rules`
+entry and a Codex `AGENTS.md` fragment — alongside the Claude Code
+`SKILL.md`.
+
+**Why:** GOALS.md sells tool-neutrality as part of sivru's core
+uniqueness ("outlives any single agent tool — Claude Code, Cursor,
+Codex all come and go"). The MCP tool descriptions are already
+tool-neutral — every MCP client sees them. But the deep routing policy
+(find_related-after-edit workflow, the `observe` pointer, and from v0.6
+`@sivru`-block authoring) ships only as a Claude Code `SKILL.md`. A
+Cursor or Codex user gets the always-on floor and none of the depth.
+
+**Pros:** delivers on the tool-neutrality claim for the deep layer, not
+just the MCP floor; widens reach beyond Claude Code.
+**Cons:** more install surface to keep in sync per target; the v0.4
+efficacy smoke test is Claude-specific, so the other targets ship
+unverified until their own efficacy is checked.
+
+**Context:** Surfaced in the /plan-ceo-review of DESIGN-0003
+(2026-05-19) as expansion Candidate 1; deferred so the Claude routing
+efficacy is proven first (v0.4 smoke test, v0.16 skill-efficacy bench).
+The deferred work is the per-tool deep-policy emit plus its
+install-safety surface — it should reuse whatever edit-safety subsystem
+DESIGN-0003's §3 work lands in v0.6.
+
+**Effort estimate:** M (human ~3-4 days) → with CC+gstack: ~3-4 hours.
+**Priority:** P3.
+**Depends on:** v0.4 (the canonical `SKILL.md` and the routing policy);
+ideally the v0.6 install edit-safety subsystem so the multi-target
+emit reuses one update-safety mechanism rather than three.

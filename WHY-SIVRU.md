@@ -113,6 +113,11 @@ The MCP integration supports both. `sivru.search` is one tool the
 agent can call; the agent can still call `Grep` and `Read` whenever
 it wants. **They're complementary, not exclusive.**
 
+The canonical, agent-facing form of this routing policy is the bundled
+`SKILL.md` that `sivru skill install` writes — see
+[`packages/cli/SKILL.md`](packages/cli/SKILL.md). This section is the
+human-facing summary; the skill is what the agent reads.
+
 ## Local-first AND extensible-by-default
 
 Every feature with a registry, ruleset, or catalog follows three layers:
@@ -155,9 +160,10 @@ for documenting workflows, conventions, and decision rules.
 
 Skills cannot run a search index, observe sessions, render a UI, or
 do static analysis. Sivru can. So sivru is the **runtime** that
-ships the capabilities, and `@sivru/skill` (v0.4) ships the
-**playbook** that tells Claude when to call those capabilities.
-Together they're a coaching system; alone, neither is.
+ships the capabilities, and the `SKILL.md` it installs (via
+`sivru skill install`, v0.4) is the **playbook** that tells Claude
+when to call those capabilities. Together they're a coaching system;
+alone, neither is.
 
 This places sivru downstream of the skill ecosystem, not in
 competition with it. Anyone building skills against the runtime is

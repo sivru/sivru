@@ -119,6 +119,21 @@ claude mcp add sivru -s user -- npx -y @sivru/cli mcp
 Restart Claude Code. The agent now has `mcp__sivru__search` and
 `mcp__sivru__find_related` tools available alongside `Grep` / `Read`.
 
+### Install the routing skill
+
+The MCP tools give the agent the *capability*. The skill gives it the
+*policy* — when to reach for `sivru.search` versus `grep`, and when to
+run `find_related` after an edit:
+
+```bash
+sivru skill install              # ~/.claude/skills/sivru/SKILL.md
+sivru skill install --project    # or <repo>/.claude/skills/sivru/
+```
+
+The installed `SKILL.md` is the canonical routing policy — read or edit
+it at [`packages/cli/SKILL.md`](packages/cli/SKILL.md). `sivru skill
+uninstall` removes it.
+
 ### From source (hacking on sivru)
 
 If you want to read or modify the source, run a local build, and have

@@ -7,7 +7,46 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Nothing yet. See [ROADMAP.md](ROADMAP.md).
+The sivru skill (v0.4). See
+[DESIGN-0003](docs/design/0003-sivru-skill-package.md).
+
+### Added
+
+- **`sivru skill install` / `uninstall`** — installs a Claude Code
+  routing skill (`SKILL.md`) into `~/.claude/skills/sivru/`, or
+  `<repo>/.claude/skills/sivru/` with `--project`. The skill is the
+  policy layer: when to reach for `sivru.search` versus grep, and when
+  to run `find_related` after an edit. Install overwrites by default,
+  notices when it replaced an edited copy, refuses a non-sivru file
+  unless `--force`, and notes a cross-scope collision. The bundled
+  `SKILL.md` is the one canonical routing policy.
+- **Routing hints in the MCP tool descriptions.** The `search` and
+  `find_related` tool `description` strings now carry a one-line
+  routing hint — the always-on channel, in the agent's context every
+  turn. A drift-guard test keeps them in sync with `SKILL.md`.
+- **§5 routing-efficacy smoke test** — a 15-prompt routing testbench
+  (`pnpm --filter @sivru/cli smoke`, `packages/cli/src/smoke/`) run
+  through the `claude` CLI, scored on whether the agent picks the tool
+  that matches each query's shape (`sivru.search` for behavioural,
+  `grep` for identifiers, `find_related` after an edit). Kept out of
+  CI — it makes live `claude` calls. Measured result (claude 2.1.144,
+  45 trials per arm — n=15 × 3 repeats, sub-agent delegation blocked so
+  the test isolates the skill from Claude Code's search-delegation):
+  routing correctness **56% without the skill, 76% with it** (+20
+  points). Behavioural-query routing to `sivru.search`: **0/18 trials
+  without the skill, 7/18 with it** — the skill is the entire reason
+  behavioural routing happens at all; the always-on tool descriptions
+  alone moved nothing. It works but is not yet consistent — 3 of 6
+  behavioural prompts move, 3 do not. In normal headless use Claude
+  Code delegates a codebase search to a sub-agent that does not carry
+  the skill; measured that way the gap is smaller (~67%). Closing the
+  delegation gap is v0.5+ work. A confidence check, not a gate. See
+  [DESIGN-0003](docs/design/0003-sivru-skill-package.md) §5.
+
+### Changed
+
+- `@sivru/cli` `package.json` `files` now includes `SKILL.md`, and a CI
+  job asserts the asset ships in the published tarball.
 
 ## [0.3.0] — 2026-05-19
 
