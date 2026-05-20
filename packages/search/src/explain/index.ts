@@ -83,6 +83,9 @@ export {
   cacheKey as commitCountsCacheKey,
 } from "./commit-counts.js";
 export type { CommitCountsOptions } from "./commit-counts.js";
+
+export { assembleArtifact, buildFooter } from "./artifact.js";
+export type { AssembleArtifactDeps } from "./artifact.js";
 export type {
   SymbolIndexCache,
   SymbolIndexCacheKey,
