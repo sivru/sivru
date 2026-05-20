@@ -414,6 +414,73 @@ describe("mcp-entry — explain tool", () => {
   });
 });
 
+describe("mcp-entry — explain refreshStale after edit (T19)", () => {
+  function gitInitInRoot(): void {
+    execFileSync("git", ["-C", root, "init", "-q", "-b", "main"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.email", "t@t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.name", "t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "commit.gpgsign", "false"], {
+      stdio: "ignore",
+    });
+  }
+
+  it("explainTool picks up a working-tree edit between two calls", async () => {
+    gitInitInRoot();
+    await write("src/foo.ts", "export function alpha() { return 1; }\n");
+    execFileSync("git", ["-C", root, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", root, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+
+    const first = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+    });
+    expect(first.isError).toBe(false);
+    const firstEnv = JSON.parse(
+      (first.content[0] as { text: string }).text,
+    ) as {
+      artifact: { public_api: Array<{ name: string }> };
+    };
+    expect(firstEnv.artifact.public_api.map((e) => e.name)).toEqual(["alpha"]);
+
+    // Edit the file — DON'T commit, just dirty the working tree. stateId
+    // will now include a dirty hash, so the cache miss is forced.
+    await new Promise((r) => setTimeout(r, 10));
+    await write(
+      "src/foo.ts",
+      [
+        "export function alpha() { return 1; }",
+        "export function beta() { return 2; }",
+      ].join("\n"),
+    );
+
+    const second = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+    });
+    expect(second.isError).toBe(false);
+    const secondEnv = JSON.parse(
+      (second.content[0] as { text: string }).text,
+    ) as {
+      artifact: { public_api: Array<{ name: string }> };
+      refreshDelta: { added: number };
+    };
+    expect(
+      secondEnv.artifact.public_api.map((e) => e.name).sort(),
+    ).toEqual(["alpha", "beta"]);
+    // Cache miss on the new stateId — the envelope reports a rebuild via
+    // `added: <indexSize>` per the MCP envelope contract.
+    expect(secondEnv.refreshDelta.added).toBeGreaterThan(0);
+  });
+});
+
 describe("mcp-entry — explain routing hint", () => {
   it("description carries the before-edit hint", () => {
     expect(EXPLAIN_TOOL_DESCRIPTION).toMatch(/before editing/i);
