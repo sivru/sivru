@@ -46,6 +46,12 @@ export {
   parseFromSpec,
   parseImportSpec,
 } from "./resolvers/python.js";
+export {
+  goResolver,
+  findGoModule,
+  extractGoImportPath,
+  resolveGoImport,
+} from "./resolvers/go.js";
 
 export {
   buildSymbolIndex,
