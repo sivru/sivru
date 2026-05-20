@@ -10,7 +10,7 @@
 // covers the file-level cut.
 
 import { execFile } from "node:child_process";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, extname, join, posix, resolve as resolvePath, sep } from "node:path";
 import { promisify } from "node:util";
 
@@ -98,13 +98,7 @@ function defaultIsInsideRepoRealpath(
 
 function defaultReadSync(absPath: string): string | undefined {
   try {
-    // Avoid pulling node:fs at the top — readFileSync is hot-path only on
-    // matched test files, which is bounded by §3d's pattern set.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require("node:fs") as typeof import("node:fs")).readFileSync(
-      absPath,
-      "utf8",
-    );
+    return readFileSync(absPath, "utf8");
   } catch {
     return undefined;
   }
