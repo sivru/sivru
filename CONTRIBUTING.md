@@ -191,6 +191,16 @@ For anything bigger than a typo fix or a single-file refactor:
    Include it in the same PR as the implementation, or as a
    standalone PR if you want feedback on the shape before coding.
 
+   **Numbers are stable IDs, never renumbered** — same rule as
+   `SIVRU-ENNN` error codes. The number is identity, not ordering. A
+   new opportunity always gets the next free number, appended, even if
+   it conceptually belongs "between" two existing docs. Ordering lives
+   in the doc's `Targets:` field (which version it's slated for, free
+   of the filename number) and in [`ROADMAP.md`](ROADMAP.md), which is
+   the canonical *ordered* view. Capture new ideas low-friction as a
+   `Status: Stub` and flesh them out later — that's how this
+   directory's stubs were filled.
+
 When a design doc is required:
 
 - New public API surface (anything in a package's `index.ts`).
