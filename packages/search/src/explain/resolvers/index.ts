@@ -7,6 +7,7 @@
 
 import type { Resolver } from "../types.js";
 import { goResolver } from "./go.js";
+import { javaResolver } from "./java.js";
 import { pythonResolver } from "./python.js";
 import { typescriptResolver } from "./typescript.js";
 
@@ -19,6 +20,7 @@ function register(languages: readonly string[], resolver: Resolver): void {
 register(["typescript", "tsx", "javascript", "jsx"], typescriptResolver);
 register(["python"], pythonResolver);
 register(["go"], goResolver);
+register(["java"], javaResolver);
 
 /** Look up the resolver for a given language id. `null` when unsupported. */
 export function resolverFor(language: string | null): Resolver | null {

@@ -91,13 +91,16 @@ export type Resolver = {
    * unresolvable.
    *
    * `repoRoot` is the absolute repo root; `fromFile` is the repo-relative
-   * path of the importing file. The import statement is the raw text
-   * captured from the source.
+   * path of the importing file. `source` is the importing file's full text —
+   * provided by `buildSymbolIndex` to spare resolvers a second disk read.
+   * The Java resolver in particular needs it to parse `package x.y.z;` and
+   * find the compilation source root; other resolvers ignore it.
    */
   resolveImport(
     importStmt: string,
     fromFile: string,
     repoRoot: string,
+    source?: string,
   ): string | null;
   /**
    * Extract exports + raw imports from this file's tree-sitter chunks. The

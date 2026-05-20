@@ -52,6 +52,13 @@ export {
   extractGoImportPath,
   resolveGoImport,
 } from "./resolvers/go.js";
+export {
+  javaResolver,
+  parseJavaPackage,
+  findJavaSourceRoot,
+  extractJavaImportPath,
+  resolveJavaImport,
+} from "./resolvers/java.js";
 
 export {
   buildSymbolIndex,

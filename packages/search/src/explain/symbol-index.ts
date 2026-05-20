@@ -164,7 +164,7 @@ export async function parseOneFile(
   const imports: ImportEdge[] = parsed.imports.map((edge) => ({
     raw: edge.raw,
     identifiers: edge.identifiers,
-    resolved: resolver.resolveImport(edge.raw, filePath, opts.repoRoot),
+    resolved: resolver.resolveImport(edge.raw, filePath, opts.repoRoot, source),
   }));
   return {
     filePath,
