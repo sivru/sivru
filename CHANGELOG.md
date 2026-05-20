@@ -7,7 +7,12 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-The sivru skill (v0.4). See
+Nothing yet. Next is **0.5.0 — `sivru explain <path>`**; see
+[ROADMAP.md](ROADMAP.md).
+
+## [0.4.0] — 2026-05-20
+
+The sivru skill. See
 [DESIGN-0003](docs/design/0003-sivru-skill-package.md).
 
 ### Added
