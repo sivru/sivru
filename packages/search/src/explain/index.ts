@@ -69,3 +69,15 @@ export type {
   BuildSymbolIndexOptions,
   RefreshDelta,
 } from "./symbol-index.js";
+
+export {
+  createSymbolIndexCache,
+  loadOrBuildSymbolIndex,
+  createSymbolIndexFromEntries,
+  SYMBOL_INDEX_CACHE_FORMAT_VERSION,
+} from "./cache.js";
+export type {
+  SymbolIndexCache,
+  SymbolIndexCacheKey,
+  SymbolIndexCacheOptions,
+} from "./cache.js";
