@@ -45,7 +45,7 @@ import type {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
-const SERVER_VERSION = "0.0.0";
+const SERVER_VERSION = "0.5.0";
 
 // ---------------------------------------------------------------------------
 // Tool surface — the JSON-Schema we advertise via tools/list.
