@@ -61,6 +61,17 @@ So the loop is: code (+ `@sivru` blocks + `.sivru/explainer.md`) →
 applied to blocks / narrative → regenerate. The artifact is always
 downstream; the repo is always the source.
 
+**Video mode — see [DESIGN-0019](0019-readme-explainer-video.md).**
+A third output mode, `sivru explain --project --video`, ships at
+v0.8 joint with this doc. It consumes the same four-level model
+this proposal builds and projects it to motion (60-90s by default,
+configurable per the same three-layer rule). DESIGN-0019 owns the
+video-mode depth — modes (`system` / `loop` / `drilldown`), the
+scene plugin contract, the story selector for arbitrary repos, and
+the deterministic-render acceptance criteria. The README's
+animated artifact at v0.8 is a particular invocation of that mode
+applied to sivru's own repo.
+
 **The Claude-side skill collapses into sivru.** Any standalone
 "generate an explainer" skill would re-implement the code parsing
 sivru already does, and its output would drift from `sivru explain`.
