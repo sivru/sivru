@@ -167,6 +167,22 @@ export const DIFF_FP_FIXTURES: readonly DiffFpFixture[] = [
     trueRemoved: ["Foo"],
   },
   {
+    id: "template-literal-codegen",
+    rationale:
+      "Removed lines include the body of a multi-line template literal that contains `class Foo {`. The parser must not report `Foo` as a removed export.",
+    diff: [
+      "--- a/src/codegen.ts",
+      "+++ b/src/codegen.ts",
+      "@@ -1,6 +1,0 @@",
+      "-export const codegen = `",
+      "-class Widget {",
+      "-  render() {}",
+      "-}",
+      "-`;",
+    ].join("\n"),
+    trueRemoved: ["codegen"],
+  },
+  {
     id: "cross-file-shadow-noise",
     rationale:
       "The target file removes alpha but the diff context (no `-` line) mentions alpha as a parameter or call. Must not double-count.",

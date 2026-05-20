@@ -360,6 +360,10 @@ async function collectRegionChurn(
   sinceDays: number,
   gitLog: NonNullable<AssembleArtifactDeps["gitLog"]>,
 ): Promise<ChurnInfo> {
+  // `--` separator is defensive: prevents a target like `--upload-pack.ts`
+  // from being interpreted by git as a flag rather than a path. The path
+  // sits inside the `-L` value here too — git allows it, but a leading `--`
+  // also short-circuits any argument-injection ambiguity.
   const args = [
     "log",
     "-L",
@@ -367,6 +371,8 @@ async function collectRegionChurn(
     `--since=${sinceDays}.days`,
     "--pretty=format:%H %cI",
     "-s", // suppress diff body — we only want the header
+    "--",
+    target,
   ];
   const out = await gitLog(args, repoPath);
   const headers: { sha: string; iso: string }[] = [];
@@ -404,6 +410,7 @@ async function collectRegionOwnership(
     "--line-porcelain",
     "-L",
     `${startLine},${endLine}`,
+    "--", // separator: target may start with `-` (e.g. `--upload-pack.ts`)
     target,
   ];
   const out = await gitBlame(args, repoPath);

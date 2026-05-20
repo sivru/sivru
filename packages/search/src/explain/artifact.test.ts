@@ -427,6 +427,8 @@ describe("assembleArtifact: region-level (T14)", () => {
       "--since=90.days",
       "--pretty=format:%H %cI",
       "-s",
+      "--",
+      "src/foo.ts",
     ]);
     expect(art.churn.commitCount).toBe(1);
     expect(art.churn.lastCommitAt).toBe("2026-05-01T12:00:00+00:00");
@@ -458,6 +460,7 @@ describe("assembleArtifact: region-level (T14)", () => {
       "--line-porcelain",
       "-L",
       "10,20",
+      "--",
       "src/foo.ts",
     ]);
     expect(art.ownership).toEqual([
