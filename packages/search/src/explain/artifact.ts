@@ -242,8 +242,11 @@ async function collectOwnership(
   target: string,
   gitShortlog: NonNullable<AssembleArtifactDeps["gitShortlog"]>,
 ): Promise<OwnershipEntry[]> {
+  // `git shortlog` reads commits from stdin unless a rev is given on the
+  // command line. Without `HEAD` it would block waiting for stdin and hang
+  // the entire request.
   const out = await gitShortlog(
-    ["shortlog", "-ns", "--", target],
+    ["shortlog", "-ns", "HEAD", "--", target],
     repoPath,
   );
   const rows: { author: string; count: number }[] = [];

@@ -8,6 +8,7 @@ import {
   runBenchPersonal,
   runConfig,
   runDoctor,
+  runExplain,
   runFromGit,
   runHelp,
   runIndex,
@@ -67,6 +68,9 @@ async function main(): Promise<number> {
 
     case "skill":
       return runSkill(argv);
+
+    case "explain":
+      return runExplain(argv.slice(1));
 
     case "help":
     case "--help":
