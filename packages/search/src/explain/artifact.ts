@@ -528,6 +528,16 @@ export function buildFooter(opts: {
   if (opts.language === "java") {
     parts.push("Java resolves at source-root + class granularity.");
   }
+  if (
+    opts.language === "typescript" ||
+    opts.language === "tsx" ||
+    opts.language === "javascript" ||
+    opts.language === "jsx"
+  ) {
+    parts.push(
+      "TS/JS resolves relative imports only — tsconfig path aliases are deferred to v0.5.x.",
+    );
+  }
   if (opts.language === null) {
     parts.push("language is not in the resolver set — public_api is empty.");
   }
