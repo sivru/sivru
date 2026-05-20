@@ -174,6 +174,24 @@ export async function assembleArtifact(
     return a.filePath.localeCompare(b.filePath);
   });
 
+  // T12: scaled precision floor (D16 + D4). Go and Java resolve at a
+  // coarser grain (package / source-root+class), so a util file in those
+  // languages can fan out to hundreds of "callers" that are mostly noise.
+  // When the candidate list exceeds the scaled floor, drop it entirely and
+  // surface `callers_skipped_reason: "precision-floor"`. The footer
+  // already reports the chosen floor so the agent sees what gate fired.
+  const language = targetEntry?.language ?? null;
+  const precisionFloor = Math.max(100, Math.round(index.size() * 0.05));
+  let finalCallers: CallerRef[] | null = callers;
+  let callersSkippedReason: string | null = null;
+  if (
+    (language === "go" || language === "java") &&
+    callers.length > precisionFloor
+  ) {
+    finalCallers = null;
+    callersSkippedReason = "precision-floor";
+  }
+
   // ---- churn -----------------------------------------------------------
   const churn: ChurnInfo = await collectChurn(
     index.repoPath,
@@ -200,7 +218,7 @@ export async function assembleArtifact(
   return {
     path: target,
     public_api,
-    callers,
+    callers: finalCallers,
     callees,
     churn,
     ownership,
@@ -208,7 +226,7 @@ export async function assembleArtifact(
     authored: [],
     callers_truncated: null,
     callees_truncated: null,
-    callers_skipped_reason: null,
+    callers_skipped_reason: callersSkippedReason,
     footer,
   };
 }

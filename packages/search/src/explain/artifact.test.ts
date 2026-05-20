@@ -306,6 +306,94 @@ describe("assembleArtifact: tests", () => {
   });
 });
 
+describe("assembleArtifact: precision floor (T12)", () => {
+  it("nulls callers when a Go target's fan-out exceeds the scaled floor", async () => {
+    const target = mkEntry("pkg/util/util.go", {
+      language: "go",
+      exports: [
+        {
+          name: "Helper",
+          kind: "function",
+          startLine: 1,
+          endLine: 1,
+          signature: "func Helper()",
+        },
+      ],
+    });
+    // Synthesise > 100 callers (the minimum floor) that all "import" Helper.
+    const callers: SymbolIndexEntry[] = [];
+    for (let i = 0; i < 110; i++) {
+      callers.push(
+        mkEntry(`svc/${i}/main.go`, {
+          language: "go",
+          imports: [
+            {
+              raw: `"example.com/m/pkg/util"`,
+              resolved: "pkg/util/util.go",
+              identifiers: ["Helper"],
+            },
+          ],
+        }),
+      );
+    }
+    const idx = mkIndex([target, ...callers]);
+    const art = await assembleArtifact(
+      baseOpts({ target: "pkg/util/util.go" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(art.callers).toBeNull();
+    expect(art.callers_skipped_reason).toBe("precision-floor");
+  });
+
+  it("does NOT trigger for TS targets even with large fan-out", async () => {
+    const target = mkEntry("src/util.ts", {
+      language: "typescript",
+      exports: [
+        {
+          name: "helper",
+          kind: "function",
+          startLine: 1,
+          endLine: 1,
+          signature: "export function helper()",
+        },
+      ],
+    });
+    const callers: SymbolIndexEntry[] = [];
+    for (let i = 0; i < 110; i++) {
+      callers.push(
+        mkEntry(`src/use${i}.ts`, {
+          imports: [
+            {
+              raw: `import { helper } from "./util"`,
+              resolved: "src/util.ts",
+              identifiers: ["helper"],
+            },
+          ],
+        }),
+      );
+    }
+    const idx = mkIndex([target, ...callers]);
+    const art = await assembleArtifact(
+      baseOpts({ target: "src/util.ts" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(art.callers).not.toBeNull();
+    expect(art.callers_skipped_reason).toBeNull();
+  });
+});
+
 describe("buildFooter", () => {
   it("scales the precision floor by repo size (min 100)", () => {
     expect(buildFooter({
