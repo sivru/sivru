@@ -1,6 +1,6 @@
 {
   "name": "sivru-monorepo",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Fast code search for coding agents + agent session observability layer.",
   "license": "MIT",

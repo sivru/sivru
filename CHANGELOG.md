@@ -7,8 +7,72 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Nothing yet. Next is **0.5.0 — `sivru explain <path>`**; see
-[ROADMAP.md](ROADMAP.md).
+Nothing yet.
+
+## [0.5.0] — 2026-05-20
+
+`sivru explain <path>` — public API, callers, callees, churn, ownership,
+and tests for a file or symbol, surfaced over CLI and MCP before an edit.
+See [DESIGN-0004](docs/design/0004-sivru-explain.md).
+
+### Added
+
+- **CLI:** `sivru explain <path> [--json] [--since=<N>] [--depth=1] [--diff] [--repo=<dir>]`
+  emits the canonical artifact as markdown (default) or bare JSON.
+  Uncapped — `--json` returns the full caller/callee lists.
+- **MCP tool:** `explain({ path, symbol?, diff?, since?, depth?, repoRoot? })`
+  registered alongside `search` and `find_related`. Returns the canonical
+  artifact wrapped in an envelope with `tool`, `path`, `latencyMs`,
+  `refreshMs`, `refreshDelta`. The MCP path applies the cap from
+  `.sivru/explain.json` (default 30 callers + 30 callees, hard ceiling
+  500). Tool description carries the always-on routing hint ("Get the
+  public API, callers, callees, churn, and ownership of a file or symbol
+  before editing it.").
+- **Region-level explain.** Pass `path::symbol` (CLI) or `symbol: "..."`
+  (MCP) to slice the artifact to one symbol's line range. Per-region
+  churn uses `git log -L`, ownership uses `git blame --line-porcelain`.
+- **`--diff` mode.** Reads the working-tree diff against HEAD, identifies
+  exported symbols that are *removed* by the edit, and for each one
+  reports the callers that will break. v0.5 ships REMOVED only; symbol
+  renames are deferred. CI gate (12-fixture corpus): mean FP rate ≤ 15%
+  per the design.
+- **Symbol-index module** in `@sivru/search/explain/`: walker → chunker
+  (warm-path Chunk[] reuse) → per-language Resolver (TS / JS / Python /
+  Go / Java) → exports + import edges. On-disk cache at
+  `~/.cache/sivru/symbol-indexes/<repo-slug>/<state_id>.json`, atomic
+  tmp→fsync→rename writes, format-version bump on shape change.
+- **Per-file commitCount cache.** One `git log --name-only` walk per
+  state_id, memoised by `(repoPath, stateId, sinceDays)` — zero git
+  invocations per MCP request after the first per state.
+- **Threat model.** Path-validator rejects absolute paths, `..` escapes,
+  and symlinks that exit the repo (SIVRU-E2001 / E2002 / E2009);
+  test-pattern realpath validation drops candidate test files whose
+  resolved path leaves the repo root; MCP cap hard ceiling clamps to
+  500 with `0 → ceiling` foot-cannon fix (SIVRU-E2008).
+- **Scaled precision floor (D16 + D4).** For Go and Java targets, when
+  the candidate caller list exceeds `max(100, repoFileCount × 0.05)`,
+  callers is nulled and `callers_skipped_reason: "precision-floor"` is
+  surfaced. Footer reports the chosen floor.
+- **Honest footer.** Every artifact carries a footer string documenting
+  the call graph's identifier-based (not type-resolved) limit, the
+  precision floor at the current repo size, Go package / Java class
+  granularity when applicable, and the region-level `git log -L`
+  performance disclosure.
+- **Cold-build budget gate.** 200-file synthetic TS corpus, 5 trials,
+  p95 < 15s (well under in practice; the gate catches O(N²) regressions
+  and parse-cache wiring bugs).
+- **SKILL.md** now describes three instruments — grep / search / explain
+  — with the "before edit" workflow for `sivru.explain`.
+
+### Implementation notes
+
+- Error code range claimed: **SIVRU-E2001..E2010** (path-validator,
+  symbol-not-found, cache load/save failures, git failures, mcpCap
+  validation).
+- `authored: []` is the v0.6 prepay slot (DESIGN-0016). Locked in v0.5
+  so a future fill is purely additive.
+- Privacy boundary intact: `packages/observe/` not touched; explain
+  shells out to local `git` only.
 
 ## [0.4.0] — 2026-05-20
 
