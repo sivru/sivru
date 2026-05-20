@@ -88,3 +88,6 @@ export type {
   MockCrossEncoderOptions,
   TransformersCrossEncoderOptions,
 } from "./rerank/index.js";
+
+// Explain module (DESIGN-0004) — subdir of @sivru/search per D1.
+export * from "./explain/index.js";
