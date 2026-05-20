@@ -22,8 +22,26 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { buildIndex } from "@sivru/search";
-import type { SearchHit, SivruIndex } from "@sivru/search";
+import {
+  applyMcpCap,
+  assembleArtifact,
+  assembleDiffArtifact,
+  buildCommitCounts,
+  buildIndex,
+  computeStateId,
+  loadMcpCapConfig,
+  loadOrBuildSymbolIndex,
+  parsePathAndSymbol,
+  resolveAndAssertInside,
+  SivruExplainError,
+} from "@sivru/search";
+import type {
+  ExplainArtifact,
+  ExplainEnvelope,
+  ExplainOptions,
+  SearchHit,
+  SivruIndex,
+} from "@sivru/search";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
@@ -53,6 +71,27 @@ const SEARCH_INPUT_SCHEMA = {
     hybrid: { type: "boolean", default: true },
   },
   required: ["query"],
+};
+
+const EXPLAIN_TOOL_NAME = "explain";
+// Routing hint: the before-edit workflow. See SEARCH_TOOL_DESCRIPTION note.
+export const EXPLAIN_TOOL_DESCRIPTION =
+  "Get the public API, callers, callees, churn, and ownership of a file or " +
+  "symbol before editing it. Use after locating a file and before changing " +
+  "a symbol — it surfaces who else depends on what you are about to touch. " +
+  "Pass `path: \"<file>::<symbol>\"` for a region-level view. `diff: true` " +
+  "shows what an in-progress edit is about to break.";
+const EXPLAIN_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    path: { type: "string", minLength: 1 },
+    symbol: { type: "string" },
+    diff: { type: "boolean", default: false },
+    since: { type: "integer", minimum: 0, default: 90 },
+    depth: { type: "integer", minimum: 1, maximum: 1, default: 1 },
+    repoRoot: { type: "string", default: "." },
+  },
+  required: ["path"],
 };
 
 const FIND_RELATED_TOOL_NAME = "find_related";
@@ -305,6 +344,88 @@ function parseFindRelatedArgs(
   return { filePath, startLine, endLine, path, top, hybrid };
 }
 
+type ParsedExplainArgs = {
+  path: string;
+  symbol: string | null;
+  diff: boolean;
+  sinceDays: number;
+  depth: number;
+  repoRoot: string;
+};
+
+export function parseExplainArgs(
+  raw: unknown,
+): ParsedExplainArgs | { error: string } {
+  if (raw === null || typeof raw !== "object") {
+    return { error: "explain: arguments must be an object" };
+  }
+  const args = raw as Record<string, unknown>;
+
+  const pathArg = args["path"];
+  if (typeof pathArg !== "string" || pathArg.length === 0) {
+    return { error: "explain: `path` is required and must be a non-empty string" };
+  }
+
+  // Symbol may be encoded either inside the `path` via `::` or as a separate
+  // `symbol` arg. We support both shapes; an explicit `symbol` arg wins.
+  let path = pathArg;
+  let symbol: string | null = null;
+  const parsedPath = parsePathAndSymbol(pathArg);
+  if (parsedPath.symbol !== null) {
+    path = parsedPath.path;
+    symbol = parsedPath.symbol;
+  }
+  const symbolArg = args["symbol"];
+  if (symbolArg !== undefined) {
+    if (typeof symbolArg !== "string") {
+      return { error: "explain: `symbol` must be a string if provided" };
+    }
+    symbol = symbolArg.length > 0 ? symbolArg : null;
+  }
+
+  const diffArg = args["diff"];
+  let diff = false;
+  if (diffArg !== undefined) {
+    if (typeof diffArg !== "boolean") {
+      return { error: "explain: `diff` must be a boolean if provided" };
+    }
+    diff = diffArg;
+  }
+
+  const sinceArg = args["since"];
+  let sinceDays = 90;
+  if (sinceArg !== undefined) {
+    if (
+      typeof sinceArg !== "number" ||
+      !Number.isInteger(sinceArg) ||
+      sinceArg < 0
+    ) {
+      return { error: "explain: `since` must be a non-negative integer" };
+    }
+    sinceDays = sinceArg;
+  }
+
+  const depthArg = args["depth"];
+  let depth = 1;
+  if (depthArg !== undefined) {
+    if (depthArg !== 1) {
+      return { error: "explain: `depth` must be 1 in v0.5" };
+    }
+    depth = 1;
+  }
+
+  const repoArg = args["repoRoot"];
+  let repoRoot = ".";
+  if (repoArg !== undefined) {
+    if (typeof repoArg !== "string") {
+      return { error: "explain: `repoRoot` must be a string" };
+    }
+    repoRoot = repoArg;
+  }
+
+  return { path, symbol, diff, sinceDays, depth, repoRoot };
+}
+
 // ---------------------------------------------------------------------------
 // Tool implementations — exported so tests can call them without a transport.
 // ---------------------------------------------------------------------------
@@ -480,6 +601,100 @@ export async function findRelatedTool(rawArgs: unknown): Promise<ToolResult> {
   }
 }
 
+/**
+ * MCP envelope for the explain tool (DESIGN-0004 §1). Returns the canonical
+ * artifact wrapped with `tool`, `path`, `latencyMs`, `refreshMs`, and
+ * `refreshDelta`. The CLI does NOT wrap — `sivru explain --json` returns the
+ * bare artifact. Only the MCP path adds the envelope.
+ */
+export function formatExplainEnvelope(
+  artifact: ExplainArtifact,
+  meta: {
+    latencyMs: number;
+    refreshMs: number;
+    refreshDelta: ExplainEnvelope["refreshDelta"];
+  },
+): string {
+  const envelope: ExplainEnvelope = {
+    tool: "sivru.explain",
+    path: artifact.path,
+    latencyMs: meta.latencyMs,
+    refreshMs: meta.refreshMs,
+    refreshDelta: meta.refreshDelta,
+    artifact,
+  };
+  return JSON.stringify(envelope, null, 2);
+}
+
+export async function explainTool(rawArgs: unknown): Promise<ToolResult> {
+  const parsed = parseExplainArgs(rawArgs);
+  if ("error" in parsed) {
+    return fail(parsed.error);
+  }
+  const absRepo = resolvePath(process.cwd(), parsed.repoRoot);
+  const tStart = performance.now();
+  try {
+    // Path validator (T13). Reject absolute paths, `..` escapes, and
+    // symlinks that exit the repo before any indexing work happens.
+    await resolveAndAssertInside(parsed.path, absRepo);
+
+    // stateId snapshots the on-disk state (commit sha or dirty hash). The
+    // symbol-index cache is keyed on it, so an edit between two MCP calls
+    // produces a different stateId → fresh build. That's the explain
+    // analogue of search's refreshStale.
+    const tRefreshStart = performance.now();
+    const stateId = await computeStateId(absRepo);
+    const commitCounts = await buildCommitCounts(absRepo, {
+      sinceDays: parsed.sinceDays,
+    });
+    const { index, fromCache } = await loadOrBuildSymbolIndex(
+      absRepo,
+      stateId,
+      { commitCounts },
+    );
+    const refreshMs = performance.now() - tRefreshStart;
+
+    const explainOpts: ExplainOptions = {
+      repoRoot: absRepo,
+      target: parsed.path,
+      sinceDays: parsed.sinceDays,
+      depth: parsed.depth,
+    };
+    if (parsed.symbol !== null) explainOpts.symbol = parsed.symbol;
+    const rawArtifact = parsed.diff
+      ? await assembleDiffArtifact(explainOpts, index)
+      : await assembleArtifact(explainOpts, index);
+    // T11: apply the MCP cap. CLI is uncapped — MCP capping happens here.
+    const cap = await loadMcpCapConfig(absRepo);
+    const artifact = applyMcpCap(rawArtifact, cap);
+
+    const latencyMs = performance.now() - tStart;
+    return ok(
+      formatExplainEnvelope(artifact, {
+        latencyMs: Math.round(latencyMs * 10) / 10,
+        refreshMs: Math.round(refreshMs * 10) / 10,
+        refreshDelta: {
+          // The explain index is rebuilt-or-not in one shot — there's no
+          // file-level partial refresh in v0.5 (T19 may revisit). Surface
+          // the binary signal as 0/0/0/0 on cache-hit and 0/<size>/0/0 on
+          // a rebuild so observability still has a hook.
+          modified: 0,
+          added: fromCache ? 0 : index.size(),
+          removed: 0,
+          embedsRecomputed: 0,
+        },
+      }),
+    );
+  } catch (err) {
+    if (err instanceof SivruExplainError) {
+      return fail(`${err.code}: ${err.message.replace(`${err.code}: `, "")}`);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`sivru mcp: explain error: ${message}\n`);
+    return fail(`explain failed: ${message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Server wiring — exported so tests can drive it over an in-memory transport.
 // ---------------------------------------------------------------------------
@@ -502,6 +717,11 @@ export function createMcpServer(): Server {
         description: FIND_RELATED_TOOL_DESCRIPTION,
         inputSchema: FIND_RELATED_INPUT_SCHEMA,
       },
+      {
+        name: EXPLAIN_TOOL_NAME,
+        description: EXPLAIN_TOOL_DESCRIPTION,
+        inputSchema: EXPLAIN_INPUT_SCHEMA,
+      },
     ],
   }));
 
@@ -513,6 +733,8 @@ export function createMcpServer(): Server {
           return await searchTool(args ?? {});
         case FIND_RELATED_TOOL_NAME:
           return await findRelatedTool(args ?? {});
+        case EXPLAIN_TOOL_NAME:
+          return await explainTool(args ?? {});
         default:
           return fail(`unknown tool: ${name}`);
       }

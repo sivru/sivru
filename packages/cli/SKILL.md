@@ -14,13 +14,16 @@ replace grep. It is a second instrument, and this skill is the policy
 for when to pick which one. It is written to be honest: there are query
 shapes where grep is the better tool, and it says so.
 
-## The two instruments
+## The three instruments
 
 - **grep / ripgrep** — exact, literal, current. Best when you already
   know the token you are looking for.
 - **`sivru.search`** — hybrid lexical + semantic search over the repo.
   Best when the question is about behaviour or concept and you do not
   know the exact identifier yet.
+- **`sivru.explain`** — public API, callers, callees, churn, ownership
+  for one file or symbol. Best **before editing** — to know who depends
+  on what you are about to touch.
 
 ## When to reach for `sivru.search`
 
@@ -50,6 +53,25 @@ Use grep — it is faster and more precise — when the query is
 A semantic search for an exact identifier is the wrong tool. Do not
 route an identifier query through `sivru.search` because this skill
 mentions sivru — route by the shape of the question.
+
+## Before you edit a file — `sivru.explain`
+
+When you are about to change a file or a symbol, call `sivru.explain` on
+it first. It returns five descriptive sections — public API, callers,
+callees, churn, ownership — for the target. Use the caller list to know
+what depends on what you are about to touch, the churn + ownership to
+gauge how settled the code is, and the tests section to see what already
+covers it.
+
+Two extra shapes are worth knowing:
+
+- `sivru.explain({ path: "src/foo.ts::doThing" })` — region-level. The
+  artifact is sliced to one symbol's line range, with per-region churn
+  via `git log -L`. Use when you only care about one function or method.
+- `sivru.explain({ path: "src/foo.ts", diff: true })` — diff mode. Reads
+  your in-progress working-tree edit, identifies removed exports, and
+  for each one tells you which callers will break. Use mid-edit when you
+  are deleting a symbol and want to know who calls it.
 
 ## After you edit a symbol — `sivru.find_related`
 

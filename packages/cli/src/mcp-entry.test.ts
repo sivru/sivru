@@ -10,11 +10,15 @@ import {
   _clearIndexCacheForTest,
   _indexBuildCountForTest,
   createMcpServer,
+  EXPLAIN_TOOL_DESCRIPTION,
+  explainTool,
   FIND_RELATED_TOOL_DESCRIPTION,
   findRelatedTool,
+  parseExplainArgs,
   SEARCH_TOOL_DESCRIPTION,
   searchTool,
 } from "./mcp-entry.js";
+import { execFileSync } from "node:child_process";
 
 let root: string;
 
@@ -63,7 +67,7 @@ describe("mcp-entry — tools/list", () => {
     try {
       const result = await client.listTools();
       const names = result.tools.map((t) => t.name).sort();
-      expect(names).toEqual(["find_related", "search"]);
+      expect(names).toEqual(["explain", "find_related", "search"]);
 
       const search = result.tools.find((t) => t.name === "search");
       expect(search?.description).toMatch(/semantic \+ lexical code search/i);
@@ -78,6 +82,10 @@ describe("mcp-entry — tools/list", () => {
         "startLine",
         "endLine",
       ]);
+
+      const explain = result.tools.find((t) => t.name === "explain");
+      expect(explain?.description).toMatch(/public API, callers, callees/i);
+      expect(explain?.inputSchema.required).toEqual(["path"]);
     } finally {
       await close();
     }
@@ -278,6 +286,205 @@ describe("mcp-entry — routing-hint drift guard", () => {
   it("find_related description keeps the after-edit hint", () => {
     expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/after editing/i);
     expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/callers/i);
+  });
+});
+
+describe("mcp-entry — explain tool argument validation", () => {
+  it("requires `path`", () => {
+    const out = parseExplainArgs({});
+    expect("error" in out).toBe(true);
+  });
+
+  it("rejects depth != 1", () => {
+    const out = parseExplainArgs({ path: "src/foo.ts", depth: 2 });
+    expect("error" in out).toBe(true);
+  });
+
+  it("rejects negative `since`", () => {
+    const out = parseExplainArgs({ path: "src/foo.ts", since: -1 });
+    expect("error" in out).toBe(true);
+  });
+
+  it("parses `path::symbol` into separate fields", () => {
+    const out = parseExplainArgs({ path: "src/foo.ts::doThing" });
+    expect("error" in out).toBe(false);
+    if ("error" in out) return;
+    expect(out.path).toBe("src/foo.ts");
+    expect(out.symbol).toBe("doThing");
+  });
+
+  it("`symbol` arg overrides `path::sym` form", () => {
+    const out = parseExplainArgs({
+      path: "src/foo.ts::ignored",
+      symbol: "winning",
+    });
+    expect("error" in out).toBe(false);
+    if ("error" in out) return;
+    expect(out.symbol).toBe("winning");
+  });
+});
+
+describe("mcp-entry — explain tool", () => {
+  function gitInitInRoot(): void {
+    execFileSync("git", ["-C", root, "init", "-q", "-b", "main"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.email", "t@t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.name", "t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "commit.gpgsign", "false"], {
+      stdio: "ignore",
+    });
+  }
+
+  it("returns the canonical envelope with the artifact", async () => {
+    gitInitInRoot();
+    await write("src/foo.ts", "export function foo() { return 1; }\n");
+    execFileSync("git", ["-C", root, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", root, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+
+    const result = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+    });
+    expect(result.isError).toBe(false);
+    const text = (result.content[0] as { text: string }).text;
+    const envelope = JSON.parse(text) as {
+      tool: string;
+      path: string;
+      latencyMs: number;
+      refreshMs: number;
+      refreshDelta: {
+        modified: number;
+        added: number;
+        removed: number;
+        embedsRecomputed: number;
+      };
+      artifact: { path: string; public_api: Array<{ name: string }>; footer: string };
+    };
+    expect(envelope.tool).toBe("sivru.explain");
+    expect(envelope.path).toBe("src/foo.ts");
+    expect(envelope.latencyMs).toBeGreaterThan(0);
+    expect(envelope.refreshMs).toBeGreaterThanOrEqual(0);
+    expect(envelope.artifact.path).toBe("src/foo.ts");
+    expect(envelope.artifact.public_api.map((e) => e.name)).toContain("foo");
+    expect(typeof envelope.artifact.footer).toBe("string");
+  });
+
+  it("returns isError for an absolute path (SIVRU-E2001)", async () => {
+    const result = await explainTool({ path: "/etc/passwd", repoRoot: root });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/SIVRU-E2001/);
+  });
+
+  it("emits diff_mode + removed_symbols when diff: true and an export was removed", async () => {
+    gitInitInRoot();
+    await write("src/foo.ts", [
+      "export function alpha() { return 1; }",
+      "export function beta() { return 2; }",
+    ].join("\n"));
+    execFileSync("git", ["-C", root, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", root, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+    // Working-tree edit: drop alpha.
+    await write("src/foo.ts", "export function beta() { return 2; }\n");
+
+    const result = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+      diff: true,
+    });
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      artifact: {
+        diff_mode?: boolean;
+        removed_symbols?: Array<{ symbol: string }>;
+      };
+    };
+    expect(env.artifact.diff_mode).toBe(true);
+    expect(env.artifact.removed_symbols?.map((r) => r.symbol)).toEqual([
+      "alpha",
+    ]);
+  });
+});
+
+describe("mcp-entry — explain refreshStale after edit (T19)", () => {
+  function gitInitInRoot(): void {
+    execFileSync("git", ["-C", root, "init", "-q", "-b", "main"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.email", "t@t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "user.name", "t"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", root, "config", "commit.gpgsign", "false"], {
+      stdio: "ignore",
+    });
+  }
+
+  it("explainTool picks up a working-tree edit between two calls", async () => {
+    gitInitInRoot();
+    await write("src/foo.ts", "export function alpha() { return 1; }\n");
+    execFileSync("git", ["-C", root, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", root, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+
+    const first = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+    });
+    expect(first.isError).toBe(false);
+    const firstEnv = JSON.parse(
+      (first.content[0] as { text: string }).text,
+    ) as {
+      artifact: { public_api: Array<{ name: string }> };
+    };
+    expect(firstEnv.artifact.public_api.map((e) => e.name)).toEqual(["alpha"]);
+
+    // Edit the file — DON'T commit, just dirty the working tree. stateId
+    // will now include a dirty hash, so the cache miss is forced.
+    await new Promise((r) => setTimeout(r, 10));
+    await write(
+      "src/foo.ts",
+      [
+        "export function alpha() { return 1; }",
+        "export function beta() { return 2; }",
+      ].join("\n"),
+    );
+
+    const second = await explainTool({
+      path: "src/foo.ts",
+      repoRoot: root,
+    });
+    expect(second.isError).toBe(false);
+    const secondEnv = JSON.parse(
+      (second.content[0] as { text: string }).text,
+    ) as {
+      artifact: { public_api: Array<{ name: string }> };
+      refreshDelta: { added: number };
+    };
+    expect(
+      secondEnv.artifact.public_api.map((e) => e.name).sort(),
+    ).toEqual(["alpha", "beta"]);
+    // Cache miss on the new stateId — the envelope reports a rebuild via
+    // `added: <indexSize>` per the MCP envelope contract.
+    expect(secondEnv.refreshDelta.added).toBeGreaterThan(0);
+  });
+});
+
+describe("mcp-entry — explain routing hint", () => {
+  it("description carries the before-edit hint", () => {
+    expect(EXPLAIN_TOOL_DESCRIPTION).toMatch(/before editing/i);
+    expect(EXPLAIN_TOOL_DESCRIPTION).toMatch(/callers, callees/i);
   });
 });
 
