@@ -76,6 +76,13 @@ export {
   createSymbolIndexFromEntries,
   SYMBOL_INDEX_CACHE_FORMAT_VERSION,
 } from "./cache.js";
+
+export {
+  buildCommitCounts,
+  getCommitCounts,
+  cacheKey as commitCountsCacheKey,
+} from "./commit-counts.js";
+export type { CommitCountsOptions } from "./commit-counts.js";
 export type {
   SymbolIndexCache,
   SymbolIndexCacheKey,
