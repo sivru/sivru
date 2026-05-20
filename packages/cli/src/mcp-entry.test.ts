@@ -382,14 +382,35 @@ describe("mcp-entry — explain tool", () => {
     expect((result.content[0] as { text: string }).text).toMatch(/SIVRU-E2001/);
   });
 
-  it("returns isError when diff: true (v0.5 defers)", async () => {
+  it("emits diff_mode + removed_symbols when diff: true and an export was removed", async () => {
+    gitInitInRoot();
+    await write("src/foo.ts", [
+      "export function alpha() { return 1; }",
+      "export function beta() { return 2; }",
+    ].join("\n"));
+    execFileSync("git", ["-C", root, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", root, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+    // Working-tree edit: drop alpha.
+    await write("src/foo.ts", "export function beta() { return 2; }\n");
+
     const result = await explainTool({
       path: "src/foo.ts",
       repoRoot: root,
       diff: true,
     });
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toMatch(/diff/i);
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      artifact: {
+        diff_mode?: boolean;
+        removed_symbols?: Array<{ symbol: string }>;
+      };
+    };
+    expect(env.artifact.diff_mode).toBe(true);
+    expect(env.artifact.removed_symbols?.map((r) => r.symbol)).toEqual([
+      "alpha",
+    ]);
   });
 });
 

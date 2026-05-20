@@ -171,15 +171,38 @@ describe("runExplain (smoke)", () => {
     expect(cap.stderr).toMatch(/SIVRU-E2001/);
   });
 
-  it("--diff is acknowledged as not-yet-implemented", async () => {
+  it("--diff emits diff_mode + removed_symbols for an edit removing an export", async () => {
+    gitInit();
+    await write("src/foo.ts", [
+      "export function alpha() { return 1; }",
+      "export function beta() { return 2; }",
+    ].join("\n"));
+    execFileSync("git", ["-C", repo, "add", "."], { stdio: "ignore" });
+    execFileSync("git", ["-C", repo, "commit", "-q", "-m", "c1"], {
+      stdio: "ignore",
+    });
+    // Working-tree edit: drop alpha.
+    await write("src/foo.ts", "export function beta() { return 2; }\n");
+
     const cap = captureIO();
     let exit: number;
     try {
-      exit = await runExplain(["src/foo.ts", "--repo", repo, "--diff"]);
+      exit = await runExplain([
+        "src/foo.ts",
+        "--repo",
+        repo,
+        "--diff",
+        "--json",
+      ]);
     } finally {
       cap.restore();
     }
-    expect(exit).toBe(2);
-    expect(cap.stderr).toMatch(/--diff/);
+    expect(exit).toBe(0);
+    const parsed = JSON.parse(cap.stdout) as {
+      diff_mode?: boolean;
+      removed_symbols?: Array<{ symbol: string; callers: unknown[] }>;
+    };
+    expect(parsed.diff_mode).toBe(true);
+    expect(parsed.removed_symbols?.map((r) => r.symbol)).toEqual(["alpha"]);
   });
 });

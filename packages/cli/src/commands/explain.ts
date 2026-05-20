@@ -12,6 +12,7 @@ import { resolve as resolvePath } from "node:path";
 
 import {
   assembleArtifact,
+  assembleDiffArtifact,
   buildSymbolIndex,
   buildCommitCounts,
   computeStateId,
@@ -121,14 +122,6 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
     return 1;
   }
   const { args } = parsed;
-  if (args.diff) {
-    // T15 wires --diff; surface a friendly note rather than silently doing the
-    // wrong thing.
-    process.stderr.write(
-      "sivru explain: --diff mode lands later in v0.5; see DESIGN-0004 §5.\n",
-    );
-    return 2;
-  }
 
   try {
     const { path: relPath, symbol } = parsePathAndSymbol(args.target);
@@ -147,7 +140,9 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
       depth: args.depth,
     };
     if (symbol !== null) explainOpts.symbol = symbol;
-    const artifact = await assembleArtifact(explainOpts, index);
+    const artifact = args.diff
+      ? await assembleDiffArtifact(explainOpts, index)
+      : await assembleArtifact(explainOpts, index);
 
     if (args.json) {
       process.stdout.write(JSON.stringify(artifact) + "\n");
@@ -251,6 +246,29 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
 
   lines.push("AUTHORED  (none yet — see v0.6)");
   lines.push("");
+
+  if (art.diff_mode === true) {
+    lines.push("DIFF MODE — removed symbols + their callers");
+    if (!art.removed_symbols || art.removed_symbols.length === 0) {
+      lines.push("  (no removed exports detected in the working-tree diff)");
+    } else {
+      for (const r of art.removed_symbols) {
+        lines.push(`  - ${r.symbol}`);
+        if (r.callers.length === 0) {
+          lines.push("      (no callers — safe to remove)");
+        } else {
+          for (const c of r.callers) {
+            const syms = c.symbols.length > 0 ? c.symbols.join(", ") : "*";
+            lines.push(`      ${c.filePath}:${c.line} → ${syms}`);
+          }
+          if (r.callers_truncated !== null) {
+            lines.push(`      ... ${r.callers_truncated} more (truncated)`);
+          }
+        }
+      }
+    }
+    lines.push("");
+  }
 
   lines.push("FOOTER");
   lines.push(`  ${art.footer}`);

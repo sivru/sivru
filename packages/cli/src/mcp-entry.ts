@@ -25,6 +25,7 @@ import {
 import {
   applyMcpCap,
   assembleArtifact,
+  assembleDiffArtifact,
   buildCommitCounts,
   buildIndex,
   computeStateId,
@@ -630,9 +631,6 @@ export async function explainTool(rawArgs: unknown): Promise<ToolResult> {
   if ("error" in parsed) {
     return fail(parsed.error);
   }
-  if (parsed.diff) {
-    return fail("explain: `diff` mode lands later in v0.5; see DESIGN-0004 §5");
-  }
   const absRepo = resolvePath(process.cwd(), parsed.repoRoot);
   const tStart = performance.now();
   try {
@@ -663,7 +661,9 @@ export async function explainTool(rawArgs: unknown): Promise<ToolResult> {
       depth: parsed.depth,
     };
     if (parsed.symbol !== null) explainOpts.symbol = parsed.symbol;
-    const rawArtifact = await assembleArtifact(explainOpts, index);
+    const rawArtifact = parsed.diff
+      ? await assembleDiffArtifact(explainOpts, index)
+      : await assembleArtifact(explainOpts, index);
     // T11: apply the MCP cap. CLI is uncapped — MCP capping happens here.
     const cap = await loadMcpCapConfig(absRepo);
     const artifact = applyMcpCap(rawArtifact, cap);

@@ -44,48 +44,59 @@ describe("parseNodeVersion", () => {
 });
 
 describe("runDoctor — JSON output", () => {
-  it("emits a single-line JSON report and a 0/1 exit code", async () => {
-    const cap = captureIO();
-    let code: number;
-    try {
-      code = await runDoctor(["doctor", "--json"]);
-    } finally {
-      cap.restore();
-    }
-    expect(code).toBe(0); // we may have warnings on this CI machine but no fails
-    const trimmed = cap.stdout.trim();
-    expect(trimmed.includes("\n")).toBe(false);
-    const parsed = JSON.parse(trimmed) as {
-      version: string;
-      checks: Array<{ name: string; severity: string; detail: string }>;
-      summary: { ok: number; warn: number; fail: number };
-    };
-    expect(parsed.version.length).toBeGreaterThan(0);
-    expect(parsed.checks.length).toBeGreaterThanOrEqual(9);
-    for (const c of parsed.checks) {
-      expect(["ok", "warn", "fail"]).toContain(c.severity);
-    }
-    expect(
-      parsed.summary.ok + parsed.summary.warn + parsed.summary.fail,
-    ).toBe(parsed.checks.length);
-  });
+  it(
+    "emits a single-line JSON report and a 0/1 exit code",
+    async () => {
+      const cap = captureIO();
+      let code: number;
+      try {
+        code = await runDoctor(["doctor", "--json"]);
+      } finally {
+        cap.restore();
+      }
+      expect(code).toBe(0); // we may have warnings on this CI machine but no fails
+      const trimmed = cap.stdout.trim();
+      expect(trimmed.includes("\n")).toBe(false);
+      const parsed = JSON.parse(trimmed) as {
+        version: string;
+        checks: Array<{ name: string; severity: string; detail: string }>;
+        summary: { ok: number; warn: number; fail: number };
+      };
+      expect(parsed.version.length).toBeGreaterThan(0);
+      expect(parsed.checks.length).toBeGreaterThanOrEqual(9);
+      for (const c of parsed.checks) {
+        expect(["ok", "warn", "fail"]).toContain(c.severity);
+      }
+      expect(
+        parsed.summary.ok + parsed.summary.warn + parsed.summary.fail,
+      ).toBe(parsed.checks.length);
+    },
+    // Doctor runs ~9 checks including a 2.5s network probe to huggingface.co.
+    // On a loaded test machine the default 5s vitest timeout can trip; pad
+    // for the network check + concurrent test-suite load.
+    15000,
+  );
 });
 
 describe("runDoctor — text output", () => {
-  it("renders the table and exits 0 when no checks failed", async () => {
-    const cap = captureIO();
-    let code: number;
-    try {
-      code = await runDoctor(["doctor"]);
-    } finally {
-      cap.restore();
-    }
-    expect(code).toBeGreaterThanOrEqual(0);
-    expect(code).toBeLessThanOrEqual(1);
-    expect(cap.stdout).toMatch(/sivru doctor /);
-    expect(cap.stdout).toMatch(/\[(ok|warn|fail)\]/);
-    expect(cap.stdout).toMatch(/ok, \d+ warn, \d+ fail/);
-  });
+  it(
+    "renders the table and exits 0 when no checks failed",
+    async () => {
+      const cap = captureIO();
+      let code: number;
+      try {
+        code = await runDoctor(["doctor"]);
+      } finally {
+        cap.restore();
+      }
+      expect(code).toBeGreaterThanOrEqual(0);
+      expect(code).toBeLessThanOrEqual(1);
+      expect(cap.stdout).toMatch(/sivru doctor /);
+      expect(cap.stdout).toMatch(/\[(ok|warn|fail)\]/);
+      expect(cap.stdout).toMatch(/ok, \d+ warn, \d+ fail/);
+    },
+    15000,
+  );
 });
 
 describe("runDoctor — argv parsing", () => {

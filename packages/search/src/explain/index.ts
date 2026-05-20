@@ -95,6 +95,12 @@ export {
   MCP_CAP_HARD_CEILING,
 } from "./mcp-cap.js";
 export type { McpCapConfig } from "./mcp-cap.js";
+
+export {
+  assembleDiffArtifact,
+  parseRemovedSymbols,
+} from "./diff.js";
+export type { DiffDeps } from "./diff.js";
 export type {
   SymbolIndexCache,
   SymbolIndexCacheKey,
