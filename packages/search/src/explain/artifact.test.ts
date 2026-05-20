@@ -327,6 +327,146 @@ describe("assembleArtifact: tests", () => {
   });
 });
 
+describe("assembleArtifact: region-level (T14)", () => {
+  const exFoo = {
+    name: "foo",
+    kind: "function" as const,
+    startLine: 10,
+    endLine: 20,
+    signature: "export function foo()",
+  };
+  const exBar = {
+    name: "bar",
+    kind: "function" as const,
+    startLine: 22,
+    endLine: 30,
+    signature: "export function bar()",
+  };
+
+  it("filters public_api to just the requested symbol and emits path::symbol", async () => {
+    const idx = mkIndex([mkEntry("src/foo.ts", { exports: [exFoo, exBar] })]);
+    const art = await assembleArtifact(
+      baseOpts({ symbol: "foo" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(art.path).toBe("src/foo.ts::foo");
+    expect(art.public_api).toEqual([exFoo]);
+    expect(art.footer).toMatch(/git log -L per call/);
+  });
+
+  it("filters callers to those importing only the requested symbol", async () => {
+    const idx = mkIndex([
+      mkEntry("src/foo.ts", { exports: [exFoo, exBar] }),
+      mkEntry("src/a.ts", {
+        imports: [
+          {
+            raw: `import { foo } from "./foo"`,
+            resolved: "src/foo.ts",
+            identifiers: ["foo"],
+          },
+        ],
+      }),
+      mkEntry("src/b.ts", {
+        imports: [
+          {
+            raw: `import { bar } from "./foo"`,
+            resolved: "src/foo.ts",
+            identifiers: ["bar"],
+          },
+        ],
+      }),
+    ]);
+    const art = await assembleArtifact(
+      baseOpts({ symbol: "foo" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(art.callers!.map((c) => c.filePath)).toEqual(["src/a.ts"]);
+  });
+
+  it("raises SIVRU-E2004 when the symbol is not in the file's exports", async () => {
+    const idx = mkIndex([mkEntry("src/foo.ts", { exports: [exFoo] })]);
+    await expect(() =>
+      assembleArtifact(baseOpts({ symbol: "missing" }), idx, {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      }),
+    ).rejects.toThrowError(/SIVRU-E2004/);
+  });
+
+  it("uses git log -L for region churn", async () => {
+    const idx = mkIndex([mkEntry("src/foo.ts", { exports: [exFoo] })]);
+    let capturedArgs: readonly string[] | null = null;
+    const gitLog = async (args: readonly string[]) => {
+      capturedArgs = args;
+      return "deadbeef 2026-05-01T12:00:00+00:00\n";
+    };
+    const art = await assembleArtifact(baseOpts({ symbol: "foo" }), idx, {
+      gitLog,
+      gitShortlog: noopGit,
+      fileExists: noTests,
+      readSyncOrUndef: noRead,
+    });
+    expect(capturedArgs).toEqual([
+      "log",
+      "-L",
+      "10,20:src/foo.ts",
+      "--since=90.days",
+      "--pretty=format:%H %cI",
+      "-s",
+    ]);
+    expect(art.churn.commitCount).toBe(1);
+    expect(art.churn.lastCommitAt).toBe("2026-05-01T12:00:00+00:00");
+  });
+
+  it("uses git blame --line-porcelain for region ownership", async () => {
+    const idx = mkIndex([mkEntry("src/foo.ts", { exports: [exFoo] })]);
+    let capturedArgs: readonly string[] | null = null;
+    const gitShortlog = async (args: readonly string[]) => {
+      capturedArgs = args;
+      return [
+        "deadbeef 1 1 1",
+        "author Alice",
+        "...",
+        "deadbeef 1 2 1",
+        "author Alice",
+        "deadbeef 1 3 1",
+        "author Bob",
+      ].join("\n");
+    };
+    const art = await assembleArtifact(baseOpts({ symbol: "foo" }), idx, {
+      gitLog: noopGit,
+      gitShortlog,
+      fileExists: noTests,
+      readSyncOrUndef: noRead,
+    });
+    expect(capturedArgs).toEqual([
+      "blame",
+      "--line-porcelain",
+      "-L",
+      "10,20",
+      "src/foo.ts",
+    ]);
+    expect(art.ownership).toEqual([
+      { author: "Alice", percent: 67, count: 2 },
+      { author: "Bob", percent: 33, count: 1 },
+    ]);
+  });
+});
+
 describe("assembleArtifact: precision floor (T12)", () => {
   it("nulls callers when a Go target's fan-out exceeds the scaled floor", async () => {
     const target = mkEntry("pkg/util/util.go", {

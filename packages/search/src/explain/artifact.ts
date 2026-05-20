@@ -18,6 +18,7 @@ import {
   type CalleeRef,
   type CallerRef,
   type ChurnInfo,
+  type Export,
   type ExplainArtifact,
   type ExplainOptions,
   type OwnershipEntry,
@@ -123,6 +124,7 @@ export async function assembleArtifact(
 ): Promise<ExplainArtifact> {
   const sinceDays = opts.sinceDays ?? DEFAULT_SINCE_DAYS;
   const target = opts.target;
+  const symbol = opts.symbol ?? null;
   const targetEntry = index.get(target);
   const gitLog = deps.gitLog ?? defaultGit;
   const gitShortlog = deps.gitShortlog ?? defaultGit;
@@ -131,8 +133,27 @@ export async function assembleArtifact(
   const isInsideRepoRealpath =
     deps.isInsideRepoRealpath ?? defaultIsInsideRepoRealpath;
 
+  // ---- region resolution (T14) ----------------------------------------
+  // When `opts.symbol` is set we slice the artifact to one exported
+  // symbol's line range. If the file is indexed but the symbol isn't a
+  // declared export, raise SIVRU-E2004 — that's the contract the MCP and
+  // CLI surfaces rely on for "symbol not found" reporting.
+  let regionExport: Export | null = null;
+  if (symbol !== null && targetEntry !== undefined) {
+    regionExport =
+      targetEntry.exports.find((e) => e.name === symbol) ?? null;
+    if (regionExport === null) {
+      throw new SivruExplainError(
+        "SIVRU-E2004",
+        `symbol "${symbol}" not found in ${target}`,
+      );
+    }
+  }
+  const isRegion = regionExport !== null;
+
   // ---- public_api ------------------------------------------------------
-  const public_api = targetEntry?.exports.slice() ?? [];
+  const public_api: Export[] =
+    regionExport !== null ? [regionExport] : targetEntry?.exports.slice() ?? [];
 
   // ---- callees ---------------------------------------------------------
   const calleesByPath = new Map<string, Set<string>>();
@@ -168,8 +189,13 @@ export async function assembleArtifact(
   // imported identifiers overlap with this file's exported names. Identifier
   // overlap is what the design calls "identifier match across an import";
   // it's the cheap second-stage filter that turns the noisy "anything that
-  // imports me" into a useful caller list.
-  const exportedNames = new Set(public_api.map((e) => e.name));
+  // imports me" into a useful caller list. In region mode the match set is
+  // just the one symbol — narrows the caller list to "who imports THIS
+  // symbol", which is the whole point of region-level explain.
+  const exportedNames =
+    regionExport !== null
+      ? new Set([regionExport.name])
+      : new Set(public_api.map((e) => e.name));
   const callers: CallerRef[] = [];
   for (const entry of index.entries()) {
     if (entry.filePath === target) continue;
@@ -225,16 +251,37 @@ export async function assembleArtifact(
   }
 
   // ---- churn -----------------------------------------------------------
-  const churn: ChurnInfo = await collectChurn(
-    index.repoPath,
-    target,
-    sinceDays,
-    gitLog,
-    targetEntry?.commitCount,
-  );
+  const churn: ChurnInfo =
+    regionExport !== null
+      ? await collectRegionChurn(
+          index.repoPath,
+          target,
+          regionExport.startLine,
+          regionExport.endLine,
+          sinceDays,
+          gitLog,
+        )
+      : await collectChurn(
+          index.repoPath,
+          target,
+          sinceDays,
+          gitLog,
+          targetEntry?.commitCount,
+        );
 
   // ---- ownership -------------------------------------------------------
-  const ownership = await collectOwnership(index.repoPath, target, gitShortlog);
+  // Region-level ownership uses git blame -L; file-level uses git shortlog.
+  // Both injected — tests stub both.
+  const ownership =
+    regionExport !== null
+      ? await collectRegionOwnership(
+          index.repoPath,
+          target,
+          regionExport.startLine,
+          regionExport.endLine,
+          gitShortlog,
+        )
+      : await collectOwnership(index.repoPath, target, gitShortlog);
 
   // ---- tests -----------------------------------------------------------
   const tests = collectTests(
@@ -250,11 +297,13 @@ export async function assembleArtifact(
     repoFileCount: index.size(),
     language: targetEntry?.language ?? null,
     sinceDays,
-    isRegion: false,
+    isRegion,
   });
 
+  const artifactPath = isRegion ? `${target}::${symbol}` : target;
+
   return {
-    path: target,
+    path: artifactPath,
     public_api,
     callers: finalCallers,
     callees,
@@ -302,6 +351,83 @@ async function collectChurn(
     lastCommitAt,
     sinceDays,
   };
+}
+
+/**
+ * Region-level churn (T14). `git log -L <startLine>,<endLine>:<path>` walks
+ * the history of that exact range. The output is one commit header per
+ * touched commit; we count commits and pull the most-recent ISO timestamp.
+ */
+async function collectRegionChurn(
+  repoPath: string,
+  target: string,
+  startLine: number,
+  endLine: number,
+  sinceDays: number,
+  gitLog: NonNullable<AssembleArtifactDeps["gitLog"]>,
+): Promise<ChurnInfo> {
+  const args = [
+    "log",
+    "-L",
+    `${startLine},${endLine}:${target}`,
+    `--since=${sinceDays}.days`,
+    "--pretty=format:%H %cI",
+    "-s", // suppress diff body — we only want the header
+  ];
+  const out = await gitLog(args, repoPath);
+  const headers: { sha: string; iso: string }[] = [];
+  for (const rawLine of out.split("\n")) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    const m = line.match(/^([0-9a-f]{7,40})\s+(\S+)/);
+    if (m === null) continue;
+    headers.push({ sha: m[1]!, iso: m[2]! });
+  }
+  if (headers.length === 0) {
+    return { commitCount: 0, lastCommitAt: null, sinceDays };
+  }
+  return {
+    commitCount: headers.length,
+    lastCommitAt: headers[0]!.iso,
+    sinceDays,
+  };
+}
+
+/**
+ * Region-level ownership (T14). `git blame --line-porcelain -L start,end <path>`
+ * emits `author <name>` lines one per source line; we bucket lines by author
+ * and report percent + count.
+ */
+async function collectRegionOwnership(
+  repoPath: string,
+  target: string,
+  startLine: number,
+  endLine: number,
+  gitBlame: NonNullable<AssembleArtifactDeps["gitShortlog"]>,
+): Promise<OwnershipEntry[]> {
+  const args = [
+    "blame",
+    "--line-porcelain",
+    "-L",
+    `${startLine},${endLine}`,
+    target,
+  ];
+  const out = await gitBlame(args, repoPath);
+  const lineCounts = new Map<string, number>();
+  for (const rawLine of out.split("\n")) {
+    if (!rawLine.startsWith("author ")) continue;
+    const author = rawLine.slice("author ".length).trim();
+    lineCounts.set(author, (lineCounts.get(author) ?? 0) + 1);
+  }
+  const total = Array.from(lineCounts.values()).reduce((a, b) => a + b, 0);
+  if (total === 0) return [];
+  return Array.from(lineCounts.entries())
+    .map(([author, count]) => ({
+      author,
+      percent: Math.round((count / total) * 100),
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
 }
 
 async function collectOwnership(
