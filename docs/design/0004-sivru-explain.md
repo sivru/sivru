@@ -1,13 +1,15 @@
 # DESIGN-0004: `sivru explain <path>`
 
-**Status:** Draft (review-stable; promote to Accepted on
-`/plan-eng-review` PASS)
+**Status:** Accepted (promoted from Draft on 2026-05-20 by
+`/plan-eng-review` iter-6 PASS)
 **Class:** Spine (per [GOALS.md](../../GOALS.md))
 **Targets:** v0.5.0
 **Issue:** filed when v0.5 work starts
 **Created:** 2026-05-08
-**Updated:** 2026-05-20 — absorbed CEO-plan iter-3 PASS (A1–A4) and
-outside-voice iter-4 decisions (D13–D16 + seven folded fixes).
+**Updated:** 2026-05-20 — eng-review iter-6 absorbed D1 (subdir,
+overturns CEO-plan D8), D2 (commit-count cache for D15 sort),
+D3 (two-tier cold-build budget), D4 (D16 floor scales with repo
+size), and six folded fixes. Promoted Draft → Accepted.
 **Author:** @pochadri
 
 ## Problem
@@ -33,8 +35,8 @@ This is **Spine**. It is the first *comprehension primitive* — the
 goal in [GOALS.md](../../GOALS.md) is to make a codebase queryable as
 a durable asset, and `explain` is the first surface a human or an
 agent calls to ask "what is this file, in this codebase, right now?".
-v0.6's `@sivru` annotation blocks layer authored *why* on top of the
-derived *what* this release ships.
+v0.6's `@sivru` annotation blocks (DESIGN-0016) layer authored *why*
+on top of the derived *what* this release ships.
 
 The MCP version (`sivru.explain`) lets the agent self-narrate before
 editing: "I am about to change `processPayment`; it is called by 12
@@ -55,7 +57,7 @@ not).
 
 The CLI markdown rendering is one cut over the same JSON the MCP
 tool returns. The JSON shape is the contract; the markdown is the
-human surface. **Canonical JSON shape:**
+human surface. **Canonical artifact JSON shape:**
 
 ```jsonc
 {
@@ -64,7 +66,7 @@ human surface. **Canonical JSON shape:**
   "callers":        [ /* 1-hop, capped per A4 in MCP only */ ],
   "callees":        [ /* 1-hop, capped per A4 in MCP only */ ],
   "churn":          { /* commit count, last commit, since-days */ },
-  "ownership":      { /* last author, top contributors with % */ },
+  "ownership":      { /* top contributors with % */ },
   "tests":          [ /* matched test files */ ],
   "authored":       [],         // empty in v0.5; v0.6 fills (A1)
   "callers_truncated": null,    // null OR count of dropped entries
@@ -78,9 +80,31 @@ human surface. **Canonical JSON shape:**
 visible-degradation pattern: `null` when no truncation, the count
 of dropped entries when capped. `callers_skipped_reason` is set to
 `"precision-floor"` when the Go-package / Java-class fan-out
-exceeds the precision floor (§3b, D16) and the field returns
-`null` rather than a noisy 200-entry list. `authored: []` is the
-A1 prepay slot for v0.6.
+exceeds the scaled precision floor (§3b, D16) and the field
+returns `null` rather than a noisy fan-out list. `authored: []` is
+the A1 prepay slot for v0.6 (DESIGN-0016 holds the v0.6
+reconciliation contract).
+
+**MCP response envelope.** When invoked via `sivru.explain` over
+MCP, the artifact is wrapped in an envelope with observability
+fields, matching the existing `sivru.search` / `sivru.find_related`
+shape (`packages/cli/src/mcp-entry.ts:340-373`):
+
+```jsonc
+{
+  "tool": "sivru.explain",
+  "path": "<path>",
+  "latencyMs": 47,
+  "refreshMs": 12,
+  "refreshDelta": { "modified": 0, "added": 0, "removed": 0,
+                    "embedsRecomputed": 0 },
+  "artifact": { /* canonical artifact shape above */ }
+}
+```
+
+The CLI does NOT wrap — `sivru explain --json` returns the bare
+artifact. Only MCP wraps. Single source of observability across all
+three tools.
 
 Example markdown rendering:
 
@@ -103,7 +127,6 @@ CHURN  (last 90 days)
   3 commits  · last 2026-05-19  · touched in #21
 
 OWNERSHIP
-  last author:  pochadri
   top 3:        pochadri 100% (37 lines)
 
 TESTS
@@ -114,11 +137,11 @@ AUTHORED  (none yet — see v0.6)
 FOOTER
   call graph is identifier-based; not type-resolved — expect
   false positives on common names. Go callers resolve at package
-  granularity; Java at source-root + class granularity.
+  granularity; Java at source-root + class granularity. Precision
+  floor at this repo size: 100.
 ```
 
-Output formats: `markdown` (default), `--json` for tooling. The MCP
-tool returns the JSON shape directly.
+Output formats: `markdown` (default), `--json` for tooling.
 
 ### 2. Surfaces
 
@@ -128,11 +151,14 @@ tool returns the JSON shape directly.
 - **CLI region-level:** `sivru explain <path>::<symbol>` — see §4.
 - **CLI diff mode:** `sivru explain <path> --diff` — see §5.
 - **MCP tool:** `sivru.explain({ path, symbol?, diff?, since?, depth? })`
-  — the agent calls it before edits. The MCP response **is capped**
-  per A4 (§2a).
+  — the agent calls it before edits. The MCP response is wrapped in
+  the envelope (§1) and the `artifact.callers` / `artifact.callees`
+  lists are capped per §2a.
 
 The MCP tool's always-on `description` is the channel that actually
-makes the agent reach for it (per the v0.4 pattern):
+makes the agent reach for it (per the v0.4 pattern and the existing
+`SEARCH_TOOL_DESCRIPTION` / `FIND_RELATED_TOOL_DESCRIPTION`
+pattern):
 
 > *"Get the public API, callers, callees, churn, and ownership of
 > a file or symbol before editing it. Use after locating a file
@@ -147,14 +173,27 @@ skill entirely) is acknowledged context for v0.5: the coach loop
 (v0.9–11) is the named release that addresses low-context-edit
 detection. v0.5 does not try to fix delegation.
 
-#### 2a. MCP token cap (A4 + D15 + #10)
+**Argument parsing.** Hand-rolled, no zod — matches the codebase
+convention in `parseSearchArgs` / `parseFindRelatedArgs`
+(`packages/cli/src/mcp-entry.ts:198-306`). Explain adds a
+`parseExplainArgs` of the same shape.
+
+#### 2a. MCP token cap (A4 + D15 + D2 + #10)
 
 - **Defaults:** 30 callers AND 30 callees, applied **independently**.
-- **Sort (D15):** by `git log --oneline -- <file> | wc -l`
+- **Sort (D15 + D2 implementation).** By per-file `commitCount`
   **ASCENDING** (stable / low-churn first), ties broken by file
   mtime **ascending**. Surfaces the dangerous legacy callers the
-  agent does not already know about; recently-touched callers
-  drop into the truncated tail.
+  agent does not already know about; recently-touched callers drop
+  into the truncated tail.
+- **`commitCount` is cached per file in the symbol-index** (D2 —
+  see §6). Build computes one `git log --name-only --pretty=format:`
+  walk over the committed history and parses into a `Map<file,
+  count>` applied to every per-file index entry. The MCP cap path
+  reads `commitCount` from the cached symbol-index entry — **zero
+  git invocations per request**. Invalidation is automatic
+  (commitCount is part of the cached entry; `state_id` changes
+  rebuild the cache).
 - **Hard ceiling (#10):** the effective cap is
   `min(configValue, 500)`. Any user-supplied value above 500 is
   clamped to 500. A value of `0` means "use the ceiling (500)",
@@ -176,26 +215,41 @@ detection. v0.5 does not try to fix delegation.
 sivru explain <path>
   │
   ├─ tree-sitter parse <path>          → public API (exports, sigs)
-  │   (reuses v0.2 grammars + chunker AST)
+  │   reuses v0.2 grammars; reads from in-process SivruIndex.Chunk[]
+  │   when search has already indexed the repo (warm path); fresh
+  │   parse only on cold path or for files outside the index.
   │
   ├─ symbol-index lookup                → callers + callees
-  │   (per-repo index: file → exports[], imports[resolved])
+  │   (per-repo index: file → exports[], imports[resolved],
+  │    commitCount)
   │   built on first explain, cached, mtime-invalidated
   │
-  ├─ git log <path>                     → churn (commit count, last)
-  │   (region-level: git log -L for path::symbol — see §4)
+  ├─ git shortlog -ns -- <path>         → ownership (file-level)
+  │   git blame -L for region-level only
   │
-  ├─ git blame <path> aggregated        → ownership (top authors %)
+  ├─ git log -- <path>                  → churn (file-level)
+  │   git log -L for region-level only (see §3c)
   │
   └─ test-file pattern match            → test hint
 ```
 
 **3a. Public API.** Reuses the v0.2 tree-sitter substrate. The
-chunker already returns `Chunk[]` with `nodeType` + `symbolName`; the
-explain layer keeps the *exported* symbols and pulls each one's
-signature line range out of the same parse. No new parser, no new
-grammar work. The five covered languages (TS, JS, Python, Go, Java)
-are first-class; uncovered languages get an empty `public_api`
+chunker already returns `Chunk[]` with `nodeType` + `symbolName`;
+the explain layer keeps the *exported* symbols and pulls each
+one's signature line range out of the same parse.
+
+**Warm-path optimisation (per D1).** Explain is a subdirectory of
+`@sivru/search` (see §6). When the MCP server has already built
+a `SivruIndex` for the repo (the common case — the agent ran
+`sivru.search` or `sivru.find_related` first), explain reads the
+per-file `Chunk[]` from the in-process index and filters chunks
+where `symbolName !== undefined` AND `nodeType` is in the exported-
+node-type whitelist for the file's language. No re-parse on the
+warm path. On the cold path (no search index built yet), explain
+runs the chunker directly. Same Chunk[] shape either way.
+
+The five covered languages (TS, JS, Python, Go, Java) are
+first-class; uncovered languages get an empty `public_api`
 section with an honest "language not yet supported" note.
 
 **3b. The 1-hop call graph.** Computed against a per-repo
@@ -206,8 +260,30 @@ section with an honest "language not yet supported" note.
   chunker already runs.
 - `imports`: each import statement → the *resolved* path of what
   is being imported (i.e. the on-disk file the import targets).
+- `commitCount`: total commits touching this file in the committed
+  history. Populated at build by one `git log --name-only` walk
+  bucketed by file. Used by the D15 cap sort (§2a) without per-
+  request git invocations.
 
-Resolution is best-effort and language-specific:
+Resolution is best-effort and language-specific. All resolvers
+implement a shared `Resolver` interface:
+
+```ts
+interface Resolver {
+  language: 'typescript' | 'javascript' | 'python' | 'go' | 'java';
+  /** Resolve one import statement's target path within the repo.
+   *  Returns null if unresolvable (extern, type-only, etc.). */
+  resolveImport(
+    importStmt: string,
+    fromFile: string,
+    repoRoot: string,
+  ): string | null;
+  /** Extract exported symbols from this file's chunks. */
+  exportsOf(chunks: readonly Chunk[]): Export[];
+}
+```
+
+Per-language behaviour:
 
 - **TS/JS:** relative imports (`./foo`, `../bar`) resolved against
   the importing file's dir, with the usual extension probes
@@ -239,42 +315,56 @@ import-edge matching — high recall, lower precision on shadowing or
 same-named symbols across files. Honest scope: documented in the
 output footer.
 
-**Go / Java precision floor (D16).** Package-level (Go) and
+**Go / Java precision floor (D16 + D4).** Package-level (Go) and
 source-root + class-level (Java) resolution can fan out to
 hundreds of "callers" for common utility files. A footer
-disclaimer cannot fix a 200-row noise flood. The rule:
+disclaimer cannot fix a noise flood. The rule:
 
 > If a single Go-package or Java-class call-site query yields
-> **> 100 candidate callers** for one symbol, explain returns
-> `callers: null` AND `callers_skipped_reason: "precision-floor"`
-> for that symbol. The footer still names the granularity caveat.
+> **more than `floor` candidate callers** where
+> `floor = max(100, repoFileCount * 0.05)`,
+> explain returns `callers: null` AND `callers_skipped_reason:
+> "precision-floor"` for that symbol. The footer string reports
+> the actual `floor` value chosen for the repo so the user / agent
+> can see it.
 
-Visible degradation > noisy output. The 100-row threshold is a
-constant; refining it (or per-language tuning) is a follow-up if
-real-world users complain it cuts too aggressively.
+D4 — the floor scales with repo size: 100 minimum, 5% of total
+indexed files maximum. A 2000-file repo: floor = 100. A 5000-
+file repo: floor = 250. A 50000-file monorepo: floor = 2500.
+Visible degradation > noisy output. User-configurable precision
+floor (`.sivru/explain.json` override) is deferred to v0.5.x.
 
 **3c. Churn + ownership.**
 
-- **File-level** (default): `git log --follow --since=<N> -- <path>`
-  for change count and last commit; `git blame --line-porcelain
-  <path>` aggregated by author for the ownership block. No
-  network. The walker already shells out to `git` for `state_id`,
-  so this is the same pattern.
-- **Region-level** (`path::symbol`): the line range comes from the
+- **File-level (default):** churn = `git log --follow --since=<N>
+  -- <path>` for change count and last commit. Ownership =
+  **`git shortlog -ns -- <path>`** aggregated by author (faster
+  and quieter than `git blame --line-porcelain` for the file-level
+  case; blame loads the full file history into memory). The
+  walker already shells out to `git` for `state_id`, so this is
+  the same pattern.
+- **Region-level (`path::symbol`):** the line range comes from the
   symbol index. Churn uses
   `git log -L <startLine>,<endLine>:<path> --since=<N>`;
   ownership uses `git blame --line-porcelain -L <startLine>,
   <endLine> <path>`. Both are computed **live per call** — there
   is no region-level churn cache. The symbol index gives us the
-  range cheaply; git provides the per-region log. This is the
-  #4 fix (region churn was elided in the CEO plan).
+  range cheaply; git provides the per-region log.
+- **Performance disclosure.** `git log -L` walks history per-commit
+  for the file's hunks and is meaningfully slower than `git log --
+  <path>` (typically 5–10x on a long-history file). The `--since`
+  default (90 days) bounds the work for region-level calls. Hot
+  files with multi-year history may see region-level explain take
+  multiple seconds. Documented in the footer when region-level
+  is used; v0.x perf patch if a user reports it.
 
 **3d. Tests.** A filename-pattern match the chunker can derive:
 `<path>.test.<ext>`, `<dir>/__tests__/<basename>.*`,
 `<dir>/<stem>.spec.<ext>`, `<dir>/<stem>_test.<ext>` (Go),
 `test_<stem>.py` (Python). Test count is a `grep` for `it(` /
 `test(` / `def test_` in the matched file — informational, not
-precise.
+precise. Pattern matching runs against repo-relative paths only;
+no glob hits files outside the repo (§6 threat model).
 
 ### 4. Region-level explain (A2 — `path::symbol`)
 
@@ -360,9 +450,9 @@ is not represented in `state_id`. Rule:
   cache lives in process memory only and dies with the process.
   No disk footprint.
 
-**Acceptance threshold (#2 fix — groundable).** The
-"≤15% false-positive caller report rate" threshold must be measured,
-not asserted. Concretely:
+**Acceptance threshold (#2 — groundable).** The "≤15% false-
+positive caller report rate" threshold must be measured, not
+asserted. Concretely:
 
 - Test corpus: **≥ 10 fixture cases** designed to be ambiguous
   (delete-and-re-add of a same-named symbol, cross-file shadowing,
@@ -379,32 +469,92 @@ algorithm OR `--diff` ambiguous-case rendering is deferred to
 v0.5.x with the test marked as a known-failure. No soft-shipping
 a noisy report — the test fails the build.
 
-### 6. Cache
+### 6. Cache + module layout (D1)
 
-The symbol index is the expensive piece. Build it on first
-`sivru explain` against a given `(repoPath, state_id)`; cache to
-`~/.cache/sivru/explain/<sha256(repoPath)>/<state_id>.json`. Reuse
-verbatim on subsequent calls in the same repo state. On mtime
-change to a file, re-index just that file and patch the cache
-(incremental, same shape as the search engine's `refreshStale`).
+**Module layout (D1 — overturns CEO-plan D8).** Explain ships as
+`packages/search/src/explain/` — a subdirectory of `@sivru/search`,
+not a separate package. Rationale: explain reuses the tree-sitter
+chunker, the `state_id` mechanism, the on-disk cache pattern, the
+gitignore-aware walker, and the `refreshStale()` invariant. A
+separate package duplicated all of these. The subdir gets them
+for free, can read the in-process `SivruIndex.Chunk[]` for export
+extraction (warm path, §3a), and is consistent with v0.6's
+DESIGN-0016 which already ships `packages/search/src/block/` for
+the `@sivru` annotation extractor. One package, two adjacent
+modules.
 
-A `SIVRU_EXPLAIN_CACHE_VERSION = 1` constant lives next to the
-search cache's version so a format change forces a rebuild
-cleanly. The cache shape is small and human-readable (JSON, one
-object per file): edit-debuggable, gitignored, never published.
+**Module structure inside `packages/search/src/explain/`:**
 
-The walker's existing `~/.cache/sivru/indexes/` lives next door;
-the two are independent. **Note (D14):** the optimisation of
-sharing the chunker parse with explain (one walk for both
-indexes) is real but rejected for v0.5 — it would bump the search
-cache format mid-release-cycle and couple @sivru/explain to
-@sivru/search's cache schema. Tracked in TODOS.md as a v0.x perf
-patch when measured to actually matter.
+```
+packages/search/src/explain/
+  types.ts          — Resolver, Export, SymbolIndex, ExplainArtifact
+  index.ts          — public exports
+  cache.ts          — load / save / refresh symbol index (mirrors
+                       packages/search/src/cache/)
+  symbol-index.ts   — buildSymbolIndex(repoPath, state_id)
+  resolvers/
+    typescript.ts   — TS/JS file-level resolver
+    python.ts       — Python file-level resolver
+    go.ts           — Go package-level resolver
+    java.ts         — Java source-root + class-level resolver
+  artifact.ts       — assembleArtifact(path, opts): ExplainArtifact
+  region.ts         — region-level slicing (A2)
+  diff.ts           — --diff mode (A3)
+  parse-cache.ts    — in-session LRU parse cache (#11)
+```
 
-**Cold-build time budget (#9).** The acceptance gate is **p95
-cold symbol-index build < 6 seconds on a 2000-file TypeScript
-repo** (Apple Silicon, M-series). Below: ship. Above: optimise
-or surface the regression in CHANGELOG with a release note.
+**Symbol-index cache.** The symbol index is the expensive piece.
+Build it on first `sivru explain` against a given `(repoPath,
+state_id)`; cache to `~/.cache/sivru/explain/<sha256(repoPath)>/
+<state_id>.json`. Reuse verbatim on subsequent calls in the same
+repo state. On mtime change to a file, re-index just that file
+and patch the cache (incremental, same shape as the search
+engine's `refreshStale`). A `SIVRU_EXPLAIN_CACHE_VERSION = 1`
+constant lives next to the search cache's `CACHE_FORMAT_VERSION`
+so a format change forces a rebuild cleanly. The cache shape is
+small and human-readable (JSON, one object per file):
+edit-debuggable, gitignored, never published.
+
+**Per-file cache entry:**
+
+```jsonc
+{
+  "filePath": "packages/cli/src/commands/skill.ts",
+  "exports": [
+    { "name": "install", "kind": "function",
+      "startLine": 42, "endLine": 78 }
+  ],
+  "imports": [
+    { "raw": "import { computeHash } from '../lib/skill-marker.js'",
+      "resolved": "packages/cli/src/lib/skill-marker.ts" }
+  ],
+  "commitCount": 17,
+  "mtimeMs": 1779251234000
+}
+```
+
+The walker's existing `~/.cache/sivru/indexes/` (search) lives
+next to `~/.cache/sivru/explain/`. With D1's subdir layout, the
+"shared parse on disk" optimisation that was deferred at D14 is
+now a **same-module refactor** — when measured to matter, the
+chunker can write `imports[]` directly into search's cache entry
+and explain reads from it. Not v0.5 scope; the cleanest place to
+hold the option is now in-module.
+
+**`commitCount` cache invariant (D2).** The per-file `commitCount`
+is computed at build via **one** `git log --name-only
+--pretty=format: --no-renames HEAD` walk parsed into a
+`Map<file, count>` and applied to every per-file entry. Same
+state_id-keyed invalidation. The MCP cap sort (§2a, D15) reads
+`commitCount` directly from cache entries — zero git invocations
+per MCP request.
+
+**Cold-build time budget (D3 — two-tier).** The acceptance gate
+is **p95 cold symbol-index build < 15 seconds on macos-latest**
+GitHub Actions runner (CI assertion). The developer-machine
+target is **< 6 seconds on Apple Silicon M-series** (documented
+quality bar in CHANGELOG; not asserted on CI). Catches order-of-
+magnitude regressions while honest about hardware variance.
 
 **Threat model (#6 — expanded).**
 
@@ -418,7 +568,11 @@ or surface the regression in CHANGELOG with a release note.
 - **Hostile `.sivru/explain.json`:** the `mcpCap` field cannot
   uncap MCP output — every read is `min(configValue, 500)` per
   A4's hard ceiling. Same clamp applies to `SIVRU_EXPLAIN_MCP_CAP`.
-- **Signature exposure:** explain DOES return public-API signature
+- **Tests pattern match.** The filename-pattern match (§3d) only
+  globs inside the realpath-validated repo root; matched test
+  paths re-validated through realpath before any `grep` reads
+  them.
+- **Signature exposure.** Explain DOES return public-API signature
   text in `public_api[].signature`. This is the same data
   surfaced by any other reader of the file; explain does not read
   function bodies. The footer string says so.
@@ -439,8 +593,8 @@ What v0.5 deliberately is *not*:
   only; renames are v0.5.x.
 - **Not Go-file-level / Java-file-level.** Go callers resolve at
   package granularity, Java at source-root + class granularity.
-  Above a 100-caller fan-out (D16) the field returns `null` with
-  a `precision-floor` reason.
+  Above a `max(100, repoFileCount * 0.05)` fan-out (D16 + D4)
+  the field returns `null` with a `precision-floor` reason.
 
 ## Alternatives considered
 
@@ -459,30 +613,40 @@ core; an `--llm-summary` add-on could ship in a later patch.
 enough to re-parse that the agent would visibly wait. The search
 engine already caches; explain follows the same precedent.
 
+**Separate `@sivru/explain` package (CEO-plan D8 — overturned by
+eng-review D1).** The CEO plan locked explain as a separate
+package. Eng-review reversed this. Rationale: explain reuses the
+chunker, walker, state_id, cache layer, and `Chunk[]` shape from
+`@sivru/search`; the chunker's `symbolName`/`nodeType` annotation
+specifically exists "so v0.6 binds without re-parsing" (packages/
+search/src/types.ts:30-36). A separate package duplicated all of
+these primitives across a boundary that the v0.6 plan
+(DESIGN-0016) already places inside `@sivru/search`. The subdir
+gets the warm-path Chunk[] reuse for free and consolidates the
+search/comprehension module set.
+
 **Piggyback on the search index build (D14).** Tempting — the
 chunker already parses every file via tree-sitter. Extending its
 output with raw `imports[]` resolved at parse time would make the
 first `sivru explain` call ~5–10 seconds faster on a populated
-search cache. Rejected for v0.5: bumps the search cache format
-mid-release-cycle (every existing v0.4 user rebuilds on upgrade)
-AND couples @sivru/explain to @sivru/search's cache schema. The
-two-parse cost is paid once per repo state. Tracked in TODOS.md
-as a v0.x perf patch when measured to matter.
+search cache. Deferred for v0.5. With D1's subdir layout, the
+optimisation is a same-module refactor (no cross-package release
+coordination) — tracked in TODOS.md as a v0.x perf patch when
+measured to matter.
 
-**Enrich `find_related` instead of shipping a new MCP tool (D13
-option B).** The outside-voice reviewer argued `find_related`
-already routes well in v0.4's bench and adding explain's payload
-to its response would ride the proven routing surface. Rejected:
-conceptually muddies `find_related`'s identity (related code AND
-file/symbol explainer in one tool); v0.6/v0.7 block-surfacing
-would need to be rewired through `find_related`. The CLI command
-`sivru explain` is the human surface; the MCP tool `sivru.explain`
-is the agent surface — keeping them named and separate matters
-for the v0.6/v0.7 follow-ons. The v0.4 routing-gap critique is
-acknowledged context; the coach loop (v0.9–11) is the named place
-it gets addressed.
+**Enrich `find_related` instead of shipping a new MCP tool
+(D13 option B in the CEO plan).** The outside-voice reviewer
+argued `find_related` already routes well in v0.4's bench and
+adding explain's payload to its response would ride the proven
+routing surface. Rejected: `find_related` is a *similarity*
+engine over `Chunk[]` (cosine + BM25), not a structured-metadata
+surface. Reading its implementation
+(`packages/cli/src/mcp-entry.ts:424-481`) confirms the two
+tools are different in kind. The v0.4 routing-gap critique is
+acknowledged context; the coach loop (v0.9–11) is the named
+place it gets addressed.
 
-## Open questions resolved by CEO + outside-voice review
+## Open questions resolved by CEO + eng + outside-voice review
 
 The Draft's three open questions are resolved:
 
@@ -496,63 +660,81 @@ The Draft's three open questions are resolved:
   limitation.
 - **Go and Java cross-file precision.** v0.5 ships at Go *package*
   granularity and Java *source-root + class* granularity, surfaced
-  in the footer. The **D16 precision floor** (`callers: null`
-  + `callers_skipped_reason: "precision-floor"` when fan-out
-  > 100) prevents the noise-flood failure mode. Finer-grained
-  per-file resolution is a v0.x follow-up if a user reports the
-  precision gap.
-- **Markdown layout.** The sketch in §1 is one cut; the MCP path
-  cares only about the JSON shape. Rubber-stamp the section
-  ordering in `/plan-eng-review`.
+  in the footer. The **D16 + D4 scaled precision floor**
+  (`callers: null` + `callers_skipped_reason: "precision-floor"`
+  when fan-out > `max(100, repoFileCount * 0.05)`) prevents the
+  noise-flood failure mode. Finer-grained per-file resolution is
+  a v0.x follow-up if a user reports the precision gap.
+- **Markdown layout.** Settled in eng-review iter-6: the §1 sketch
+  is the layout; section ordering matches the JSON shape order.
 
 ## Acceptance criteria
 
 - `sivru explain <path>` produces the five sections; `--json`
-  returns the canonical JSON shape in §1 with every field
+  returns the canonical artifact JSON shape in §1 with every field
   present (including `authored: []`, `callers_truncated`,
   `callees_truncated`, `callers_skipped_reason`, `footer`).
 - The MCP tool `sivru.explain({ path, symbol?, diff?, since?,
-  depth? })` returns the JSON artifact; its always-on
-  `description` carries the routing hint per §2.
+  depth? })` returns the **envelope shape** in §1 with `tool`,
+  `path`, `latencyMs`, `refreshMs`, `refreshDelta`, `artifact`
+  fields, matching the existing `search` / `find_related` shape.
+  Its always-on `description` carries the routing hint per §2.
+- Argument validation is hand-rolled (no zod dependency); matches
+  the `parseSearchArgs` / `parseFindRelatedArgs` convention.
+- Module location: `packages/search/src/explain/` subdirectory of
+  `@sivru/search` (per D1; overturns CEO-plan D8). No new package.
 - The symbol index is built on first call per `(repoPath,
   state_id)`, cached, and incrementally refreshed on file mtime
   change.
-- **Cold-build budget:** p95 cold symbol-index build **< 6
-  seconds on a 2000-file TS repo** (Apple Silicon, M-series).
+- **Per-file `commitCount` field cached** in the symbol-index
+  (D2); MCP cap sort (§2a) reads commitCount from cache with
+  **zero git invocations per request**.
+- **Two-tier cold-build budget (D3):** CI asserts p95 < 15s on
+  macos-latest; CHANGELOG documents < 6s target on Apple Silicon
+  M-series (not asserted on CI).
 - Cross-file callers/callees work for TS, JS, Python (file-level)
-  and Go, Java (package/class-level, with the D16 precision-
-  floor of 100).
+  and Go, Java (package/class-level, with the scaled D16 + D4
+  precision floor `max(100, repoFileCount * 0.05)`).
+- All resolvers implement the shared `Resolver` interface (§3b).
 - Output footer states the resolution model honestly (identifier
   + import; not type-resolved; Go-package / Java-class
-  granularity; relative-imports-only for TS path resolution).
+  granularity; relative-imports-only for TS path resolution;
+  actual `floor` value chosen for the repo).
 - Churn + ownership computed via local `git`; no network call.
-  Region-level uses `git log -L` / `git blame -L` per §3c (#4).
+  File-level ownership uses `git shortlog -ns` (not `git blame`);
+  region-level uses `git log -L` / `git blame -L` per §3c.
 - **Region-level (§4):** `sivru explain pkg/foo.ts::processPayment`
-  CLI works and matches the canonical JSON shape with the
+  CLI works and matches the canonical artifact shape with the
   `symbol` filter applied. MCP equivalent
-  (`sivru.explain({ path, symbol })`) returns the same shape.
+  (`sivru.explain({ path, symbol })`) returns the same shape
+  wrapped in the envelope.
 - **`--diff` mode (§5):** detects exported-symbol removals;
   renames produce no output (deferred to v0.5.x); CI test asserts
   **mean FP rate ≤ 15% over ≥ 10 ambiguous fixture cases**. If
   the corpus is < 10 or FP > 15%, the build fails.
 - **MCP cap (§2a):** 30 callers + 30 callees independently; hard
   ceiling 500 (config `0` means "use ceiling"); sort by
-  **commit-count ascending, then mtime ascending** (D15);
-  `*_truncated` fields populated when capped.
-- **D16 precision floor:** if Go-package / Java-class fan-out > 100
-  for a single symbol, `callers: null` and
-  `callers_skipped_reason: "precision-floor"`.
+  `commitCount` ascending (cached, D2), then mtime ascending
+  tiebreaker; `*_truncated` fields populated when capped.
+- **D16 + D4 scaled precision floor:** if Go-package / Java-class
+  fan-out > `max(100, repoFileCount * 0.05)` for a single symbol,
+  `callers: null` and `callers_skipped_reason: "precision-floor"`.
 - **Threat model:** path-validator rejects `..` escapes and
   absolute paths; `realpath()` check confirms resolved path stays
   inside the repo root; `mcpCap` config + env value is clamped
-  to `min(value, 500)`.
+  to `min(value, 500)`; test-pattern matching is realpath-
+  validated.
 - **`authored` field reconciliation gate (#12 + A1):** in v0.5
   the JSON-shape test asserts only `typeof artifact.authored ===
   "object" && Array.isArray(artifact.authored)` (compatible with
-  v0.6's filled values). DESIGN-0005 (v0.6 `@sivru` blocks) PR
-  description MUST include a "DESIGN-0004 reconciliation"
-  section listing the `authored` field's v0.6 contract — this is
-  the DESIGN-0001 reconciliation-gate pattern carried forward.
+  v0.6's filled values). **DESIGN-0016** (v0.6 `@sivru` blocks)
+  has a "DESIGN-0004 reconciliation gate" section pinning the
+  contract; the v0.6 PR description MUST include the named
+  reconciliation section.
+- **`refreshStale` after edit:** MCP integration test edits a
+  fixture file's exports then calls `sivru.explain` on it →
+  response reflects the new exports (the staleness invariant
+  `search` and `find_related` already enforce; mcp-entry.ts:391).
 - `sivru help` lists `explain`.
 - A `SIVRU-Exxxx` error code range is claimed in the PR
   description for the new error classes (cache load failure,
@@ -566,6 +748,9 @@ The Draft's three open questions are resolved:
 - **Unit — symbol index per language.** For each of TS/JS/Py/Go/Java
   fixtures: imports resolve to the right target file/package;
   exports list matches.
+- **Unit — Resolver interface conformance.** Every resolver
+  satisfies the `Resolver` type (TypeScript compile check) and
+  passes a shared minimum-contract test suite.
 - **Unit — callers / callees.** A fixture pair (`foo.ts` exports
   `bar`, `baz.ts` imports `bar`) → callers of `foo.ts` includes
   `baz.ts:<line>`; callees of `baz.ts` resolves back to `foo.ts`.
@@ -573,55 +758,82 @@ The Draft's three open questions are resolved:
   in two files; the resolution stays scoped by import path —
   proves identifier+import is stricter than identifier-only.
 - **Unit — churn / ownership.** Mock git output → expected counts
-  + author percentages. Region-level fixture exercises
-  `git log -L` and `git blame -L` mock paths.
+  + author percentages. File-level uses `git shortlog`; region-
+  level fixture exercises `git log -L` and `git blame -L` mock
+  paths.
+- **Unit — `commitCount` cache (D2).** Fixture repo with 5 files
+  of varying commit counts → cached commitCount matches `git log
+  --oneline -- <file> | wc -l` for each file. State_id change
+  forces recompute.
 - **Unit — test-file detection.** Per-language naming conventions.
-- **Unit — JSON shape.** The artifact's JSON object passes a
-  schema check (Zod or hand-rolled assert). Asserts
+- **Unit — JSON shape.** The artifact JSON object passes a hand-
+  rolled schema check (no zod). Asserts
   `Array.isArray(artifact.authored)` and the truncation /
   precision-floor markers default to `null`.
+- **Unit — MCP envelope shape.** `sivru.explain` MCP response has
+  `tool`, `path`, `latencyMs`, `refreshMs`, `refreshDelta`,
+  `artifact` fields. Matches `formatSearchResultEnvelope` shape.
 - **Unit — MCP cap behaviour (§2a).** Synthetic 600-caller
   fixture: `mcpCap=30` returns 30 entries + `callers_truncated:
   570`; `mcpCap=1000` returns 500 entries + `callers_truncated:
   100` (clamped); `mcpCap=0` returns 500 entries (ceiling, not
-  uncapped); sort verified as commit-count-asc, mtime-asc
-  tiebreaker.
-- **Unit — D16 precision floor.** Synthetic Java fixture with
-  120 importers of one class → `callers: null`,
-  `callers_skipped_reason: "precision-floor"`. Same with Go
-  package fan-out.
+  uncapped); sort verified as `commitCount` ascending, mtime
+  ascending tiebreaker. **Zero git invocations during the cap
+  sort** (asserted by mocking `execFile` and counting calls).
+- **Unit — D16 + D4 scaled precision floor.** Synthetic Java
+  fixture with `repoFileCount = 200, fanout = 80` → callers
+  returned (under floor 100). `repoFileCount = 5000, fanout =
+  280` → callers returned (under floor 250). `repoFileCount =
+  5000, fanout = 280, but Go package fanout = 300` →
+  `callers: null`, `callers_skipped_reason: "precision-floor"`.
+  Footer reports floor value.
 - **Unit — threat model.** Path-validator rejects `../etc/passwd`
   and `/etc/passwd`; symlink fixture pointing outside the repo
-  returns the `SIVRU-Exxxx` symlink-escape error.
-- **Integration — `buildExplainIndex` over a fixture repo.** A
+  returns the `SIVRU-Exxxx` symlink-escape error; test-pattern
+  match against a symlinked test file outside the repo refuses
+  to read.
+- **Integration — `buildSymbolIndex` over a fixture repo.** A
   small multi-file repo → index round-trips through cache; an
   mtime bump on one file → incremental refresh updates only
-  that entry.
+  that entry. `commitCount` populated per file.
+- **Integration — refreshStale-after-edit.** Build the index over
+  a fixture repo; modify a file's exports; call `sivru.explain`
+  on that file via the MCP server → response artifact reflects
+  the new exports. Mirrors the `searchTool` /  `findRelatedTool`
+  staleness invariant (mcp-entry.ts:391-397).
+- **Integration — warm-path Chunk[] reuse (D1).** Build a
+  `SivruIndex` for the fixture repo; call `sivru.explain` on a
+  file that's in the index → assert no fresh tree-sitter parse
+  was invoked (mock `treeSitterChunks` and count calls).
 - **Integration — region-level (§4).** Fixture file with two
   exported symbols → `explain path::symbolA` returns only
   symbolA's public_api, callers narrowed to symbolA mentions,
-  callees within symbolA's line range. `git log -L` mock
-  verified.
+  callees within symbolA's line range. `git log -L` mock path
+  exercised.
 - **Integration — `--diff` mode (§5).** Working-tree fixture
-  removes one exported symbol → `--diff` returns the removed
-  symbol's callers; rename fixture produces no removed_symbols
-  output. **Acceptance corpus ≥ 10 ambiguous fixtures asserts
-  mean FP rate ≤ 15%.**
+  removes one exported symbol → `--diff` returns the symbol's
+  callers under `removed_symbols`. Rename fixture produces no
+  `removed_symbols` (deferred).
 - **Integration — `--diff` in-session parse cache (#11).**
-  Synthetic 50-file diff invoked twice in one process → the
-  second invocation's parse count is 0 (LRU hit). New process
-  → re-parses (no disk cache, by design).
-- **Integration — cold-build budget (#9).** A 2000-file TS
+  Synthetic 50-file diff invoked twice in one process → second
+  invocation's parse count is 0 (LRU hit). New process →
+  re-parses (no disk cache, by design).
+- **Integration — `--diff` FP corpus (#2).** ≥ 10 ambiguous
+  fixtures; CI fails if corpus < 10 OR mean FP rate > 15%. Per-
+  fixture FP rate logged in test output.
+- **Integration — cold-build budget (D3).** A 2000-file TS
   fixture repo → cold `sivru explain` measures p95 build time
-  across N runs; CI asserts < 6s on Apple Silicon (or skips with
-  a logged note on other arches).
+  across N≥5 runs. CI on macos-latest asserts `p95 < 15s`.
+  Developer-machine test (Apple Silicon detection) logs a warning
+  if p95 > 6s without failing.
 - **CLI smoke.** `sivru explain packages/cli/src/commands/skill.ts`
   prints all five sections plus `AUTHORED (none yet — see v0.6)`;
-  `--json` is valid JSON matching the canonical shape.
+  `--json` is valid JSON matching the canonical artifact shape;
+  footer reports `floor` value.
 - **MCP integration.** `sivru.explain(path)` and
   `sivru.explain({ path, symbol })` and
   `sivru.explain({ path, diff: true })` over the MCP server
-  each return the expected JSON.
+  each return the expected envelope-wrapped JSON.
 - **Honest-scope check.** A file with dynamic imports / runtime
   dispatch → the output's footer states the limitation, and the
   result is empty-or-best-effort, never silently wrong.
@@ -632,11 +844,13 @@ Per the three-layer rule (CONTRIBUTING.md):
 
 1. **Built-in defaults.** All five sections enabled; markdown
    output; call-graph depth 1; churn window 90 days; MCP cap 30
-   each (with hard-ceiling 500).
+   each (with hard-ceiling 500); precision floor
+   `max(100, repoFileCount * 0.05)`.
 2. **Declarative override.** `~/.config/sivru/explain.json` and
    `.sivru/explain.json` accept `{ sections, callGraphDepth,
    format, sinceDays, mcpCap }`. Project config beats user
    config. `mcpCap` is always clamped to `min(value, 500)`.
+   `precisionFloor` user-override is deferred to v0.5.x.
 3. **Code-level extension.** `.sivru/explain/*.ts` register
    custom analyzers — punted to a v0.x patch (the interface
    ships internal-only in v0.5; the public surface lands once
@@ -644,8 +858,8 @@ Per the three-layer rule (CONTRIBUTING.md):
 
 ## Effort
 
-Roadmap budget: ~3 weeks. After CEO-plan accepted expansions
-(A1–A4) and outside-voice folded fixes: **~5–6.5 weeks**.
+Roadmap budget: ~3 weeks. After all locked decisions: **~5–6.5
+weeks**.
 
 | Item | Working days | Cumulative |
 |------|--------------|------------|
@@ -653,135 +867,143 @@ Roadmap budget: ~3 weeks. After CEO-plan accepted expansions
 | A1 `authored` reserve | +0.5 | ~3 weeks |
 | A2 Region-level explain | +4–5 | ~3.5–4 weeks |
 | A3 `--diff` mode (+ groundable FP test corpus) | +5 | ~4.5–5 weeks |
-| A4 MCP cap (+ D15 sort + #10 ceiling) | +1–2 | ~5–6.5 weeks |
-| D16 Go/Java precision floor | (within A2) | — |
+| A4 MCP cap (+ D15 + #10 + D2 commitCount cache) | +1.5–2.5 | ~5–6.5 weeks |
+| D16 + D4 scaled precision floor | (within A2) | — |
 | #4 region churn via `git log -L` | (within A2) | — |
 | #6 symlink/realpath threat model | +0.5 | — |
-| #9 cold-build acceptance test | +0.5 | — |
+| D3 two-tier cold-build acceptance test | +0.5 | — |
 | #11 in-session parse cache | (within A3) | — |
 | #12 reconciliation gate copy | +0 (doc-only) | — |
+| D1 subdir scaffold (vs new package) | -0.5 (savings) | — |
+| Folded fixes (envelope, shortlog, resolver iface) | +0.5 | — |
 
 The upper bound (~6.5 weeks) is the honest figure; ~5–6 weeks
 absorbed buffer silently. The honest risk: TS path-aliases /
 Python flat-vs-src / Go package resolution edge cases. The
-open-questions section names them; the precision floor catches
-the worst-case Go/Java noise; relative-imports-only is the
-shipped TS contract for v0.5.
+open-questions section names them; the scaled precision floor
+catches the worst-case Go/Java noise; relative-imports-only is
+the shipped TS contract for v0.5.
 
 ---
 
 ## GSTACK REVIEW REPORT
 
-*Last section per `/plan-ceo-review` skill — review log, decisions
+*Last section per `/plan-eng-review` skill — review log, decisions
 ledger, dashboard, next-steps.*
 
 ### Iteration history
 
-| Iter | Reviewer | Outcome | Issues | Lock state |
-|------|----------|---------|--------|------------|
-| 1 | `/plan-ceo-review` spec-review | REVISE | 11 issues, 6/10 quality | DESIGN-0004 stale relative to accepted expansions; canonical JSON shape missing; A4 cap semantics under-specified |
-| 2 | `/plan-ceo-review` spec-review | REVISE | 8 issues | FP-threshold groundability, JSON-shape inconsistency, A2 cache rule conflated, callee sort ambiguous, effort math optimistic, design-doc-sync gate missing |
-| 3 | `/plan-ceo-review` spec-review | **PASS** | 9/9/9/9/8 | iter-3 lock — CEO plan accepted with A1–A4 + open-question adjudications |
-| 4 | outside-voice independent reviewer | REVISE | 14 issues (4 P0) | Strategic miscalibration vs v0.4 routing data; symbol-index drift; MCP cap sort direction; Go/Java precision floor missing; plus 7 smaller fixes |
-| 5 | this rewrite | **review-stable** | — | D13–D16 + 7 folded fixes absorbed; DESIGN-0004 reflects every locked decision; awaiting `/plan-eng-review` for Accepted promotion |
+| Iter | Reviewer | Outcome | Findings | Lock state |
+|------|----------|---------|----------|------------|
+| 1 | `/plan-ceo-review` spec-review | REVISE | 11 issues, 6/10 quality | DESIGN-0004 stale relative to accepted expansions |
+| 2 | `/plan-ceo-review` spec-review | REVISE | 8 issues | Refinements: FP groundability, JSON shape, A2 cache, sort field, design-doc sync gate |
+| 3 | `/plan-ceo-review` spec-review | **PASS** | 9/9/9/9/8 | CEO plan accepted with A1–A4 |
+| 4 | outside-voice independent reviewer | REVISE | 14 issues (4 P0) | Strategic + precision-floor + sort direction + symbol-index drift |
+| 5 | DESIGN-0004 rewrite (this doc, prior commit) | review-stable | — | D13–D16 + 7 folded fixes absorbed |
+| 6 | `/plan-eng-review` (this section) | **PASS** | 4 issues (1 P0, 3 P1), all resolved | D1–D4 + 6 folded fixes absorbed; **Status promoted Draft → Accepted** |
 
 ### Decisions ledger
 
-**CEO plan (locked iter-3):**
+**CEO plan (locked iter-3):** A1 (`authored` field), A2 (region-
+level), A3 (`--diff` removed-only with groundable FP threshold),
+A4 (MCP cap 30/30 + hard ceiling 500). Open questions: Go/Java
+precision = accept with footer + D16; TS path aliases = defer.
 
-- A1 — `authored: []` field reserved in v0.5 schema (XS, accepted)
-- A2 — Region-level `path::symbol` (S–M, accepted; symbol-index
-  slice, no per-symbol cache, no artifact cache)
-- A3 — `--diff` mode (M, accepted; REMOVED-only, renames →
-  v0.5.x, groundable ≤15% FP threshold over ≥10 fixtures)
-- A4 — MCP cap (S–M, accepted; 30 each independently, hard
-  ceiling 500, env + config override, `*_truncated` markers)
-- Go/Java precision = accept with footer **plus** D16 precision-
-  floor at 100 (outside-voice override)
-- TS path aliases = defer to v0.5.x
-- Markdown layout = settle in `/plan-eng-review`
+**Outside-voice (locked iter-4):**
 
-**Outside-voice decisions (this rewrite):**
+- **D13** — Stay the course on v0.5 scope. v0.4 routing data
+  acknowledged; coach loop (v0.9–11) is the named answer.
+- **D14** — Defer shared-parse optimisation to TODOS.md.
+- **D15** — Flip MCP cap sort from `mtime-desc` to **commit-count-
+  asc, mtime-asc tiebreaker**.
+- **D16** — Hard precision floor at 100 callers for Go/Java; later
+  scaled per D4.
 
-- **D13** — Stay the course on v0.5 scope (declined the reframe
-  to defer v0.5 OR enrich `find_related` instead of a new tool);
-  v0.4's routing-gap is acknowledged context the coach loop
-  (v0.9–11) addresses.
-- **D14** — Defer the shared-parse optimisation to TODOS.md;
-  keep @sivru/explain's separate walker for v0.5 to avoid mid-
-  release search cache format bump.
-- **D15** — Flip MCP cap sort from `mtime-desc` to **commit-
-  count-asc, mtime-asc tiebreaker** (stable callers first;
-  surfaces what the agent does NOT already know).
-- **D16** — Hard precision floor in Go-package / Java-class
-  resolution: `callers: null` + `callers_skipped_reason:
-  "precision-floor"` when fan-out > 100.
+**Eng-review (this iter-6):**
 
-**Folded findings (no separate decision):**
+- **D1 — OVERTURNS CEO-plan D8.** Explain ships as
+  `packages/search/src/explain/` subdirectory of `@sivru/search`,
+  not a separate package. Rationale: chunker's `Chunk[]` already
+  carries `symbolName`/`nodeType`; the subdir reuses every
+  primitive (walker, state_id, cache, refreshStale) cleanly and
+  is consistent with v0.6's DESIGN-0016 already shipping
+  `packages/search/src/block/`.
+- **D2 — D15 cost mitigation.** Cache `commitCount` per file in
+  the symbol-index at build via one `git log --name-only` walk
+  bucketed by file. MCP cap sort reads commitCount from cache,
+  zero git invocations per request.
+- **D3 — Two-tier cold-build budget.** CI gates p95 < 15s on
+  macos-latest. Developer-machine target < 6s on Apple Silicon
+  M-series, documented in CHANGELOG.
+- **D4 — D16 floor scales with repo size:** `max(100,
+  repoFileCount * 0.05)`. Footer surfaces the actual chosen
+  value.
 
-- #2 — `--diff` FP threshold groundable (≥10 fixtures, mean
-  FP-rate ≤ 15%, asserted in CI)
-- #4 — Region-level churn via `git log -L` (computed live, no
-  cache layer)
-- #6 — Expanded threat model (symlink-out via `realpath`,
-  `mcpCap` hard ceiling)
-- #9 — Cold-build acceptance budget (p95 < 6s on 2000-file TS
-  repo)
-- #10 — `mcpCap=0` means "use ceiling 500", not "no cap"
-- #11 — In-session parse cache for `--diff` (LRU, process-
-  scoped, no disk)
-- #12 — `authored: []` test weakened to type check; v0.6 design
-  doc reconciliation-gate is the real protection
+**Folded fixes (this iter-6, no separate decision):**
 
-**Deferred / dismissed:**
-
-- #1 + #8 + #13 (strategic miscalibration → defer v0.5) —
-  user chose to stay the course at D13. Recorded for the v0.5
-  ship-retrospective.
-- #14 (enrich `find_related` instead of new tool) — user chose
-  to keep the explain tool named and separate at D13.
-- #3 (two indexers drift) — deferred to TODOS at D14.
+- MCP response envelope shape matches `formatSearchResultEnvelope`
+  (latencyMs, refreshMs, refreshDelta, artifact).
+- Argument parsing hand-rolled (no zod), matches `parseSearchArgs`
+  convention.
+- `refreshStale`-after-edit MCP integration test added.
+- Per-language `Resolver` interface specified in §3b.
+- File-level ownership uses `git shortlog -ns` (faster than blame).
+- DESIGN-0016 (v0.6) stub updated with the **"DESIGN-0004
+  reconciliation gate"** section pinning the v0.5 → v0.6 contract.
 
 ### Dashboard
 
 | Surface | State |
 |---------|-------|
-| Canonical JSON shape | Specified (§1) |
+| Module location | `packages/search/src/explain/` (D1) |
+| Canonical artifact JSON shape | Specified (§1) |
+| MCP envelope shape | Specified (§1) — matches search/find_related |
 | CLI surfaces | `<path>`, `<path>::<symbol>`, `--diff`, `--json`, `--since`, `--depth` |
 | MCP surface | `sivru.explain({ path, symbol?, diff?, since?, depth? })` capped per §2a |
-| Cache | `~/.cache/sivru/explain/...` symbol-index only; format version 1; D14 deferred |
-| Threat model | path-validator + realpath + hard-ceiling clamp |
-| Acceptance | cold-build < 6s/2000 files; FP-rate ≤ 15% over ≥ 10 `--diff` fixtures; D16 precision floor at 100 |
+| Cache | `~/.cache/sivru/explain/...` symbol-index only; `commitCount` cached per-file; version 1 |
+| Threat model | path-validator + realpath + hard-ceiling clamp + test-pattern realpath |
+| Acceptance | CI cold-build < 15s; dev target < 6s; FP-rate ≤ 15% over ≥ 10 `--diff` fixtures; scaled precision floor |
+| Resolver interface | Specified (§3b) |
+| Reconciliation gate | DESIGN-0016 stub updated |
 | Effort | ~5–6.5 weeks |
 | Open questions | All four resolved |
-| Sync prerequisites | All five CEO-plan items absorbed; no follow-up doc changes blocking implementation |
+| Sync prerequisites | All eng-review decisions absorbed in this rewrite |
 
-### Next steps (review chaining)
+### Outside voice (this eng-review)
 
-1. **`/plan-eng-review`** — architecture / package-boundary
-   review against this rewritten DESIGN-0004. Specific topics
-   to confirm: `@sivru/explain` package boundary (per D8);
-   symbol-index cache shape; per-language resolver interface;
-   the in-session parse cache contract (#11); the
-   reconciliation-gate language (#12) is correctly placed for
-   v0.6 to find.
-2. **Implementation tasks** — write `docs/design/0004-sivru-
-   explain.tasks.md` + JSONL artifact for autoplan, with per-
-   task acceptance criteria, dependencies, effort.
-3. **`/auto-ship`** — in a worktree on branch
-   `design/sivru-explain`, after `/plan-eng-review` passes.
-4. **v0.5.0 ship** — tag once CI green, CHANGELOG updated,
-   bench numbers honest. Open the next bench's adoption-rate
-   question alongside it (per D13: if explain adoption is
-   < 20%, the v0.4 routing data was right and we should
-   prioritise the coach loop earlier).
+Skipped. Outside-voice was just run in CEO iter-4 (14 findings
+absorbed into the iter-5 rewrite less than an hour before this
+review). Running it a second time on the same scope so quickly
+is double-work; the eng-review's own findings (D1–D4) are
+informed by the same code-reading pass that would have grounded
+a second outside voice. Recorded for the review log as
+"skipped — recent fresh data".
+
+### VERDICT
+
+**CLEARED.** Eng-review iter-6 PASS. All four substantive
+findings (1 P0, 3 P1) resolved via D1–D4. Six folded fixes
+absorbed. DESIGN-0004 promoted from Draft (review-stable) to
+**Accepted**.
+
+### Next steps
+
+1. **Update task sidecar** (`docs/design/0004-sivru-explain.tasks.md`
+   + JSONL) to reflect D1 (T1 = subdir scaffold, not package),
+   D2 (new T_commit-count-cache task), D3 (T17 two-tier), D4
+   (T11 scaled floor), and the folded resolver-interface +
+   refreshStale-after-edit test additions.
+2. **`/auto-ship`** in a worktree on `design/sivru-explain`.
+   The doc is Accepted; the tasks are buildable.
+3. **v0.5.0 ship** — tag once CI green, CHANGELOG updated, bench
+   numbers honest. Instrument routing-correctness on the explain
+   tool (per D13: if explain adoption < 20%, the v0.4 routing
+   data was right and the coach loop should be pulled forward).
 
 ### Handoff note
 
-DESIGN-0004 is **review-stable** as of 2026-05-20. The CEO plan
-(iter-3 PASS) and the outside-voice review (iter-4, 14 issues)
-have both been absorbed; every locked decision is reflected in
-the §1–§7 spec, the acceptance criteria, and the test plan. The
-doc is ready for `/plan-eng-review`. No further user decisions
-are pending unless the eng-review surfaces new architectural
-trade-offs.
+DESIGN-0004 is **Accepted** as of 2026-05-20. Three reviews (CEO
+iter-3 PASS, outside-voice iter-4 absorbed, eng-review iter-6
+PASS) have shaped the spec across §1–§7, acceptance criteria,
+and test plan. The doc is implementation-ready; the next handoff
+is `/auto-ship` against the task sidecar.

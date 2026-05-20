@@ -133,6 +133,27 @@ would not survive a clone.
 - Block size. A block past ~25 lines is probably prose that belongs
   in a design doc. Soft lint warning, or no cap? (owner: @pochadri)
 
+## DESIGN-0004 reconciliation gate (v0.5 forward-pointer)
+
+DESIGN-0004 v0.5 reserved the `authored: []` field on the explain
+artifact (decision A1 in the CEO plan, locked in this design doc's
+acceptance criteria). The v0.6 PR description for this design MUST
+include a section titled "DESIGN-0004 reconciliation" that states
+the v0.6 contract for filling the `authored` field on `sivru explain`
+artifacts. Specifically:
+
+- What `extractBlocks()` output goes into `artifact.authored[]`.
+- How a region-level `sivru explain path::symbol` call filters
+  `authored[]` to blocks attached to that symbol.
+- Whether v0.6 also surfaces unvalidated blocks (with a diagnostic)
+  or strips them.
+
+This gate is the v0.5 → v0.6 contract pin per the DESIGN-0001
+reconciliation pattern (the only protection against the v0.5
+`authored: []` placeholder silently never getting filled). Sivru's
+release CI should reject v0.6 PRs whose body does not contain the
+"DESIGN-0004 reconciliation" heading.
+
 ## Acceptance criteria
 
 - `SivruBlock` type defined in `packages/search/src/block/types.ts`.
@@ -146,6 +167,9 @@ would not survive a clone.
   to `[]`.
 - Round-trip test: an identical block written in 4 carrier syntaxes
   (Java, Go, TypeScript, Python) parses to the same `SivruBlock`.
+- **DESIGN-0004 reconciliation gate** (see section above): v0.6 PR
+  description includes the named reconciliation section, and the
+  v0.5 `authored: []` placeholder is filled per the stated contract.
 
 ## Test plan
 
