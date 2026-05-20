@@ -117,3 +117,46 @@ DESIGN-0003's §3 work lands in v0.6.
 **Depends on:** v0.4 (the canonical `SKILL.md` and the routing policy);
 ideally the v0.6 install edit-safety subsystem so the multi-target
 emit reuses one update-safety mechanism rather than three.
+
+## Source-of-truth for the CLI version constants
+
+**What:** Replace the hand-synced `SIVRU_VERSION` constant in
+`packages/cli/src/commands/version.ts:6` and `SERVER_VERSION` in
+`packages/cli/src/mcp-entry.ts:48` with a single value read from
+`packages/cli/package.json` at module load. Standard Node-CLI
+pattern: a small helper `readFileSync`s the `package.json` that
+sits alongside `dist/` (npm always publishes it next to the
+`files[]` outputs) and parses `.version`; both constants source
+from that helper.
+
+**Why:** The hand-synced pattern caused `SIVRU_VERSION` to lie
+about the version across four releases (stuck at `0.1.0` from
+the initial release through v0.5.0). The v0.4.0 release commit
+(0722d80) bumped the four `package.json` files plus
+`SIVRU_SEARCH_VERSION` but missed both CLI-side constants. Every
+user who ran `sivru version` got `0.1.0` while their installed
+binary was actually shipping v0.4 features. `SERVER_VERSION`
+(reported to MCP clients) was even worse — stuck at `0.0.0`
+since inception. Both fixed manually for v0.5.0 (commit
+76fcf82), but the mechanism that allowed four releases of drift
+is still there.
+
+**Pros:** one source of truth (package.json); release commits
+only touch the four `package.json` files (or fewer with
+workspace-version inheritance), not six spots; the drift class
+is structurally impossible.
+**Cons:** one extra `readFileSync` at CLI startup (~one syscall,
+negligible). The build needs a regression test asserting the
+runtime-read version matches `package.json`.
+
+**Context:** Surfaced at the v0.5.0 release-finalize (commit
+76fcf82). The longstanding `SIVRU_VERSION = "0.1.0"` was the
+most visible drift; `SERVER_VERSION = "0.0.0"` reported to MCP
+clients was the quieter one. The mcp-entry test
+(`packages/cli/src/mcp-entry.test.ts`) already exercises the
+server-init path — extending it to assert version equality with
+`package.json` is a few lines.
+
+**Effort estimate:** XS (human ~30 min) → with CC+gstack: ~10 min.
+**Priority:** P3 — low impact unless drift recurs at v0.6+.
+**Depends on:** nothing.
