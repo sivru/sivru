@@ -23,10 +23,12 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
+  applyMcpCap,
   assembleArtifact,
   buildCommitCounts,
   buildIndex,
   computeStateId,
+  loadMcpCapConfig,
   loadOrBuildSymbolIndex,
   parsePathAndSymbol,
   resolveAndAssertInside,
@@ -661,7 +663,10 @@ export async function explainTool(rawArgs: unknown): Promise<ToolResult> {
       depth: parsed.depth,
     };
     if (parsed.symbol !== null) explainOpts.symbol = parsed.symbol;
-    const artifact = await assembleArtifact(explainOpts, index);
+    const rawArtifact = await assembleArtifact(explainOpts, index);
+    // T11: apply the MCP cap. CLI is uncapped — MCP capping happens here.
+    const cap = await loadMcpCapConfig(absRepo);
+    const artifact = applyMcpCap(rawArtifact, cap);
 
     const latencyMs = performance.now() - tStart;
     return ok(

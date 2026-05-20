@@ -118,7 +118,18 @@ export async function assembleArtifact(
       filePath,
       symbols: Array.from(syms).sort(),
     }))
-    .sort((a, b) => a.filePath.localeCompare(b.filePath));
+    .sort((a, b) => {
+      // Same D15 sort as callers: low-churn first so the truncated tail is
+      // the dangerous-because-noisy stuff, not the dangerous-because-stable
+      // stuff.
+      const cA = index.get(a.filePath)?.commitCount ?? 0;
+      const cB = index.get(b.filePath)?.commitCount ?? 0;
+      if (cA !== cB) return cA - cB;
+      const mA = index.get(a.filePath)?.mtimeMs ?? 0;
+      const mB = index.get(b.filePath)?.mtimeMs ?? 0;
+      if (mA !== mB) return mA - mB;
+      return a.filePath.localeCompare(b.filePath);
+    });
 
   // ---- callers ---------------------------------------------------------
   // A file is a caller iff one of its imports resolves to <target> AND the

@@ -86,6 +86,15 @@ export type { CommitCountsOptions } from "./commit-counts.js";
 
 export { assembleArtifact, buildFooter } from "./artifact.js";
 export type { AssembleArtifactDeps } from "./artifact.js";
+
+export {
+  applyMcpCap,
+  effectiveCap,
+  loadMcpCapConfig,
+  MCP_CAP_DEFAULT,
+  MCP_CAP_HARD_CEILING,
+} from "./mcp-cap.js";
+export type { McpCapConfig } from "./mcp-cap.js";
 export type {
   SymbolIndexCache,
   SymbolIndexCacheKey,
