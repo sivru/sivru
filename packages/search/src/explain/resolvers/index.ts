@@ -6,6 +6,7 @@
 // Python (T3), Go (T4), and Java (T5) resolvers add entries here.
 
 import type { Resolver } from "../types.js";
+import { pythonResolver } from "./python.js";
 import { typescriptResolver } from "./typescript.js";
 
 const REGISTRY = new Map<string, Resolver>();
@@ -15,6 +16,7 @@ function register(languages: readonly string[], resolver: Resolver): void {
 }
 
 register(["typescript", "tsx", "javascript", "jsx"], typescriptResolver);
+register(["python"], pythonResolver);
 
 /** Look up the resolver for a given language id. `null` when unsupported. */
 export function resolverFor(language: string | null): Resolver | null {

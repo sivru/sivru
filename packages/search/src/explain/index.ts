@@ -41,6 +41,11 @@ export {
   extractImportedIdentifiers,
   extractImportSpecifier,
 } from "./resolvers/typescript.js";
+export {
+  pythonResolver,
+  parseFromSpec,
+  parseImportSpec,
+} from "./resolvers/python.js";
 
 export {
   buildSymbolIndex,

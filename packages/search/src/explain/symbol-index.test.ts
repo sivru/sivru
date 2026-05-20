@@ -62,12 +62,12 @@ describe("buildSymbolIndex", () => {
   });
 
   it("records language but no exports for languages without a resolver yet", async () => {
-    // Python is a chunkable language; the Python resolver lands in T3, so
-    // T2's index reports language=`python` with empty exports/imports.
-    await write("svc/pkg/mod.py", "def hello():\n    return 1\n");
+    // Rust is detected by extension but has no resolver as of v0.5 — the
+    // index entry should carry the language tag with empty exports/imports.
+    await write("src/lib.rs", "pub fn hello() -> i32 { 1 }\n");
     const index = await buildSymbolIndex(root);
-    const entry = index.get("svc/pkg/mod.py")!;
-    expect(entry.language).toBe("python");
+    const entry = index.get("src/lib.rs")!;
+    expect(entry.language).toBe("rust");
     expect(entry.exports).toEqual([]);
     expect(entry.imports).toEqual([]);
   });
