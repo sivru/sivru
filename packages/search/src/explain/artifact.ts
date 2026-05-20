@@ -522,6 +522,7 @@ export function buildFooter(opts: {
   const floor = Math.max(100, Math.round(opts.repoFileCount * 0.05));
   const parts: string[] = [
     "call graph is identifier-based; not type-resolved — expect false positives on common names.",
+    "Dynamic imports and runtime dispatch (await import(...), importlib, reflection) are not resolved — empty-or-best-effort, never silently wrong.",
   ];
   if (opts.language === "go") {
     parts.push("Go callers resolve at package granularity.");

@@ -89,14 +89,16 @@ in one npm package; one MCP server. Public pitch in
 
 See [`ROADMAP.md`](ROADMAP.md) for direction.
 
-- The sivru skill (v0.4) — routing policy + `sivru skill install`,
-  in progress
 - Embed code only; BM25-only-index docs and configs
 - Real-agent replay via the Anthropic SDK (opt-in)
 - `sivru completion` + `sivru bench tthw`
+- `@sivru`-block annotations (v0.6 — DESIGN-0016) — fills the
+  `artifact.authored` slot that v0.5 reserves as `[]`.
 
 (Shipped since this list was last cut: tree-sitter chunker — v0.2;
-per-model chunk-windowing — v0.3.)
+per-model chunk-windowing — v0.3; the sivru skill — v0.4;
+`sivru explain` (CLI + MCP + region + --diff) — v0.5
+[DESIGN-0004](docs/design/0004-sivru-explain.md).)
 
 ## Don't do without asking
 

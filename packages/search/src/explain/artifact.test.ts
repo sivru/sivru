@@ -558,6 +558,137 @@ describe("assembleArtifact: precision floor (T12)", () => {
   });
 });
 
+describe("assembleArtifact: identifier shadowing", () => {
+  // Design §"Test plan" line 757: a common name (`get`) defined in two files;
+  // the resolution stays scoped by import path — proves identifier+import is
+  // stricter than identifier-only.
+  it("a shared identifier defined in two files stays scoped by import path", async () => {
+    const targetA = mkEntry("src/a.ts", {
+      exports: [
+        {
+          name: "get",
+          kind: "function",
+          startLine: 1,
+          endLine: 1,
+          signature: "export function get()",
+        },
+      ],
+    });
+    const targetB = mkEntry("src/b.ts", {
+      exports: [
+        {
+          name: "get",
+          kind: "function",
+          startLine: 1,
+          endLine: 1,
+          signature: "export function get()",
+        },
+      ],
+    });
+    // Caller imports `get` from src/a.ts only. Even though src/b.ts also
+    // exports `get`, the caller does NOT show up as a caller of src/b.ts.
+    const callerOfA = mkEntry("src/caller.ts", {
+      imports: [
+        {
+          raw: `import { get } from "./a"`,
+          resolved: "src/a.ts",
+          identifiers: ["get"],
+        },
+      ],
+    });
+    const idx = mkIndex([targetA, targetB, callerOfA]);
+
+    const artA = await assembleArtifact(
+      baseOpts({ target: "src/a.ts" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(artA.callers!.map((c) => c.filePath)).toEqual(["src/caller.ts"]);
+
+    const artB = await assembleArtifact(
+      baseOpts({ target: "src/b.ts" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(artB.callers).toEqual([]);
+  });
+});
+
+describe("assembleArtifact: dynamic imports / runtime dispatch", () => {
+  // Design §"Test plan" line 837-839: a file with dynamic imports / runtime
+  // dispatch → footer states the limitation, result is empty-or-best-effort,
+  // never silently wrong.
+  it("a file using `await import(...)` produces no resolved callees from the dynamic site", async () => {
+    // The TS resolver only captures static `import ... from "..."` statements.
+    // `await import("./foo")` is invisible to it — that's the design's
+    // empty-or-best-effort contract.
+    const dynUser = mkEntry("src/dynamic.ts", {
+      imports: [], // resolver returned no static imports for the dynamic site
+    });
+    const targetFoo = mkEntry("src/foo.ts", {
+      exports: [
+        {
+          name: "foo",
+          kind: "function",
+          startLine: 1,
+          endLine: 1,
+          signature: "export function foo()",
+        },
+      ],
+    });
+    const idx = mkIndex([dynUser, targetFoo]);
+
+    const art = await assembleArtifact(
+      baseOpts({ target: "src/dynamic.ts" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    // No callees discovered from the dynamic import — empty result.
+    expect(art.callees).toEqual([]);
+    // And foo.ts shows no caller pointing at it from dynamic.ts.
+    const artFoo = await assembleArtifact(
+      baseOpts({ target: "src/foo.ts" }),
+      idx,
+      {
+        gitLog: noopGit,
+        gitShortlog: noopGit,
+        fileExists: noTests,
+        readSyncOrUndef: noRead,
+      },
+    );
+    expect(artFoo.callers!.map((c) => c.filePath)).not.toContain(
+      "src/dynamic.ts",
+    );
+  });
+
+  it("the footer surfaces the dynamic-imports / runtime-dispatch limitation", async () => {
+    const idx = mkIndex([mkEntry("src/foo.ts")]);
+    const art = await assembleArtifact(baseOpts(), idx, {
+      gitLog: noopGit,
+      gitShortlog: noopGit,
+      fileExists: noTests,
+      readSyncOrUndef: noRead,
+    });
+    expect(art.footer).toMatch(/Dynamic imports and runtime dispatch/);
+    expect(art.footer).toMatch(/empty-or-best-effort/);
+  });
+});
+
 describe("buildFooter", () => {
   it("scales the precision floor by repo size (min 100)", () => {
     expect(buildFooter({

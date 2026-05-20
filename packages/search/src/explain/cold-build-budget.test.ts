@@ -83,4 +83,35 @@ describe("explain cold-build budget", () => {
     // timeout independent of the budget itself.
     BUDGET_MS * TRIALS,
   );
+
+  // Heavy variant matching the design's stated scale (test plan line 825):
+  // 2000-file fixture, p95 < 15s. Skipped in normal CI to keep the suite
+  // fast; set `SIVRU_HEAVY_BENCH=1` to opt in (e.g. on a nightly run or a
+  // perf-regression bisect session).
+  const HEAVY_ENABLED = process.env["SIVRU_HEAVY_BENCH"] === "1";
+  const HEAVY_FILES = 2000;
+  it.skipIf(!HEAVY_ENABLED)(
+    `[opt-in] ${HEAVY_FILES}-file cold buildSymbolIndex p95 < ${BUDGET_MS}ms (${TRIALS} trials)`,
+    async () => {
+      await makeCorpus(HEAVY_FILES);
+      const timings: number[] = [];
+      for (let t = 0; t < TRIALS; t++) {
+        const start = performance.now();
+        const index = await buildSymbolIndex(root);
+        const elapsed = performance.now() - start;
+        timings.push(elapsed);
+        expect(index.size()).toBeGreaterThanOrEqual(HEAVY_FILES);
+      }
+      const p95 = percentile(timings, 95);
+      if (p95 >= BUDGET_MS) {
+        throw new Error(
+          `[heavy] cold-build p95 ${p95.toFixed(0)} ms exceeds ${BUDGET_MS} ms budget\n` +
+            `trials: ${timings.map((t) => t.toFixed(0)).join(", ")} ms`,
+        );
+      }
+      expect(p95).toBeLessThan(BUDGET_MS);
+    },
+    // 5 trials × ~15s budget headroom each.
+    BUDGET_MS * TRIALS * 2,
+  );
 });
