@@ -10,8 +10,8 @@
 // covers the file-level cut.
 
 import { execFile } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { dirname, extname, join, posix } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, extname, join, posix, resolve as resolvePath, sep } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -38,6 +38,13 @@ export type AssembleArtifactDeps = {
   fileExists?: (absPath: string) => boolean;
   /** Read file synchronously for the test-case counter. */
   readSyncOrUndef?: (absPath: string) => string | undefined;
+  /**
+   * Realpath check (T13 threat model). When provided, the test-pattern
+   * matcher uses it to reject candidate paths whose realpath escapes the
+   * repo root. Default uses `node:fs#realpathSync` and asserts the
+   * resolved path stays inside `index.repoPath`.
+   */
+  isInsideRepoRealpath?: (absPath: string, repoRoot: string) => boolean;
 };
 
 async function defaultGit(
@@ -60,6 +67,29 @@ async function defaultGit(
 function defaultFileExists(absPath: string): boolean {
   try {
     return existsSync(absPath) && statSync(absPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Default realpath-inside check (T13). Resolves both sides and asserts the
+ * target sits under the repo. Any failure (missing file, permission) is
+ * conservative — return false so the candidate is dropped, not read.
+ */
+function defaultIsInsideRepoRealpath(
+  absPath: string,
+  repoRoot: string,
+): boolean {
+  try {
+    const realTarget = realpathSync(absPath);
+    const realRoot = realpathSync(repoRoot);
+    const rootSlash = realRoot.endsWith(sep) ? realRoot : realRoot + sep;
+    const targetSlash = realTarget.endsWith(sep)
+      ? realTarget
+      : realTarget + sep;
+    if (realTarget === realRoot) return true;
+    return targetSlash.startsWith(rootSlash);
   } catch {
     return false;
   }
@@ -98,6 +128,8 @@ export async function assembleArtifact(
   const gitShortlog = deps.gitShortlog ?? defaultGit;
   const fileExists = deps.fileExists ?? defaultFileExists;
   const readSyncOrUndef = deps.readSyncOrUndef ?? defaultReadSync;
+  const isInsideRepoRealpath =
+    deps.isInsideRepoRealpath ?? defaultIsInsideRepoRealpath;
 
   // ---- public_api ------------------------------------------------------
   const public_api = targetEntry?.exports.slice() ?? [];
@@ -205,7 +237,13 @@ export async function assembleArtifact(
   const ownership = await collectOwnership(index.repoPath, target, gitShortlog);
 
   // ---- tests -----------------------------------------------------------
-  const tests = collectTests(index, target, fileExists, readSyncOrUndef);
+  const tests = collectTests(
+    index,
+    target,
+    fileExists,
+    readSyncOrUndef,
+    isInsideRepoRealpath,
+  );
 
   // ---- footer ----------------------------------------------------------
   const footer = buildFooter({
@@ -302,6 +340,7 @@ function collectTests(
   target: string,
   fileExists: (absPath: string) => boolean,
   readSyncOrUndef: (absPath: string) => string | undefined,
+  isInsideRepoRealpath: (absPath: string, repoRoot: string) => boolean,
 ): TestHit[] {
   const ext = extname(target);
   const stem = target.slice(0, target.length - ext.length);
@@ -322,8 +361,12 @@ function collectTests(
   const out: TestHit[] = [];
   for (const c of candidates) {
     const indexed = index.get(c);
-    const absPath = join(index.repoPath, c);
+    const absPath = resolvePath(index.repoPath, c);
     if (indexed === undefined && !fileExists(absPath)) continue;
+    // T13: a test fixture or symlink that points outside the repo would be
+    // a credential-exfil vector if we read it blindly. Realpath both sides
+    // and drop the candidate if the resolved path escapes repoRoot.
+    if (!isInsideRepoRealpath(absPath, index.repoPath)) continue;
     const source = readSyncOrUndef(absPath) ?? "";
     const cases = countTestCases(source);
     out.push({ filePath: c, cases });

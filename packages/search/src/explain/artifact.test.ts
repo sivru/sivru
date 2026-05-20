@@ -301,8 +301,29 @@ describe("assembleArtifact: tests", () => {
       gitShortlog: noopGit,
       fileExists,
       readSyncOrUndef,
+      isInsideRepoRealpath: () => true,
     });
     expect(art.tests).toEqual([{ filePath: "src/foo.test.ts", cases: 3 }]);
+  });
+
+  it("drops a candidate whose realpath escapes the repo (T13)", async () => {
+    const idx = mkIndex([
+      mkEntry("src/foo.ts"),
+      mkEntry("src/foo.test.ts"),
+    ]);
+    const fileExists = (absPath: string) =>
+      absPath.endsWith("/foo.test.ts");
+    const readSyncOrUndef = () => "it('a', ()=>{});";
+    const art = await assembleArtifact(baseOpts(), idx, {
+      gitLog: noopGit,
+      gitShortlog: noopGit,
+      fileExists,
+      readSyncOrUndef,
+      // Force the realpath check to reject everything — simulates a symlink
+      // pointing outside the repo.
+      isInsideRepoRealpath: () => false,
+    });
+    expect(art.tests).toEqual([]);
   });
 });
 
