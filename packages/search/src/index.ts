@@ -91,3 +91,6 @@ export type {
 
 // Explain module (DESIGN-0004) — subdir of @sivru/search per D1.
 export * from "./explain/index.js";
+
+// Block module (DESIGN-0016) — subdir of @sivru/search.
+export * from "./block/index.js";
