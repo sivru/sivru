@@ -6,6 +6,7 @@
 import {
   runBenchModels,
   runBenchPersonal,
+  runBlock,
   runConfig,
   runDoctor,
   runExplain,
@@ -71,6 +72,9 @@ async function main(): Promise<number> {
 
     case "explain":
       return runExplain(argv.slice(1));
+
+    case "block":
+      return runBlock(argv.slice(1));
 
     case "help":
     case "--help":
