@@ -15,6 +15,7 @@ import { dirname, extname, join, posix, resolve as resolvePath, sep } from "node
 import { promisify } from "node:util";
 
 import {
+  type AuthoredEntry,
   type CalleeRef,
   type CallerRef,
   type ChurnInfo,
@@ -26,6 +27,10 @@ import {
   type TestHit,
   SivruExplainError,
 } from "./types.js";
+
+import { extractBlocks } from "../block/extract.js";
+import { blockToJSON } from "../block/toJSON.js";
+import { validateExtracted } from "../block/validate.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -296,6 +301,17 @@ export async function assembleArtifact(
 
   const artifactPath = isRegion ? `${target}::${symbol}` : target;
 
+  // ---- authored (DESIGN-0016) ------------------------------------------
+  // v0.5 emitted `authored: []` unconditionally; v0.6 fills the slot from
+  // `@sivru` blocks extracted from the target file. Region-level filters to
+  // the region's symbol; file-level includes every block. Any extraction or
+  // validation failure becomes an empty list (never blocks the artifact).
+  const authored = await collectAuthored(
+    index.repoPath,
+    target,
+    regionExport,
+  );
+
   return {
     path: artifactPath,
     public_api,
@@ -304,12 +320,45 @@ export async function assembleArtifact(
     churn,
     ownership,
     tests,
-    authored: [],
+    authored,
     callers_truncated: null,
     callees_truncated: null,
     callers_skipped_reason: callersSkippedReason,
     footer,
   };
+}
+
+async function collectAuthored(
+  repoPath: string,
+  target: string,
+  regionExport: Export | null,
+): Promise<AuthoredEntry[]> {
+  try {
+    const abs = resolvePath(repoPath, target);
+    const extracted = await extractBlocks(abs);
+    validateExtracted(extracted);
+    const out: AuthoredEntry[] = [];
+    for (const eb of extracted) {
+      if (eb.block === null) continue; // never silently dropped from CLI;
+      // the explain artifact intentionally omits invalid blocks since
+      // surfacing them as authored context would be misleading.
+      if (regionExport !== null) {
+        if (eb.kind !== "symbol") continue;
+        if (eb.symbolName !== regionExport.name) continue;
+      }
+      const entry: AuthoredEntry = {
+        kind: eb.kind,
+        startLine: eb.range.startLine,
+        endLine: eb.range.endLine,
+        block: blockToJSON(eb.block),
+      };
+      if (eb.symbolName !== undefined) entry.symbol = eb.symbolName;
+      out.push(entry);
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 async function collectChurn(

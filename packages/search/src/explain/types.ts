@@ -157,8 +157,19 @@ export type TestHit = {
 };
 
 export type AuthoredEntry = {
-  /** v0.6 fills this; v0.5 always emits empty array. */
+  /** Symbol name for kind:"symbol" entries; absent for kind:"module". */
   symbol?: string;
+  /** "symbol" (per-symbol block) or "module" (top-of-file/package). */
+  kind?: "symbol" | "module";
+  /** 1-indexed inclusive line span of the @sivru .. @end fence. */
+  startLine?: number;
+  endLine?: number;
+  /** Canonical block JSON; absent on v0.5 placeholder entries. */
+  block?: import("../block/types.js").SivruBlockJSON;
+  /**
+   * v0.5 free-form body retained for backwards-compat across pre-v0.6
+   * consumers; v0.6+ leaves this undefined and uses `block` instead.
+   */
   body?: string;
 };
 
