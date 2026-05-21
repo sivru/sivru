@@ -182,11 +182,13 @@ function collectDeclarations(root: SyntaxNode, language: string): SyntaxNode[] {
           : [
               // TS / JS / TSX / JSX
               "function_declaration",
+              "generator_function_declaration",
               "class_declaration",
               "interface_declaration",
               "method_definition",
               "lexical_declaration",
               "variable_declaration",
+              "type_alias_declaration",
             ],
   );
   const visit = (n: SyntaxNode): void => {
@@ -523,6 +525,26 @@ function extractCommentCarriedBlocks(
  * @throws only on tree-sitter parser failure (which the chunker itself
  *   guards against by detectLanguage filtering); callers should treat
  *   unknown-language files as empty.
+ *
+ * @sivru
+ * schema: 1
+ * role: block-extractor
+ * responsibility: emit one ExtractedBlock per @sivru fence in the file; never silently drop, even on malformed YAML
+ * collaborators: [validateBlock, blockToJSON, pythonModuleLocator, typescriptModuleLocator]
+ * invariants:
+ *   - invalid blocks appear with block:null and diagnostics:[...] populated — never silently dropped (project memory rule)
+ *   - YAML internal indentation is preserved by stripping the @sivru line's exact prefix from each body line
+ * decisions:
+ *   - chose: prefix-anchored line scan rather than greedy whitespace strip
+ *     because: greedy strip collapses YAML's meaningful indentation; nested mappings (decisions[].chose etc.) become invalid
+ *     valid-while: well-formed comments use a consistent prefix per line
+ *     revisit-if: a carrier syntax that mixes prefixes within one block becomes common
+ *   - chose: per-symbol attachment via comment carrier for non-Python; via docstring for Python
+ *     because: matches each language's convention; godoc / JSDoc / Javadoc are above the symbol, PEP 257 is inside
+ *     valid-while: the per-language convention stays canonical
+ *     revisit-if: a language adopts a different convention worth supporting
+ * maturity: stable
+ * @end
  */
 export async function extractBlocks(
   filePath: string,
@@ -600,19 +622,24 @@ export async function extractBlocks(
 }
 
 /**
- * Convenience: extract blocks across many files in parallel. Errors on
- * a single file (e.g., tree-sitter blow-up) become an empty result for
- * THAT file so the batch isn't aborted.
+ * Convenience: extract blocks across many files. Errors on a single
+ * file (e.g., tree-sitter blow-up) become an empty result for THAT
+ * file so the batch isn't aborted.
+ *
+ * Files are processed sequentially per-language because the chunker's
+ * per-language parser is shared across calls and concurrent parse()
+ * invocations can leave overlapping tree lifetimes invalid.
  */
 export async function extractBlocksFromFiles(
   filePaths: readonly string[],
 ): Promise<ExtractedBlock[]> {
-  const settled = await Promise.allSettled(
-    filePaths.map((p) => extractBlocks(p)),
-  );
   const out: ExtractedBlock[] = [];
-  for (const s of settled) {
-    if (s.status === "fulfilled") out.push(...s.value);
+  for (const p of filePaths) {
+    try {
+      out.push(...(await extractBlocks(p)));
+    } catch {
+      // Single-file failure must not abort the batch.
+    }
   }
   return out;
 }

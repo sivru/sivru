@@ -12,6 +12,22 @@ export type RrfOptions = {
  * Reciprocal Rank Fusion: merge multiple ranked lists into one.
  * Input scores are ignored; only ranks contribute.
  * Output: sorted by fused score desc, ties broken by lower id first.
+ *
+ * @sivru
+ * schema: 1
+ * role: rank-fusion
+ * responsibility: merge BM25 and semantic ranked lists into a single hybrid ranking
+ * collaborators: [cosineTopK, createBm25Index, buildIndex]
+ * invariants:
+ *   - input scores are intentionally ignored — only the rank position contributes
+ *   - tie-break is by lower id first so results are stable across runs
+ * decisions:
+ *   - chose: RRF with k=60 from Cormack et al.
+ *     because: parameter-free fusion that beats most learned alternatives at small evaluation budgets
+ *     valid-while: no labelled training data exists for sivru-specific reranking
+ *     revisit-if: a dataset large enough to train a learned fuser becomes available
+ * maturity: stable
+ * @end
  */
 export function reciprocalRankFusion(
   lists: readonly RankedList[],

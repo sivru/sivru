@@ -127,6 +127,22 @@ function scanDeclaredNames(lines: readonly string[]): Set<string> {
  * AND import.identifiers contains the symbol name. We compute this directly
  * here rather than recursing through `assembleArtifact`'s region path so
  * "the symbol no longer exists in the file" doesn't trigger SIVRU-E2004.
+ *
+ * @sivru
+ * schema: 1
+ * role: explain-diff
+ * responsibility: assemble the explain artifact in --diff mode, including the removed_symbols section that surfaces orphaned callers
+ * collaborators: [assembleArtifact, parsePathAndSymbol]
+ * invariants:
+ *   - removed_symbols is only populated when an export disappeared from the working-tree diff
+ *   - diff_mode:true distinguishes the diff artifact from the regular artifact for downstream consumers
+ * decisions:
+ *   - chose: compute removed-symbol callers directly here instead of recursing through assembleArtifact's region path
+ *     because: a removed symbol no longer appears in the file's exports, so the region path would throw SIVRU-E2004
+ *     valid-while: SIVRU-E2004 stays the contract for missing region symbols
+ *     revisit-if: a unified path through assembleArtifact becomes feasible without changing that contract
+ * maturity: stable
+ * @end
  */
 export async function assembleDiffArtifact(
   opts: ExplainOptions,

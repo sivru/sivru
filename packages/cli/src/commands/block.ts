@@ -88,9 +88,31 @@ const USAGE = [
   "                    block:null and diagnostics:[…]; never silently dropped.",
 ].join("\n");
 
+/**
+ * Skip well-known non-source paths that the walker cannot infer from the
+ * gitignore (root .gitignore is not visible when walk() is invoked against
+ * a sub-tree like `packages/`). Test fixtures intentionally include
+ * malformed blocks; linting them in the dogfood gate is noise.
+ */
+const SKIP_PATH_SEGMENTS = [
+  "/dist/",
+  "/node_modules/",
+  "/__fixtures__/",
+  "/.git/",
+];
+
+function isSkippablePath(absPath: string): boolean {
+  const normalized = absPath.replace(/\\/g, "/");
+  for (const seg of SKIP_PATH_SEGMENTS) {
+    if (normalized.includes(seg)) return true;
+  }
+  return false;
+}
+
 async function discoverFiles(rootPath: string): Promise<string[]> {
   const files: string[] = [];
   for await (const entry of walk(rootPath)) {
+    if (isSkippablePath(entry.absPath)) continue;
     files.push(entry.absPath);
   }
   return files;
@@ -124,6 +146,23 @@ function toExtractEntry(eb: ExtractedBlock): ExtractEntry {
   return entry;
 }
 
+/**
+ * @sivru
+ * schema: 1
+ * role: cli-block
+ * responsibility: drive the sivru block CLI subcommand — validate exits non-zero on error; extract emits every block + diagnostics
+ * collaborators: [extractBlocksFromFiles, validateExtracted, blockToJSON, walk, loadBlockConfig]
+ * invariants:
+ *   - extract --json NEVER silently drops an invalid block; invalid entries appear with block:null and diagnostics:[...]
+ *   - validate exit code reads from BlockDiagnostic.severity — any error-level diagnostic flips to exit 1
+ * decisions:
+ *   - chose: validate writes errors to stderr, warnings to stdout
+ *     because: CI scripts pipe stderr separately; warnings should not pollute the same stream as machine-readable error output
+ *     valid-while: the standard CI convention of separating streams holds
+ *     revisit-if: a CI runner needs both on stdout for log correlation
+ * maturity: stable
+ * @end
+ */
 export async function runBlock(argv: readonly string[]): Promise<number> {
   const parsed = parseBlockArgs(argv);
   if (parsed.kind === "err") {

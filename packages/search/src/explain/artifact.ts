@@ -115,6 +115,22 @@ function defaultReadSync(absPath: string): string | undefined {
  * Caps (`opts.mcpCap`), precision floors (T12), region slicing (T14), and
  * diff mode (T15) are explicitly NOT applied here — they wrap or compose
  * with the result.
+ *
+ * @sivru
+ * schema: 1
+ * role: explain-assembler
+ * responsibility: emit the canonical ExplainArtifact for one target — public_api, callers, callees, churn, ownership, tests, authored
+ * collaborators: [buildSymbolIndex, extractBlocks, parsePathAndSymbol]
+ * invariants:
+ *   - every section is descriptive only — no recommendations, no quality verdicts
+ *   - authored entries reflect @sivru blocks from the target file only; cross-file aggregation is out of scope at v0.6
+ * decisions:
+ *   - chose: one shared assembler for file-level and region-level explain
+ *     because: caps, precision floors, and diff mode all compose more cleanly when they wrap one assembler
+ *     valid-while: region-level remains a slice of file-level rather than a different data shape
+ *     revisit-if: region-level needs information that file-level cannot also expose
+ * maturity: stable
+ * @end
  */
 export async function assembleArtifact(
   opts: ExplainOptions,

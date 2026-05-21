@@ -336,6 +336,22 @@ async function chunkFiles(
  * provider for cosine-based hybrid retrieval. With `cache: true`, the
  * resulting index is persisted to `~/.cache/sivru/indexes/` so the next
  * call against the same repo state is sub-second.
+ *
+ * @sivru
+ * schema: 1
+ * role: search-orchestrator
+ * responsibility: wire walker + chunker + tokenizer + BM25 + (optional) embeddings + (optional) cache into one SivruIndex
+ * collaborators: [walk, chunkFile, tokenize, createBm25Index, cosineTopK, createIndexCache, reciprocalRankFusion]
+ * invariants:
+ *   - cold and warm paths return the same SivruIndex shape
+ *   - cache hits never serve a different embedderId than was requested; the cache key includes embedderId
+ * decisions:
+ *   - chose: one orchestrator function with optional embedding rather than two parallel APIs
+ *     because: callers should not branch on lexical-vs-hybrid; mode lives in the options object
+ *     valid-while: the two modes share enough of the pipeline to keep one function readable
+ *     revisit-if: hybrid and lexical diverge enough that one function becomes harder to follow than two
+ * maturity: stable
+ * @end
  */
 export async function buildIndex(
   rootDir: string,

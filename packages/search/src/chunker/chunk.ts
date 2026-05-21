@@ -20,6 +20,21 @@ import { treeSitterChunks } from "./treeSitter.js";
  * @param content - Full UTF-8 source text.
  * @param options - Line-window size / overlap (line-fallback path, and
  *   gap-fill / oversized-node splitting in the tree-sitter path).
+ *
+ * @sivru
+ * schema: 1
+ * role: file-chunker
+ * responsibility: produce chunks for one file via the best available strategy
+ * collaborators: [treeSitterChunks, lineFallbackChunks, detectLanguage]
+ * invariants:
+ *   - the file is always fully indexed; tree-sitter failure degrades chunk quality, never coverage
+ * decisions:
+ *   - chose: tree-sitter where a grammar exists; line-fallback everywhere else
+ *     because: code-aware chunks beat fixed line windows for retrieval, but a parse failure must not silently drop a file
+ *     valid-while: tree-sitter grammars stay the path of least resistance for language coverage
+ *     revisit-if: a chunking model materially out-performs the tree-sitter route
+ * maturity: stable
+ * @end
  */
 export async function chunkFile(
   filePath: string,

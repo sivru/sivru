@@ -23,6 +23,23 @@ import type {
  *
  * @param block parsed block to check
  * @param ctx   per-block context: source range + optional config
+ *
+ * @sivru
+ * schema: 1
+ * role: block-validator
+ * responsibility: produce the full BlockDiagnostic[] for one parsed block; never throws so the CLI can surface every issue
+ * collaborators: [extractBlocks, loadBlockConfig]
+ * invariants:
+ *   - schema:1 is strict-rejected for any other value at v0.6 (SIVRU-E214)
+ *   - maturityValues is override-replaces-default; the user has to re-list defaults to extend them (DESIGN-0016 E4)
+ *   - the 100-line runaway ceiling (SIVRU-E212) is hardcoded; only the 25-line warning (SIVRU-E211) is configurable via maxLines
+ * decisions:
+ *   - chose: warning for SIVRU-E210 decision-no-revisit rather than error
+ *     because: a decision without a revisit-if is a smell but not a build break; v0.7 drift detector will use the signal
+ *     valid-while: decisions without revisit-if remain better than no decisions at all
+ *     revisit-if: the v0.7 drift detector starts catching enough real drift that it becomes an error
+ * maturity: stable
+ * @end
  */
 export function validateBlock(
   block: SivruBlock,
