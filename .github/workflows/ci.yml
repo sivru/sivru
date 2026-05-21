@@ -49,6 +49,37 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # DESIGN-0016 self-dogfood gate: the v0.6 PR commits >= 21 @sivru
+      # annotation blocks across @sivru/search + @sivru/cli, with >= 5
+      # distinct roles. Both the validate step and the role-coverage
+      # gate must pass.
+      #
+      # Note the invocation: `node packages/cli/dist/index.js block ...`
+      # NOT `pnpm sivru block ...`. The `sivru` binary is not globally
+      # linked in CI; the workspace-root `sivru` pnpm script provides
+      # developer convenience for local runs only.
+      - name: Validate @sivru annotation blocks
+        run: node packages/cli/dist/index.js block validate packages/
+
+      - name: Role-coverage gate (>=21 blocks, >=5 distinct roles)
+        run: |
+          node -e '
+            const { execSync } = require("node:child_process");
+            const out = JSON.parse(execSync(
+              "node packages/cli/dist/index.js block extract --json packages/"
+            ));
+            if (out.length < 21) {
+              console.error(`expected >= 21 blocks, got ${out.length}`);
+              process.exit(1);
+            }
+            const roles = new Set(out.map(e => e.block?.role).filter(Boolean));
+            if (roles.size < 5) {
+              console.error(`expected >= 5 distinct roles, got ${roles.size}`);
+              process.exit(1);
+            }
+            console.log(`OK: ${out.length} blocks, ${roles.size} distinct roles`);
+          '
+
   package-contents:
     name: package contents (SKILL.md ships in @sivru/cli)
     runs-on: ubuntu-latest

@@ -1,6 +1,6 @@
 {
   "name": "sivru-monorepo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Fast code search for coding agents + agent session observability layer.",
   "license": "MIT",
@@ -21,7 +21,8 @@
     "lint": "pnpm -r lint",
     "bench": "pnpm --filter benchmarks run bench",
     "bench:tthw": "pnpm --filter sivru run bench:tthw",
-    "bench:agent": "pnpm --filter benchmarks run bench:agent"
+    "bench:agent": "pnpm --filter benchmarks run bench:agent",
+    "sivru": "node packages/cli/dist/index.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

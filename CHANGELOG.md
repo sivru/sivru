@@ -7,7 +7,80 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-Nothing yet.
+## [0.6.0] — 2026-05-21
+
+`@sivru` annotation blocks — small, structured, language-neutral blocks of
+authored context carried inside whatever doc-comment syntax the host language
+already uses. Attached to a symbol or to a module via the language's
+convention. See [DESIGN-0016](docs/design/0016-sivru-annotation-blocks.md).
+
+### Added
+
+- **Block module** in `@sivru/search/block/`: `extractBlocks(path)`,
+  `validateBlock(block, ctx)`, `validateExtracted(blocks)`, `blockToJSON(block)`,
+  `loadBlockConfig(repoRoot?)`. Per-symbol blocks for TS / JS / Java / Go via
+  the leading doc-comment carrier; per-symbol blocks for Python via the PEP
+  257 docstring. Module-level blocks for Python (`__init__.py` etc.) and TS
+  (top-of-file `/** */` on the package entry point) — Java and Go module-level
+  deferred to v0.6.x.
+- **CLI:** `sivru block validate [path]` lints every `@sivru` block under
+  `path` (default cwd) and exits non-zero on any error-level diagnostic;
+  `sivru block extract [path] --json` emits every block plus its diagnostics
+  as JSON. Invalid blocks appear with `block:null` and `diagnostics:[...]` —
+  never silently dropped (per the project rule on silent exclusion).
+- **Diagnostic table.** `SIVRU-E210..E218` cover the v0.6 surface:
+  decision-no-revisit (warn), block-prose (warn at 25 lines), block-runaway
+  (error at 100 lines, hardcoded), maturity-invalid (error), schema-version-
+  unsupported (error, strict-reject at v0.6), fence-unclosed (error),
+  yaml-malformed (error), missing-required (error), module-locator-failed
+  (warn). E219 reserved.
+- **JSON wire shape (`SivruBlockJSON`)**: camelCased decision fields
+  (`validWhile`, `revisitIf`); missing optional fields null- or empty-fill so
+  consumers get a fully populated, type-stable object.
+- **Project config**: `.sivru/block.json` overrides defaults
+  (`requiredFields`, `optionalFields`, `maxLines`, `maturityValues`, `drift`).
+  Project beats user (`~/.config/sivru/block.json`) beats defaults. Array
+  overrides REPLACE the default array (don't extend); the 100-line runaway
+  ceiling is NOT configurable. Same precedence model as `.sivru/explain.json`.
+- **21 self-dogfood blocks** committed across `@sivru/search` and `@sivru/cli`
+  symbols, covering 21 distinct roles. CI gate: `node packages/cli/dist/
+  index.js block validate packages/` exits 0, AND the role-coverage gate
+  asserts >=21 blocks AND >=5 distinct roles.
+- **SKILL.md** gains an authoring section: when to write a block, the
+  minimal valid form, the optional fields, and the read-the-block-before-
+  editing rule.
+- **DESIGN-0004 reconciliation.** `explain` artifacts now fill `authored[]`
+  from `blockToJSON()` for blocks extracted from the target file. Region-
+  level filters to entries whose symbol matches the region's exported symbol.
+  v0.5's `Array.isArray(artifact.authored)` invariant is preserved.
+
+### Dependency notes
+
+- New direct dep on `@sivru/search`: `js-yaml@^4.1.0` (+ `@types/js-yaml`).
+  Loaded exclusively via `yaml.load(text, { schema: JSON_SCHEMA })`; never
+  `loadAll()`, never `DEFAULT_FULL_SCHEMA`. Threat-model test asserts
+  `!!js/function` is rejected.
+
+### Performance
+
+- Block extraction is invoked by the explain artifact's `authored[]` fill
+  (one `extractBlocks` call per target file) and by the `block` CLI's bulk
+  walk. It does NOT add to the chunker pipeline used at index time.
+- Measured chunker fixture suite (DESIGN-0016 P1 corpus,
+  `packages/search/src/chunker/__fixtures__/`): 553ms post-v0.6 vs the same
+  duration pre-v0.6 (block module is sibling, not in the chunker path).
+  Overhead: 0% — the < 5% gate is satisfied trivially.
+- Block module test suite (47 tests across 8 files) runs in ~510ms; bulk
+  validate over `packages/` (~600 files, 21 blocks, NUL-binary filter +
+  __fixtures__ / dist / node_modules skip) completes in ~2.5s on a warm
+  parser cache.
+
+### Forward-pointer
+
+- v0.7 (DESIGN-0017) will surface authored context through the existing
+  `sivru.explain` MCP tool and add the drift detector that consumes
+  `SIVRU-E210 decision-no-revisit` plus four new diagnostics in the
+  `SIVRU-E220..E229` range.
 
 ## [0.5.0] — 2026-05-20
 
