@@ -10,14 +10,32 @@
 v0.6–v0.8 ship coaching signals as descriptive (what happened,
 surfaced post-hoc). v0.16 graduates one signal — the highest-
 precision one as proven by months of FP data — to **pre-action
-steering.** Specifically: PreToolUse hooks that fire when the
-agent is about to edit a risk-sensitive file, and inject a JSON
-nudge ("editing auth/, no security-review skill is loaded; load
-now?").
+steering.** A PreToolUse hook fires when the agent is about to edit
+a symbol whose recorded architectural intent forbids or constrains
+the change, and injects a JSON nudge.
+
+Per the architect-thinking thesis: the most precise pre-action
+signal is not "is the right skill loaded" — that's user-side
+configuration drift. It is "does this edit violate a recorded
+architectural boundary the author already wrote down." `@sivru`
+blocks (v0.6) record exactly this: `decisions[]` with
+`revisit-if` clauses that say "this choice holds while X; revisit
+when Y." When the agent's planned edit triggers Y, the architect
+already signed the nudge — sivru just delivers it.
+
+Concrete first signal: the edit's diff appears to violate a
+`revisit-if` condition (broken-collaborator class) OR appears to
+rewrite a `chose` clause's referenced structure. Secondary signal:
+skill-presence at risk-tagged paths (the v0.4 routing concern).
+Skill-presence is included but not the lead signal — it is user
+configuration; the architect's recorded boundary is the source
+of truth.
 
 This is dangerous. False positives turn into noise that makes the
 user disable the hook entirely. Ship only after months of field
-data have proven which signal is precise enough.
+data have proven which signal is precise enough, and only against
+the architect's recorded constraints (which the author opted into
+by writing the block).
 
 ## Acceptance (from ROADMAP.md v0.16)
 

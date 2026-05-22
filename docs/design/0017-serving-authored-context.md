@@ -4,22 +4,65 @@
 **Targets:** v0.7.0
 **Issue:** filed when v0.7 becomes next release
 **Created:** 2026-05-15
+**Updated:** 2026-05-22 — folded in the architect-thinking thesis (no
+behavioural change; problem framing and "why this is the right shape"
+sharpened)
 **Author:** @pochadri
+
+## Thesis (the lens this design is evaluated under)
+
+**In the AI coding world, every engineer needs to think like a
+technical architect.** AI produces code at high velocity but without
+the architect's mental model — invariants, decisions and their
+lifetimes, why-this-not-that, blast radius. The `@sivru` block is
+architect-thinking written down: `role` is the symbol's place in the
+architecture; `invariants` are the assertions the type system cannot
+enforce; `decisions[]` is the four-field `chose / because /
+valid-while / revisit-if` quadruple — a pre-commitment that the
+decision has a lifetime and a trigger for re-evaluation.
+
+DESIGN-0016 made that architect-thinking durable (it lives in the
+repo, survives the senior leaving). This design makes it
+**visible** at the moment of decision (an agent or editor about to
+touch the symbol gets the architect's view alongside the derived
+facts) AND keeps it **honest** (the drift detector catches when the
+architect's claim no longer matches the code).
+
+Two release-narrative questions answered:
+
+- **Why surface + drift in the same release:** an architect's
+  decision recorded but invisible is dead weight; an architect's
+  decision visible but rotted is worse than no decision at all
+  (anchors the next reader on a wrong premise). Ship both or
+  neither.
+- **Why a heuristic-not-LLM drift signal:** an architect-thinking
+  tool that delegates the judgement to a black-box model trains
+  users to outsource the judgement. Sivru's job is to surface the
+  inputs precisely; the agent / human still makes the call.
 
 ## Problem
 
-DESIGN-0016 extracts `@sivru` blocks. Nothing surfaces them yet. An
-agent calling `mcp__sivru__explain` (v0.5.0) still gets derived facts
-only — it cannot see the authored intent that block extraction now
-makes available.
+DESIGN-0016 made architect-thinking durable: `@sivru` blocks live in
+the repo and survive the senior engineer leaving. But nothing
+surfaces them yet. An agent calling `mcp__sivru__explain` (v0.5.0)
+still gets derived facts only — it cannot see the architect's view
+of the symbol it is about to edit. The intent is captured but not
+visible at the moment of decision.
 
 And an authored block, once written, rots. The code it describes
 changes; a `collaborators` entry is renamed; a decision's
 `revisit-if` condition quietly comes true. A stale block is worse
-than no block — it asserts intent that is no longer real, and an
-agent that trusts it makes a confident wrong call. Today, when a
-block goes stale, the user sees nothing: no warning, no diff, no
-signal. The block just lies.
+than no block — it asserts architectural intent that is no longer
+real, and the next reader (agent or human) makes a confident wrong
+call anchored on a wrong premise. Today, when a block goes stale,
+nobody sees anything: no warning, no diff, no signal. The block
+just lies.
+
+The architect-thinking thesis (top of doc) says sivru's job is
+making that thinking durable, visible, and actionable. v0.6
+delivered durable. This release delivers visible (part 1 — surface)
+and keeps it honest (part 2 — drift). Without both, the layer is
+not trustworthy.
 
 ## Proposal
 
