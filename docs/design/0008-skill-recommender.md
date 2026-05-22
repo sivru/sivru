@@ -68,6 +68,15 @@ Type stub already exists at
 - Remote catalog auth: company catalogs on private URLs need a
   way to authenticate. Token-in-config? `Bearer` header from env
   var?
+- **Architect-thinking interaction.** Should the recommender cross-
+  check candidate skills against `@sivru` block invariants and
+  decisions in the affected files, deprioritising skills that
+  encourage patterns a block explicitly forbids (e.g. a "split
+  routing per-channel" skill recommended for a file whose block
+  records "chose: one central router")? Pairs with DESIGN-0017's
+  block surface. Lean: yes, but as a post-rank filter rather than
+  the primary score so the recommender still works on repos with
+  no blocks.
 
 ## Status note
 

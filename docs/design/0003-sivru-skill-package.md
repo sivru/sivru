@@ -157,6 +157,20 @@ the §5 smoke test measures whether honest framing still routes
 correctly. If it does not, revisit then — do not pre-emptively shade
 the truth.
 
+**v0.6 update (architect-thinking thesis).** The routing policy gains
+a third instrument: `sivru.explain` (v0.5) — and from v0.6 onward,
+the explain artifact carries the symbol's `@sivru` block. The skill
+now binds tool calls to architect-thinking questions rather than just
+to "look up code." Before editing a symbol the agent loads
+`sivru.explain` to read the architect's view (role, invariants,
+decisions, `revisit-if`); after edits that change a role or
+invalidate a decision the agent updates the block in the same edit.
+This re-framing is the practical mechanism by which the skill
+delivers on the project thesis: it teaches the agent to think like
+an architect before it acts like a coder. The §5 smoke test gains a
+corresponding case (does the agent call `explain` before editing a
+block-bearing symbol?).
+
 **One canonical source.** The routing policy is canonically the
 `SKILL.md` body. The MCP tool descriptions are a deliberate one-line
 compression of it; the README and `WHY-SIVRU.md` **link** to it rather

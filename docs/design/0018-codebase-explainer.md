@@ -4,27 +4,69 @@
 **Targets:** v0.8.0
 **Issue:** filed when v0.8 becomes next release
 **Created:** 2026-05-15
+**Updated:** 2026-05-22 — folded in the architect-thinking thesis (no
+behavioural change; problem framing and module narrative sharpened
+around the architect-onboarding journey)
 **Author:** @pochadri
+
+## Thesis (the lens this design is evaluated under)
+
+**In the AI coding world, every engineer needs to think like a
+technical architect.** This release is the onboarding artifact for
+that thinking: the surface a new engineer (or an agent picking up a
+codebase cold) reads first.
+
+An architect decomposes systems top-down — System → Module →
+Package → Symbol — and at every level asks the same questions:
+*what is this layer for, what are its parts, why is it shaped this
+way, what is its contract with the layer above and below?* The
+four-level drill-down here is not arbitrary visual hierarchy; it is
+the architect's decomposition rendered as navigation. At each level
+the page fuses the same two ingredients: the architect's recorded
+intent (`@sivru` blocks from v0.6, narrative from
+`.sivru/explainer.md`) and the derived facts from `sivru explain`
+(public API, call graph, churn).
+
+Two release-narrative consequences:
+
+- **Why a projection, not a source.** A hand-written
+  `ARCHITECTURE.md` is the senior architect's voice frozen at one
+  moment; it lies within a month because nothing forces it to
+  follow the code. A projection regenerated from blocks + code
+  cannot lie — when it goes stale, it goes stale visibly (drift
+  diagnostics from DESIGN-0017 surface), and the fix lands where
+  the truth lives, not in the artifact.
+- **Why feedback patches the block, not the HTML.** A reader's
+  correction is architect-thinking the original author missed.
+  Routing the correction to the source `@sivru` block (or to
+  `.sivru/explainer.md` when it has no symbol home) means the next
+  reader and the next agent both benefit; routing it to the HTML
+  means the correction dies with this regeneration. The artifact
+  is downstream; the architect's thinking is the source.
 
 ## Problem
 
 `sivru explain <path>` (v0.5.0) answers "tell me about this file."
-But nobody onboarding to a codebase starts at a file. They start at
-"what is this system, what are its parts, how do they fit together"
-— and drill down from there. Sivru has no artifact for that.
+But nobody onboarding to a codebase starts at a file — that's not
+how an architect reads a system. They start at "what is this
+system, what are its parts, how do they fit together, why is it
+shaped this way" and drill down. Sivru has no artifact for that.
 
-What teams build instead is a hand-written `ARCHITECTURE.md` and a
-diagram. Both lie within a month, because both are copies of the
-truth rather than projections of it. When the code changes, nothing
-forces the doc to follow. The reader cannot tell which parts are
-current. The agent cannot trust it as context.
+What teams build instead is a hand-written `ARCHITECTURE.md` plus
+a Mermaid diagram. Both lie within a month, because both are copies
+of the truth rather than projections of it. When the code changes,
+nothing forces the doc to follow. The reader cannot tell which
+parts are current. The agent cannot trust it as context. The
+architect-thinking that went into the original is silently demoted
+to "out-of-date doc."
 
 By v0.7.0 sivru holds everything needed to do this properly: a
 tree-sitter symbol graph, derived facts per file (`explain`), and
-authored `@sivru` blocks (DESIGN-0016/0017). The missing piece is a
-whole-repo projection that fuses them into something a human can
-navigate and an agent can consume — and that is regenerated, never
-maintained by hand, so it cannot rot.
+authored `@sivru` blocks (DESIGN-0016/0017). The missing piece is
+the **whole-repo projection** — the architect-decomposition
+navigation that fuses derived facts with authored intent at every
+level, and that is regenerated, never maintained by hand, so it
+cannot rot.
 
 ## Proposal
 

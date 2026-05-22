@@ -7,29 +7,60 @@
 
 ## Problem
 
-The comprehension-axis coaching signal. The agent edits a file
-without reading its imports, tests, or callers in the same session.
-That's a low-context edit — the agent is shooting blind. Maybe it
-got lucky; maybe it broke something invisible.
+The architect-thinking coaching signal. Per the thesis (see
+`project_sivru_architect_thinking_thesis` memory), AI generates code
+at high velocity but without the architect's mental model unless we
+mechanically place that model in front of it. This signal asks: did
+the agent ACTUALLY load the architect's view of the symbol before
+editing it?
+
+Three concentric definitions of "context loaded," in increasing
+order of architect-thinking depth:
+
+1. **File context** — read the file's imports, tests, callers (the
+   v0.5 `sivru explain` surface). This is the baseline: did the
+   agent see the mechanical neighbourhood?
+2. **Authored context** — for any edited symbol that carries a
+   `@sivru` block, did the agent's session include a call to
+   `sivru explain` or `mcp__sivru__explain` on that symbol? A block
+   read is the cheapest proof the agent saw the architect's
+   recorded intent (role, invariants, decisions, `revisit-if`).
+3. **Decision context** — for any edit that touches a region the
+   block's `decisions[]` references, did the agent's session
+   include an acknowledgement of the relevant decision's
+   `valid-while` clause? (Stretch goal; needs DESIGN-0017 drift
+   wiring.)
+
+A low-context edit on a block-bearing symbol that skipped layer (2)
+is the **highest-risk** instance of this signal. It means the agent
+edited a symbol with a recorded architectural decision without
+loading that decision — exactly the failure mode the @sivru-block
+investment was made to prevent. That class is treated as
+strictly worse than a layer-(1)-only miss.
 
 This is **AGENT context, not human review depth.** Sivru can detect
 what the agent did but cannot see PR reviews on github.com or code
 read in another tool. So the signal scopes narrowly: did the agent
 have the relevant context loaded before editing?
 
-Per the comprehension axis (see [WHY-SIVRU.md](../../WHY-SIVRU.md)),
-this is the highest-value coaching signal long-term. Every edit the
-agent makes without context is a comprehension burden it leaves to
-the human.
+Per the comprehension axis (see [WHY-SIVRU.md](../../WHY-SIVRU.md))
+and the architect-thinking thesis, this is the highest-value
+coaching signal long-term. Every edit the agent makes without the
+architect's view is a comprehension burden it leaves to the human.
 
 ## Acceptance (from ROADMAP.md v0.8)
 
-- Signal records:
-  - Files imported by the edited file that were NOT read in this
-    session
-  - Test files matching the edited file's name pattern that were
-    NOT read in this session
-  - Call sites (1-hop callers) that were NOT read in this session
+- Signal records, in increasing order of severity:
+  - **Layer 1 (file context):** files imported by the edited file
+    that were NOT read in this session; test files matching the
+    edited file's name pattern that were NOT read in this session;
+    call sites (1-hop callers) that were NOT read in this session
+  - **Layer 2 (authored context):** for any edited symbol that
+    carries a `@sivru` block, no `sivru explain` /
+    `mcp__sivru__explain` call on that symbol earlier in the
+    session. Tagged HIGHEST-RISK in the Checkup tab — the agent
+    edited a symbol with recorded architectural intent without
+    reading it.
 - Surfaced in the Checkup tab alongside v0.6 + v0.7 signals
 - FP rate < 15% on a labeled set
 - Three-layer customization: per-path skips, threshold tuning,
