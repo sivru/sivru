@@ -8,7 +8,7 @@ on:
 # Lock-down: only this workflow can write to the npm registry. The default
 # CI workflow has read-only contents and never sees the NPM_TOKEN secret.
 permissions:
-  contents: read
+  contents: write   # required to create a GitHub Release object
   id-token: write   # required for npm provenance
 
 jobs:
@@ -50,3 +50,40 @@ jobs:
         run: pnpm publish -r --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Extract the matching CHANGELOG.md section for the pushed tag so the
+      # GitHub Release body reads identically to the changelog entry.
+      # Falls back to a generic body when CHANGELOG.md has no entry for
+      # the tag (lets us still ship a Release; the workflow does not fail).
+      - name: Extract changelog section for this tag
+        id: changelog
+        run: |
+          tag="${GITHUB_REF_NAME}"            # e.g. v0.7.0
+          version="${tag#v}"                  # e.g. 0.7.0
+          notes_file="$(mktemp)"
+          awk -v ver="$version" '
+            /^## \[/ {
+              if (printing) exit
+              if ($0 ~ "\\["ver"\\]") { printing=1; next }
+            }
+            printing { print }
+          ' CHANGELOG.md > "$notes_file"
+          if [ ! -s "$notes_file" ]; then
+            printf "Tag %s. See [CHANGELOG.md](CHANGELOG.md).\n" "$tag" \
+              > "$notes_file"
+          fi
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # --verify-tag confirms the tag exists; --notes-file uses the
+          # extracted CHANGELOG section as the release body. Idempotent:
+          # re-running for an existing release fails fast rather than
+          # silently overwriting.
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file "${{ steps.changelog.outputs.notes_file }}" \
+            --verify-tag
