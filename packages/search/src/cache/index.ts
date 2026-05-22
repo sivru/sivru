@@ -182,6 +182,23 @@ async function bestEffortUnlink(p: string): Promise<void> {
 
 // --- factory --------------------------------------------------------------
 
+/**
+ * @sivru
+ * schema: 1
+ * role: index-cache
+ * responsibility: load and atomically save the per-repo index so the cold-rebuild cost amortises across runs
+ * collaborators: [buildIndex, computeStateId, walk]
+ * invariants:
+ *   - atomic write: tmp file is fsynced and then renamed; readers skip *.tmp.*
+ *   - format-version bump on any incompatible change so older caches are rejected, not silently misread
+ * decisions:
+ *   - chose: stateId-keyed file-per-build instead of overwrite-in-place
+ *     because: corrupt cache from a crash never breaks a working build; the user just pays the cold-rebuild cost once
+ *     valid-while: per-repo cache size stays bounded enough that LRU isn't urgent
+ *     revisit-if: per-repo cache directories grow unbounded in practice
+ * maturity: stable
+ * @end
+ */
 export function createIndexCache(options?: IndexCacheOptions): IndexCache {
   const cacheDir = options?.cacheDir ?? defaultCacheDir();
 

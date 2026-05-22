@@ -2,7 +2,7 @@
 // `buildIndex` + `SivruIndex.searchBM25` flow over the W1 walker + chunker;
 // embeddings, cosine, and RRF land in Pass 2 behind the same facade.
 
-export const SIVRU_SEARCH_VERSION = "0.5.0";
+export const SIVRU_SEARCH_VERSION = "0.6.0";
 
 export type {
   Chunk,
@@ -91,3 +91,6 @@ export type {
 
 // Explain module (DESIGN-0004) — subdir of @sivru/search per D1.
 export * from "./explain/index.js";
+
+// Block module (DESIGN-0016) — subdir of @sivru/search.
+export * from "./block/index.js";

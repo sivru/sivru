@@ -1,6 +1,6 @@
 {
   "name": "@sivru/search",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Sivru search engine — gitignore-aware walker, code-aware chunker, BM25, cosine top-k, ranking signals, on-disk cache.",
   "license": "MIT",
   "type": "module",
@@ -36,9 +36,11 @@
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",
     "ignore": "^6.0.2",
+    "js-yaml": "^4.1.0",
     "web-tree-sitter": "0.24.7"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4",
     "tree-sitter-wasms": "0.1.13"
   }
 }

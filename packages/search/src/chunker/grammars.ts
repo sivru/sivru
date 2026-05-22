@@ -129,8 +129,25 @@ function wasmFileFor(language: string): string {
 }
 
 /**
+ * Serializes the first-load of each grammar across the WHOLE process —
+ * not just per-grammar. web-tree-sitter's `Parser.Language.load` shares
+ * global WASM linker state; concurrent first-loads of two DIFFERENT
+ * grammars can poison the export lookup (we have seen "bad export type
+ * for 'tree_sitter_python_external_scanner_create'" surface when
+ * `javascript.wasm` is loaded in parallel with `python.wasm` on Node
+ * 20 and on Windows). Once a grammar is cached the fast path skips
+ * this lock entirely.
+ */
+let grammarLoadChain: Promise<unknown> = Promise.resolve();
+
+/**
  * Load the tree-sitter grammar for `language`. Memoised: the first call
  * per grammar loads the bundled WASM; later calls reuse it.
+ *
+ * Concurrent first-loads of DIFFERENT grammars are serialised via a
+ * single process-wide chain — `Parser.Language.load` is not safe to
+ * run in parallel for different grammars under all Node versions
+ * (see grammarLoadChain comment above).
  *
  * @throws if `language` has no bundled grammar (`SIVRU-E1001`) or the
  *   WASM fails to load (`SIVRU-E1002`).
@@ -142,11 +159,21 @@ function loadGrammar(language: string): Promise<Parser.Language> {
     cached = (async () => {
       await initParser();
       const wasmPath = fileURLToPath(new URL(`./grammars/${wasmFile}`, import.meta.url));
+      const previous = grammarLoadChain;
+      let release: (v: unknown) => void;
+      grammarLoadChain = new Promise((resolve) => {
+        release = resolve;
+      });
       try {
-        return await Parser.Language.load(wasmPath);
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(`SIVRU-E1002: failed to load grammar "${wasmFile}": ${reason}`);
+        await previous;
+        try {
+          return await Parser.Language.load(wasmPath);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          throw new Error(`SIVRU-E1002: failed to load grammar "${wasmFile}": ${reason}`);
+        }
+      } finally {
+        release!(undefined);
       }
     })();
     grammarCache.set(wasmFile, cached);

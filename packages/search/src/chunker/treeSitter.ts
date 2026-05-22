@@ -157,6 +157,26 @@ function lineContent(lines: readonly string[], startLine: number, endLine: numbe
  *
  * @throws if the grammar fails to load or the parser fails — the
  *   `chunkFile` facade catches this and falls back to line chunks.
+ *
+ * @sivru
+ * schema: 1
+ * role: ast-chunker
+ * responsibility: emit one chunk per top-level definition + gap-fill so the file is always fully indexed
+ * collaborators: [chunkFile, lineFallbackChunks, indexComments, attachLeadingComment]
+ * invariants:
+ *   - coverage invariant: every source line lands in at least one chunk
+ *   - leading own-line doc comments are attached to the symbol's chunk; trailing comments are not
+ * decisions:
+ *   - chose: whitelist named node types per grammar
+ *     because: a small explicit set is debuggable; an automatic "anything that looks like a function" rule produces too many edge cases
+ *     valid-while: the per-grammar whitelists in grammars.ts stay roughly stable
+ *     revisit-if: a new language with a fundamentally different unit-of-meaning (e.g. dataflow blocks) is added
+ *   - chose: oversized nodes are line-windowed within their own range
+ *     because: a huge single chunk blows the embedder's context; dropping it would defeat coverage
+ *     valid-while: the embedder's context cap is the binding constraint
+ *     revisit-if: embedders gain effectively unlimited context
+ * maturity: stable
+ * @end
  */
 export async function treeSitterChunks(
   filePath: string,

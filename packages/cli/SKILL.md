@@ -82,6 +82,44 @@ affected — the code you would otherwise have to remember to grep for.
 This is the cheapest way to catch a change that compiled but broke a
 caller or left a test stale.
 
+## Authoring `@sivru` annotation blocks
+
+If you are about to edit a symbol that does NOT yet carry an `@sivru`
+block, and the change you are about to make depends on knowing the
+symbol's intent / invariants / a past decision: BEFORE editing, write
+the block. Author it from the existing code + git history + any
+adjacent docs. This is the cheapest moment to record the WHY — you are
+already reconstructing it.
+
+The block lives inside the symbol's existing doc-comment carrier
+(`/** */` for TS/JS/Java, `///` or `//` for Go, `"""..."""` docstring
+for Python). Minimal valid form:
+
+```
+@sivru
+schema: 1
+role: <one-line role name, kebab-case>
+responsibility: <one line: what this symbol is FOR>
+@end
+```
+
+Optional fields when they earn their keep: `collaborators` (named
+symbols it depends on or that depend on it), `invariants` (claims that
+must hold which the type system does not enforce), `decisions[]`
+(`chose` / `because` / `valid-while` / `revisit-if` — the four-field
+form is what makes a decision durable), `maturity`
+(`stable | experimental | deprecated | wip`).
+
+Run `sivru block validate <path>` before committing. Errors block CI;
+warnings (e.g. block-prose at >25 lines, decision-no-revisit) ship.
+
+If you are about to edit a symbol that ALREADY carries an `@sivru`
+block: READ it before editing. The block tells you the role the
+symbol plays in the system and the decisions that shaped it — that
+context is exactly what tests cannot recover. If the change makes
+one of the decisions stale, update its `revisit-if` (or remove the
+decision entirely) in the same commit.
+
 ## sivru also observes sessions
 
 `sivru observe` is a separate local tool that reads coding-session

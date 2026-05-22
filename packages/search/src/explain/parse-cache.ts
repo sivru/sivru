@@ -20,6 +20,23 @@ export interface ParseCache {
   misses(): number;
 }
 
+/**
+ * @sivru
+ * schema: 1
+ * role: explain-parse-cache
+ * responsibility: avoid re-parsing the same file twice within one explain --diff invocation
+ * collaborators: [assembleArtifact, buildSymbolIndex]
+ * invariants:
+ *   - keyed by (absPath, mtimeMs); a concurrent edit invalidates cleanly because the mtime changes
+ *   - process-scoped; nothing is persisted to disk
+ * decisions:
+ *   - chose: bounded in-memory LRU rather than an on-disk cache
+ *     because: the cache is only useful within one invocation; persistence buys nothing and adds invalidation surface
+ *     valid-while: a single invocation does not parse more files than the LRU bound
+ *     revisit-if: a multi-process explain workflow needs to share parse work
+ * maturity: stable
+ * @end
+ */
 export function createParseCache(maxEntries = 256): ParseCache {
   const order: ParseCacheKey[] = [];
   const data = new Map<ParseCacheKey, readonly Chunk[]>();

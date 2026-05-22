@@ -31,6 +31,22 @@ type Posting = { docId: number; freq: number };
 const DEFAULT_K1 = 1.2;
 const DEFAULT_B = 0.75;
 
+/**
+ * @sivru
+ * schema: 1
+ * role: bm25-index
+ * responsibility: build the in-memory BM25 index that powers the lexical leg of hybrid search
+ * collaborators: [tokenize, reciprocalRankFusion, buildIndex]
+ * invariants:
+ *   - k1 and b are the standard Robertson-Sparck-Jones values; deviating from them changes ranking globally
+ * decisions:
+ *   - chose: in-memory inverted index rather than an external store
+ *     because: sivru is a single-process tool; latency beats persistence at this scale
+ *     valid-while: target repos fit in memory at index time
+ *     revisit-if: a multi-GB-repo target lands as a goal
+ * maturity: stable
+ * @end
+ */
 export function createBm25Index(options: Bm25Options = {}): Bm25Index {
   const k1 = options.k1 ?? DEFAULT_K1;
   const b = options.b ?? DEFAULT_B;

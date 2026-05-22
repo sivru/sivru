@@ -281,6 +281,23 @@ function formatTextHit(hit: SearchHit): string {
   return header + "\n" + previewOf(chunk.content);
 }
 
+/**
+ * @sivru
+ * schema: 1
+ * role: cli-search
+ * responsibility: drive the sivru search CLI subcommand — parse argv, build the index, run the query, print results
+ * collaborators: [buildIndex, tokenize, reciprocalRankFusion, applySignals]
+ * invariants:
+ *   - returns the process exit code (0 success; 1+ on argv or runtime failure); never calls process.exit itself
+ *   - argv parsing is hand-rolled to match parseSearchArgs / parseExplainArgs convention; no zod dep
+ * decisions:
+ *   - chose: hand-rolled argv parsing instead of an argparser dep
+ *     because: each subcommand has a small unique flag set; a shared parser would need to be heavier than the savings
+ *     valid-while: the CLI surface stays small enough that per-command parsers are tractable
+ *     revisit-if: the flag surface grows large enough that per-command parsers start to drift in style
+ * maturity: stable
+ * @end
+ */
 export async function runSearch(argv: readonly string[]): Promise<number> {
   const parsed = parseArgs(argv);
   if ("error" in parsed) {

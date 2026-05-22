@@ -116,6 +116,22 @@ function isMissing(err: unknown): boolean {
  *
  * Iteration is depth-first, sorted by `readdir` lexical order so cache
  * `state_id` hashes don't drift across platforms (DESIGN.md §4.6).
+ *
+ * @sivru
+ * schema: 1
+ * role: filesystem-walker
+ * responsibility: emit one WalkEntry per file that survives the filter set (gitignore, size, binary, symlink loop)
+ * collaborators: [createIndexCache, chunkFile, buildIndex]
+ * invariants:
+ *   - iteration order is stable across platforms so cache state_id hashes do not drift
+ *   - .git/ is always skipped, regardless of options
+ * decisions:
+ *   - chose: gitignore-aware default-on with explicit opt-out
+ *     because: most users want their build artifacts excluded; surprise inclusion creates noisy indexes
+ *     valid-while: gitignore stays the canonical "what to ignore" signal in the ecosystem
+ *     revisit-if: a non-gitignore convention (e.g. .sivruignore) becomes load-bearing
+ * maturity: stable
+ * @end
  */
 export async function* walk(
   rootDir: string,

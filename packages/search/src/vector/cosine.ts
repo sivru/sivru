@@ -42,6 +42,22 @@ export function packMatrix(vectors: readonly Float32Array[]): CosineMatrix {
  * Top-k cosine similarity. Assumes both matrix rows AND `query` are already
  * L2-normalized — when both are unit vectors, dot product == cosine. The
  * caller is responsible for normalization.
+ *
+ * @sivru
+ * schema: 1
+ * role: vector-search
+ * responsibility: rank documents by cosine similarity for the semantic leg of hybrid search
+ * collaborators: [reciprocalRankFusion, buildIndex, packMatrix]
+ * invariants:
+ *   - assumes the caller has already L2-normalized both the matrix rows and the query
+ *   - dot product == cosine only when both sides are unit vectors
+ * decisions:
+ *   - chose: packed-row dot product instead of an ANN library
+ *     because: target repos are small enough that brute-force top-k is faster than building an index
+ *     valid-while: repo chunk counts stay in the low six figures or below
+ *     revisit-if: a large-repo workflow makes ANN materially faster
+ * maturity: stable
+ * @end
  */
 export function cosineTopK(
   matrix: CosineMatrix,

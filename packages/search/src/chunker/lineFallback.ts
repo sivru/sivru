@@ -70,6 +70,22 @@ export function windowLines(
  * - 1-based inclusive `startLine`/`endLine` per chunk.
  * - Returns `[]` for empty content (no lines, nothing to index).
  * - Window size and overlap are configurable; overlap must be < window.
+ *
+ * @sivru
+ * schema: 1
+ * role: fallback-chunker
+ * responsibility: window-chunk arbitrary content when no AST grammar is available or parsing failed
+ * collaborators: [chunkFile, treeSitterChunks]
+ * invariants:
+ *   - overlap must be strictly less than window size; otherwise the windowing loop would not advance
+ *   - empty content yields []; the file is never silently dropped from the index — chunkFile guards coverage
+ * decisions:
+ *   - chose: fixed line windows with overlap rather than character / token windows
+ *     because: lines are the unit of meaning in source code; mid-line splits read worse for both BM25 and the LLM
+ *     valid-while: code files are predominantly line-oriented
+ *     revisit-if: a substantially better fallback chunker (e.g. paragraph-aware) materially improves retrieval
+ * maturity: stable
+ * @end
  */
 export function lineFallbackChunks(
   filePath: string,

@@ -45,7 +45,7 @@ import type {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
-const SERVER_VERSION = "0.5.0";
+const SERVER_VERSION = "0.6.0";
 
 // ---------------------------------------------------------------------------
 // Tool surface — the JSON-Schema we advertise via tools/list.
@@ -781,6 +781,22 @@ export async function runWithTransport(transport: Transport): Promise<number> {
  *
  * `argv` is `process.argv.slice(2)`. It will be `["mcp", ...]` when called via
  * the dispatcher; the v0.0.0 server takes no flags.
+ *
+ * @sivru
+ * schema: 1
+ * role: mcp-server
+ * responsibility: run the sivru MCP server on stdio so coding agents (Claude Code, Cursor, etc.) can call sivru.search / sivru.explain
+ * collaborators: [buildIndex, assembleArtifact, runWithTransport]
+ * invariants:
+ *   - the server reads JSON-RPC framed on stdin and writes responses to stdout; logs go to stderr
+ *   - the server lifecycle ends when stdin closes (parent client disconnect)
+ * decisions:
+ *   - chose: stdio transport rather than a network listener
+ *     because: matches the dominant agent integration pattern (Claude Code MCP); no port allocation or auth surface
+ *     valid-while: agent runtimes default to stdio MCP
+ *     revisit-if: a meaningful agent target ships with a network-MCP-only convention
+ * maturity: stable
+ * @end
  */
 export async function runMcp(_argv: readonly string[]): Promise<number> {
   void _argv;

@@ -1,60 +1,16 @@
-# Auto-Ship Deferred Register
+# Deferred findings from auto-ship runs
 
-Minor / nit findings recorded during auto-ship runs but not fixed in the
-landing PR. Append-only.
+Findings recorded here are minor/nit-level items surfaced by /code-review that the
+loop chose to ship as-is. Each entry: run journal path, file:line, finding, date.
 
-## Run: 20260518-151152-per-model-chunk-windowing
+## Run: .auto-ship/runs/20260521-222604-sivru-annotation-blocks.md (DESIGN-0016 v0.6.0) — 2026-05-21
 
-Source journal: `.auto-ship/runs/20260518-151152-per-model-chunk-windowing.md`
-Date: 2026-05-18
-
-### Resolved (post-review "fix all" pass)
-
-The following were deferred at code-review time and then fixed on this
-branch after the user asked to address all review findings:
-
-- ~~countTokens non-additivity across newline joins~~ — `splitChunk` now
-  re-verifies each assembled window against its real joined content and
-  shrinks until it fits by `countTokens`'s own measure.
-- ~~`provider.embed("")` prime can abort the build/refresh~~ —
-  `primeAndResolveWindowParams` wraps the prime in try/catch.
-- ~~`charSplit` shrink loop never grows back~~ — the piece-length guess
-  now adapts both ways (halve on overshoot, double after headroom).
-- ~~`EST_CHARS_PER_TOKEN` reused for two distinct ratios~~ — split into
-  `HEURISTIC_BYTES_PER_TOKEN` and `CHARSPLIT_CHARS_PER_TOKEN`.
-
-### Still open
-
-- **[MINOR] `packages/search/src/embed/transformers.ts` — silent windowing
-  skip when `model_max_length` is a sentinel.** `effectiveContextTokens`
-  returns `undefined` for a missing/sentinel `model_max_length`, so
-  windowing is skipped with no diagnostic. No real embedder hits this; a
-  `BuildIndexProgress` warning event would surface it if one ever did.
-  Not fixed: it needs a new progress-event type, which is beyond the
-  windowing change.
-
-- **[NIT] `packages/search/src/chunker/rewindow.ts` — `lines[idx] ?? ""`
-  in `emitOversizeLine`.** `idx` is always in range, so the `?? ""` is
-  never exercised at runtime — but it is required to satisfy
-  `noUncheckedIndexedAccess`, so it is not removable dead code. Left as-is.
-
-## Run: .auto-ship/runs/20260519-174233-sivru-skill.md (2026-05-19)
-
-Code review of the v0.4 sivru-skill diff. CRITICAL/MAJOR: none.
-Fixed in-loop: hidden --cwd flag (now documented), smoke-corpus ambiguous
-caller prompt (reworded to an unambiguous import search), runner exit code
-on partial failure. Deferred minors/nits below.
-
-- packages/cli/src/commands/skill.ts:~248 — uninstall removes SKILL.md and
-  the empty sivru/ dir but leaves an empty .claude/skills/ (and .claude/)
-  behind. Minor litter; acceptable since other tools may share skills/.
-- packages/cli/src/commands/{skill,help}.test.ts — captureIO stdout/stderr
-  monkey-patch helper is duplicated across both test files. Could be a
-  shared test util. NIT.
-- packages/cli/src/smoke/parser.ts:~48 — classifyTool matches a "ripgrep"
-  substring, but Claude Code's tool is named "Grep" (Bash runs rg). The
-  ripgrep branch is harmless defensiveness, untested, likely never hit.
-- packages/cli/src/skill-asset.ts:~55 — looksLikeSivruSkill only checks
-  frontmatter name: sivru. A third-party skill also named "sivru" would
-  bypass the non-sivru-file guard. Extremely unlikely; content-hash/marker
-  safety is deliberately deferred to v0.6 (DESIGN-0003).
+- packages/search/src/block/extract.ts:69-74 — `makeFenceEndRegex` rebuilt per line inside the hot loop; cache once per opened fence.
+- packages/search/src/block/extract.ts:115 — regex permits no extra leading whitespace before prefix on `@end`; inconsistent indent inside a body fires SIVRU-E215 instead of relaxing.
+- packages/search/src/block/extract.ts:353-355 — dead `if` block (comment only, no behavior).
+- packages/search/src/block/extract.ts:596-614 — TS/TSX/JS/JSX module-locator branch duplicates the Python branch verbatim; extract a helper.
+- packages/search/src/block/module-locators/python.ts:90-93 + typescript.ts:94 — unreachable `void filePath` lines after `return`.
+- packages/cli/src/commands/block.ts:104-110 — skip-path matches any `/__fixtures__/` substring; a real source dir containing that name would be silently excluded (low risk; worth a comment).
+- .github/workflows/ci.yml:64-81 — CI role-coverage gate uses `execSync` with default `maxBuffer` (1 MB); pass `{ maxBuffer: 64 * 1024 * 1024 }` for headroom.
+- packages/search/src/block/validate.ts:118-125 — re-checks E212 here even though extract.ts:393-402 already short-circuits; defensive, but a hand-called validateBlock on a runaway block would emit two E212 diagnostics.
+- packages/cli/src/commands/block.test.ts:27 — double mkdir call in mkRepo helper (redundant).

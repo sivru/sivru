@@ -50,6 +50,22 @@ export function byteHeuristicTokenCount(text: string): number {
  * Pure and embedder-agnostic at the type level: the caller supplies the
  * budget and counter. For a windowless embedder the caller simply does not
  * invoke this pass.
+ *
+ * @sivru
+ * schema: 1
+ * role: budget-rewindow
+ * responsibility: split any chunk that overflows the embedder's token budget so no stored embedding is ever computed from a truncated chunk
+ * collaborators: [buildIndex, chunkFile, byteHeuristicTokenCount]
+ * invariants:
+ *   - one shared chunk set: BM25 and embedding index the same ids so RRF alignment holds
+ *   - full line coverage is preserved across splits
+ * decisions:
+ *   - chose: post-pass over the chunker output instead of teaching the chunker about tokens
+ *     because: chunker stays embedder-agnostic; token-awareness lives in exactly one place
+ *     valid-while: token budgets remain a property of the embedder, not the language
+ *     revisit-if: a chunker variant needs token-aware splitting at its own layer
+ * maturity: stable
+ * @end
  */
 export function rewindowForBudget(
   chunks: readonly Chunk[],

@@ -115,6 +115,23 @@ const USAGE = [
   "  --repo=<dir>      Repo root to resolve <path> against (default cwd)",
 ].join("\n");
 
+/**
+ * @sivru
+ * schema: 1
+ * role: cli-explain
+ * responsibility: drive the sivru explain CLI subcommand — parse argv, build the symbol index, assemble the artifact, render as markdown or JSON
+ * collaborators: [assembleArtifact, parsePathAndSymbol, loadOrBuildSymbolIndex, renderArtifactMarkdown]
+ * invariants:
+ *   - exit code reflects the failure class: 1 for an invalid argument or runtime error, 0 on success
+ *   - the artifact is descriptive only — explain never prescribes a fix or rewrites code
+ * decisions:
+ *   - chose: uncapped CLI output (markdown and --json return the full lists)
+ *     because: the agent operator chose CLI explicitly; capping should only happen in the MCP path where the budget is a real constraint
+ *     valid-while: CLI users want completeness more than they want size
+ *     revisit-if: a CLI use case develops where capping is essential
+ * maturity: stable
+ * @end
+ */
 export async function runExplain(argv: readonly string[]): Promise<number> {
   const parsed = parseExplainArgs(argv);
   if (parsed.kind === "err") {
@@ -244,7 +261,22 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
   }
   lines.push("");
 
-  lines.push("AUTHORED  (none yet — see v0.6)");
+  // v0.6 fills artifact.authored[] from extracted @sivru blocks; full
+  // surfacing (per-block role + responsibility + decisions) is v0.7
+  // (DESIGN-0017). The CLI markdown renderer prints a one-line summary
+  // here so the agent at least sees that authored context exists; the
+  // structured payload is in the --json output.
+  if (art.authored.length === 0) {
+    lines.push("AUTHORED  (no @sivru blocks attached)");
+  } else {
+    const roles = art.authored
+      .map((a) => a.block?.role)
+      .filter((r): r is string => typeof r === "string");
+    const roleStr = roles.length > 0 ? `roles: ${roles.join(", ")}` : "";
+    lines.push(
+      `AUTHORED  ${art.authored.length} block(s); ${roleStr} (full payload in --json)`,
+    );
+  }
   lines.push("");
 
   if (art.diff_mode === true) {
