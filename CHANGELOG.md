@@ -7,7 +7,7 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-05-21
+## [0.6.0] — 2026-05-22
 
 `@sivru` annotation blocks — small, structured, language-neutral blocks of
 authored context carried inside whatever doc-comment syntax the host language
