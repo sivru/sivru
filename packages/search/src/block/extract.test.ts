@@ -177,6 +177,29 @@ describe("extractBlocks — fence edges (T1)", () => {
   });
 });
 
+describe("extractBlocks — CRLF tolerance (Windows checkout)", () => {
+  it("normalises CRLF content so the fence regex matches", async () => {
+    const lf = [
+      "/**",
+      " * @sivru",
+      " * schema: 1",
+      " * role: crlf-tolerant",
+      " * responsibility: parses cleanly even with windows line endings",
+      " * @end",
+      " */",
+      "export function fn(): void {}",
+    ].join("\n");
+    const crlf = lf.replace(/\n/g, "\r\n");
+    const out = await extractBlocks("/tmp/crlf-test.ts", {
+      content: crlf,
+      language: "typescript",
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.block?.role).toBe("crlf-tolerant");
+    expect(out[0]!.symbolName).toBe("fn");
+  });
+});
+
 describe("extractBlocks — non-chunkable file types", () => {
   it("returns empty for an unknown file extension", async () => {
     const out = await extractBlocks("/tmp/nonexistent.foobar", {

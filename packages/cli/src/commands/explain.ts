@@ -261,7 +261,22 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
   }
   lines.push("");
 
-  lines.push("AUTHORED  (none yet — see v0.6)");
+  // v0.6 fills artifact.authored[] from extracted @sivru blocks; full
+  // surfacing (per-block role + responsibility + decisions) is v0.7
+  // (DESIGN-0017). The CLI markdown renderer prints a one-line summary
+  // here so the agent at least sees that authored context exists; the
+  // structured payload is in the --json output.
+  if (art.authored.length === 0) {
+    lines.push("AUTHORED  (no @sivru blocks attached)");
+  } else {
+    const roles = art.authored
+      .map((a) => a.block?.role)
+      .filter((r): r is string => typeof r === "string");
+    const roleStr = roles.length > 0 ? `roles: ${roles.join(", ")}` : "";
+    lines.push(
+      `AUTHORED  ${art.authored.length} block(s); ${roleStr} (full payload in --json)`,
+    );
+  }
   lines.push("");
 
   if (art.diff_mode === true) {

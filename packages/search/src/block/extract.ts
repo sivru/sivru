@@ -553,9 +553,19 @@ export async function extractBlocks(
   const language = options.language ?? detectLanguage(filePath);
   if (language === null || !isChunkableLanguage(language)) return [];
 
-  const content =
+  const rawContent =
     options.content ?? (await readFile(filePath, "utf8"));
-  if (content.length === 0) return [];
+  if (rawContent.length === 0) return [];
+
+  // Normalise CRLF to LF before line splitting and tree-sitter parsing.
+  // Windows-checked-out repos store source files with `\r\n`; the
+  // prefix-anchored fence regex uses `[ \t]*` and would silently miss
+  // every fence on a CRLF file. Tree-sitter itself parses CRLF input
+  // fine, but normalising once at the boundary means line ranges from
+  // the AST line up with the line array we pass to fence extraction.
+  const content = rawContent.includes("\r\n")
+    ? rawContent.replace(/\r\n/g, "\n")
+    : rawContent;
 
   const lines = content.split("\n");
 

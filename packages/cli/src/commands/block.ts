@@ -12,6 +12,7 @@
 // Argument parsing is hand-rolled to match v0.5's parseSearchArgs /
 // parseExplainArgs convention. No zod.
 
+import { statSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 
 import {
@@ -110,6 +111,18 @@ function isSkippablePath(absPath: string): boolean {
 }
 
 async function discoverFiles(rootPath: string): Promise<string[]> {
+  // A file argument (e.g., `sivru block validate src/foo.ts`) is a
+  // perfectly reasonable input — the walker only handles directories,
+  // so short-circuit here and return the single path.
+  let isDir = false;
+  try {
+    isDir = statSync(rootPath).isDirectory();
+  } catch {
+    // Path missing entirely; let the walker raise the canonical error.
+  }
+  if (!isDir) {
+    return [rootPath];
+  }
   const files: string[] = [];
   for await (const entry of walk(rootPath)) {
     if (isSkippablePath(entry.absPath)) continue;
