@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QA Report — DESIGN-0016 / PR #25 — @sivru annotation blocks (v0.6.0)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f29;
+    --panel-2: #232a36;
+    --fg: #d6deeb;
+    --muted: #8b97a8;
+    --accent: #82aaff;
+    --accent-2: #c3e88d;
+    --warn: #ffcb6b;
+    --error: #f78c6c;
+    --ok: #c3e88d;
+    --border: #2a3140;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.55; }
+  body { max-width: 1100px; margin: 0 auto; padding: 32px 28px 80px; }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; margin: 1.6em 0 0.6em; }
+  h1 { font-size: 1.9em; margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; }
+  h2 { font-size: 1.35em; color: var(--accent); margin-top: 2.2em; }
+  h3 { font-size: 1.1em; color: var(--accent-2); margin-top: 1.8em; }
+  h4 { font-size: 1em; color: var(--muted); margin-top: 1.4em; text-transform: uppercase; letter-spacing: 0.04em; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  a:hover { border-bottom-style: solid; }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--panel-2); padding: 1px 6px; border-radius: 3px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 12px 14px; overflow-x: auto; border-radius: 4px; font-family: var(--mono); font-size: 0.86em; line-height: 1.5; }
+  pre.terminal { border-left-color: var(--accent-2); background: #0a0e14; }
+  pre.terminal .prompt { color: var(--accent-2); }
+  pre.terminal .ok { color: var(--ok); }
+  pre.terminal .warn { color: var(--warn); }
+  pre.terminal .err { color: var(--error); }
+  pre.terminal .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.92em; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--accent); font-weight: 600; background: var(--panel); }
+  tr:hover td { background: var(--panel); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 0.8em; font-family: var(--mono); border: 1px solid var(--border); }
+  .pill.pass { background: rgba(195, 232, 141, 0.12); color: var(--ok); border-color: rgba(195, 232, 141, 0.3); }
+  .pill.fail { background: rgba(247, 140, 108, 0.12); color: var(--error); border-color: rgba(247, 140, 108, 0.3); }
+  .pill.warn { background: rgba(255, 203, 107, 0.12); color: var(--warn); border-color: rgba(255, 203, 107, 0.3); }
+  .pill.skip { background: rgba(139, 151, 168, 0.12); color: var(--muted); }
+  .meta { color: var(--muted); font-size: 0.92em; margin-top: -4px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 18px; margin: 12px 0; }
+  .panel.warn { border-left: 3px solid var(--warn); }
+  .panel.error { border-left: 3px solid var(--error); }
+  .panel.ok { border-left: 3px solid var(--ok); }
+  .panel.note { border-left: 3px solid var(--accent); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 22px; }
+  .toc ol { margin: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .kv { display: grid; grid-template-columns: 200px 1fr; gap: 4px 16px; font-size: 0.94em; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: var(--mono); font-size: 0.9em; }
+  .severity-critical { color: #ff6e6e; font-weight: 600; }
+  .severity-major { color: var(--warn); font-weight: 600; }
+  .severity-minor { color: var(--muted); font-weight: 600; }
+  blockquote { margin: 12px 0; padding: 8px 16px; border-left: 3px solid var(--muted); color: var(--muted); background: var(--panel); }
+  details { margin: 8px 0; }
+  details summary { cursor: pointer; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>QA Report — DESIGN-0016 / PR #25</h1>
+<p class="meta">
+  Branch <code>feat/sivru-annotation-blocks</code> &middot; v0.6.0 (<code>@sivru</code> annotation blocks) &middot;
+  Generated 2026-05-22 &middot;
+  PR: <a href="https://github.com/sivru/sivru/pull/25">github.com/sivru/sivru/pull/25</a>
+</p>
+
+<div class="panel ok">
+  <strong>Verdict.</strong> Branch is ship-ready on Linux + macOS (Node 20 &amp; 22).
+  Two rounds of QA surfaced 4 bugs (1 CRITICAL, 2 MAJOR, 1 MINOR-pair) &mdash; all fixed, all in the branch.
+  Windows CI is red on pre-existing main issues in <code>@sivru/observe</code>, unrelated to this PR.
+</div>
+
+<h2>Table of contents</h2>
+<div class="toc">
+  <ol>
+    <li><a href="#scope">Scope and method</a> &mdash; what was tested, what was not, why no screenshots</li>
+    <li><a href="#summary">Summary table</a> &mdash; all 11 QA passes at a glance</li>
+    <li><a href="#bugs">Bugs found and fixed</a> &mdash; the 4 issues, in severity order</li>
+    <li><a href="#detail">Per-pass detail</a> &mdash; QA1 through QA11, with commands and outputs</li>
+    <li><a href="#ci">CI status timeline</a></li>
+    <li><a href="#commits">Branch commit log</a></li>
+    <li><a href="#deferred">Deferred register</a> &mdash; 9 minor items not in this PR</li>
+    <li><a href="#opportunities">Opportunities to make this better</a> &mdash; 12 specific improvements</li>
+  </ol>
+</div>
+
+<hr />
+
+<h2 id="scope">Scope and method</h2>
+
+<p>
+  Eleven QA passes were run against PR #25 in two rounds &mdash; an initial sweep after the auto-ship loop
+  reported done, and a follow-up after the user explicitly asked for "more thorough QA". Each pass exercises a
+  distinct surface (CLI, MCP, config, multi-language round-trip, SKILL.md, CI gate, privacy boundary, YAML
+  threat-model edges, CRLF tolerance, PR CI status, markdown render). Round 2 added 4 passes focused on
+  attack-surface edges (YAML edges, CRLF, CI, render).
+</p>
+
+<h4>No screenshots</h4>
+<p>
+  This PR ships CLI and library code. Nothing in the change renders visually &mdash; no web UI, no graphical
+  surface, no chart. Where the project does have a web UI (<code>@sivru/observe-ui</code>), the only change in
+  this PR is the <code>package.json</code> version bump. Including UI screenshots would be theater. Where
+  behaviour was worth capturing for review, the report inlines the actual terminal commands and outputs that
+  produced the verdict.
+</p>
+
+<h4>What was deliberately not tested</h4>
+<ul>
+  <li>Cross-platform Windows: cannot drive Windows from this macOS environment beyond what CI exercises. The
+    pre-existing Windows failures in <code>@sivru/observe</code> were confirmed (via <code>gh run view</code>)
+    to exist on <code>main</code> too &mdash; not introduced by this PR.</li>
+  <li>External-repo stress (running <code>sivru block validate</code> against random GitHub repos):
+    high effort, low signal-per-effort. Substituted with synthetic fixture stress (QA8).</li>
+  <li>Memory profiling beyond the pathological-YAML fixture's runtime bound: the integration test asserts
+    bounded time but doesn't capture RSS deltas. See <a href="#opportunities">opportunity O11</a>.</li>
+</ul>
+
+<hr />
+
+<h2 id="summary">Summary table</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:5%">#</th>
+      <th style="width:35%">Surface</th>
+      <th style="width:10%">Result</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>QA1</td><td>CLI failure-mode matrix (8 paths)</td><td><span class="pill pass">PASS</span></td><td>Every diagnostic fires with correct code, severity, exit code; errors&rarr;stderr, warnings&rarr;stdout</td></tr>
+    <tr><td>QA2</td><td>MCP <code>sivru.explain.authored</code> round-trip</td><td><span class="pill pass">PASS</span></td><td>kind, symbol, line range, full <code>SivruBlockJSON</code> all present; null- and empty-fills correct</td></tr>
+    <tr><td>QA3</td><td>Config precedence (defaults &lt; user XDG &lt; project)</td><td><span class="pill pass">PASS</span></td><td>Override-replaces-default semantics confirmed</td></tr>
+    <tr><td>QA4</td><td>5-carrier round-trip parity (TS/JS/Java/Go/Python)</td><td><span class="pill pass">PASS</span></td><td>5 blocks, 1 distinct JSON shape</td></tr>
+    <tr><td>QA5</td><td>SKILL.md / help / version</td><td><span class="pill pass">PASS</span></td><td>Plain prose, no marketing voice, <code>sivru version</code> &rarr; 0.6.0</td></tr>
+    <tr><td>QA6</td><td>CI gate dry-run</td><td><span class="pill fail">FAIL &rarr; FIXED</span></td><td><strong>CRITICAL</strong> pipe-drain bug; fix in <a href="#bug-1">17cd5fc</a>; regression test added</td></tr>
+    <tr><td>QA7</td><td>Privacy boundary (no network in <code>@sivru/observe</code>)</td><td><span class="pill pass">PASS</span></td><td>Egress test still green (93/93); js-yaml not in observe</td></tr>
+    <tr><td>QA8</td><td>YAML threat-model edges (5 attack classes)</td><td><span class="pill pass">PASS</span></td><td>Object.prototype clean across all; anchors bounded; dupes &amp; long-strings rejected with E216</td></tr>
+    <tr><td>QA9</td><td>CRLF line-ending tolerance</td><td><span class="pill fail">FAIL &rarr; FIXED</span></td><td><strong>MAJOR</strong> &mdash; extracted 0 blocks on CRLF input; fix in <a href="#bug-3">548fa7f</a>; regression test added</td></tr>
+    <tr><td>QA10</td><td>GitHub PR CI status</td><td><span class="pill fail">FAIL &rarr; FIXED</span></td><td><strong>MAJOR</strong> tree-sitter grammar load race; fix in <a href="#bug-2">2ecb18a</a>. Windows still red, pre-existing on main</td></tr>
+    <tr><td>QA11</td><td><code>sivru explain</code> markdown render with authored fill</td><td><span class="pill fail">FAIL &rarr; FIXED</span></td><td><strong>MINOR-pair</strong>: single-file input crash + stale "see v0.6" text; fix in <a href="#bug-4">548fa7f</a></td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="bugs">Bugs found and fixed</h2>
+
+<div class="panel error" id="bug-1">
+  <h3 style="margin-top: 0;"><span class="severity-critical">CRITICAL</span> &mdash; stdout truncated at pipe-buffer boundary (~8 KiB)</h3>
+  <dl class="kv">
+    <dt>Surfaced by</dt><dd>QA6 &mdash; CI gate dry-run</dd>
+    <dt>Commit</dt><dd>17cd5fc &mdash; <code>fix(cli): wait for stdout to drain before exit</code></dd>
+    <dt>Files</dt><dd><code>packages/cli/src/index.ts</code>; regression test in <code>packages/cli/src/commands/block.test.ts</code></dd>
+  </dl>
+  <p>
+    The CLI entry called <code>process.exit(code)</code> immediately on <code>main()</code> resolution. When
+    stdout is a pipe (rather than a TTY), <code>process.exit</code> terminates the process before the runtime
+    flushes the write buffer. macOS's default pipe buffer is ~8 KiB, so any larger stdout silently truncated.
+  </p>
+  <p><strong>Reproducible before the fix:</strong></p>
+  <pre class="terminal"><span class="prompt">$</span> node packages/cli/dist/index.js block extract --json packages/ | wc -c
+<span class="ok">   23603</span>          <span class="muted"># correct total when piped through wc</span>
+<span class="prompt">$</span> node -e 'JSON.parse(execSync("node packages/cli/dist/index.js block extract --json packages/", { encoding: "utf8" }))'
+<span class="err">SyntaxError: Unterminated string in JSON at position 8178</span></pre>
+  <p><strong>Why this matters:</strong> the CI role-coverage gate this PR added uses
+  <code>execSync &rarr; JSON.parse</code>. Without the fix, the very CI step the PR introduced would have
+  failed on the PR itself once the JSON exceeded the pipe buffer. Any downstream MCP / pipeline /
+  programmatic consumer of <code>extract --json</code> has the same exposure.</p>
+  <p><strong>Fix:</strong></p>
+  <pre><code>// before
+main().then((code) =&gt; process.exit(code), ...);
+
+// after
+main().then((code) =&gt; { process.exitCode = code; }, ...);</code></pre>
+  <p><code>process.exitCode = code</code> lets Node exit naturally after stdout/stderr drain; no daemon-style
+  work holds the loop open so the process still exits immediately.</p>
+  <p><strong>Regression test:</strong> spawns the actual built binary against a 30-block fixture and asserts
+  <code>execFileSync &rarr; JSON.parse</code> succeeds. The in-process spy-based test that previously covered
+  <code>extract --json</code> could not have caught this &mdash; the spy receives the data the CLI tried to
+  write, not what survives the pipe-drain race.</p>
+</div>
+
+<div class="panel warn" id="bug-2">
+  <h3 style="margin-top: 0;"><span class="severity-major">MAJOR</span> &mdash; tree-sitter grammar load race</h3>
+  <dl class="kv">
+    <dt>Surfaced by</dt><dd>QA10 &mdash; GitHub PR CI status (visible on Node 20 all OS, Node 22 on Windows)</dd>
+    <dt>Commit</dt><dd>2ecb18a &mdash; <code>fix(chunker): serialize tree-sitter grammar first-loads across the whole process</code></dd>
+    <dt>Files</dt><dd><code>packages/search/src/chunker/grammars.ts</code></dd>
+  </dl>
+  <p>The new toJSON round-trip test calls <code>extractBlocks()</code> on 5 different languages via
+    <code>Promise.all</code>. Each first-language path hits <code>loadGrammar()</code> which calls
+    web-tree-sitter's <code>Parser.Language.load()</code>. That call shares global WASM linker state; running
+    it for two different .wasm files concurrently can poison the export lookup so a later read returns a
+    function name from the WRONG grammar:</p>
+  <pre class="terminal"><span class="err">SIVRU-E1002: failed to load grammar "javascript.wasm": bad export type
+for 'tree_sitter_python_external_scanner_create': undefined</span></pre>
+  <p>Per-grammar cache prevents the SECOND call for the SAME grammar but does nothing across DIFFERENT
+    grammars. The bug was <em>latent in the chunker</em> before v0.6 &mdash; no test had triggered concurrent
+    multi-grammar first-load until the round-trip test added in this PR.</p>
+  <p><strong>Why it only showed in CI:</strong> Node 22 on Linux/macOS happens to serialize the WASM module
+    instantiation enough to mask the bug locally. Node 20 (newer V8 behaviour) and Windows do not. The first
+    PR push showed 4 failed jobs (Node 20 all OS + Node 22 Windows); after the fix 2 of those 4 went green.</p>
+  <p><strong>Fix:</strong> a process-wide <code>grammarLoadChain</code> Promise that serialises the first-load
+    of each grammar. Subsequent calls hit the per-grammar cache and skip the chain entirely &mdash; steady-
+    state path stays zero-overhead.</p>
+</div>
+
+<div class="panel warn" id="bug-3">
+  <h3 style="margin-top: 0;"><span class="severity-major">MAJOR</span> &mdash; CRLF line endings silently extract 0 blocks</h3>
+  <dl class="kv">
+    <dt>Surfaced by</dt><dd>QA9 &mdash; CRLF tolerance</dd>
+    <dt>Commit</dt><dd>548fa7f &mdash; <code>fix: QA-surfaced edges</code></dd>
+    <dt>Files</dt><dd><code>packages/search/src/block/extract.ts</code>; regression test in <code>extract.test.ts</code></dd>
+  </dl>
+  <p>Files saved with CRLF line endings (Windows-checked-out repos) silently extracted 0 blocks. The
+    prefix-anchored fence regex <code>/^([ \t]*(?:\/\/\/|\/\/|\*|#)?[ \t]*)@sivru[ \t]*$/</code> uses
+    <code>[ \t]*$</code> with no <code>\r</code> tolerance, so <code>@sivru\r\n</code> never matched.</p>
+  <p><strong>Reproducible before the fix:</strong></p>
+  <pre class="terminal"><span class="prompt">$</span> # write a TS file with CRLF endings
+<span class="prompt">$</span> python3 -c '...' &gt; foo.ts        <span class="muted"># content has \r\n</span>
+<span class="prompt">$</span> node ../dist/index.js block extract --json foo.ts
+<span class="err">BUG: extracted 0 blocks from CRLF file</span></pre>
+  <p><strong>Fix:</strong> normalise CRLF&rarr;LF at the content boundary in <code>extractBlocks</code>:</p>
+  <pre><code>const content = rawContent.includes("\r\n")
+  ? rawContent.replace(/\r\n/g, "\n")
+  : rawContent;</code></pre>
+  <p>Tree-sitter parses CRLF input fine, but normalising once at the boundary means line ranges from the AST
+    line up with the line array we pass to fence extraction.</p>
+</div>
+
+<div class="panel note" id="bug-4">
+  <h3 style="margin-top: 0;"><span class="severity-minor">MINOR-pair</span> &mdash; single-file CLI input crash + stale "see v0.6" markdown text</h3>
+  <dl class="kv">
+    <dt>Surfaced by</dt><dd>QA11 &mdash; markdown render path + ad-hoc</dd>
+    <dt>Commit</dt><dd>548fa7f &mdash; <code>fix: QA-surfaced edges</code></dd>
+    <dt>Files</dt><dd><code>packages/cli/src/commands/block.ts</code>, <code>packages/cli/src/commands/explain.ts</code></dd>
+  </dl>
+  <p><strong>(a)</strong> <code>sivru block validate &lt;file&gt;</code> crashed with <code>ENOTDIR</code> when
+    given a file rather than a directory &mdash; the walker assumed a directory root and tried to read
+    <code>.gitignore</code> inside it. File arguments are the natural form for editor / pre-commit hook
+    integration ("validate the file I'm about to commit").</p>
+  <p><strong>(b)</strong> The explain markdown renderer printed the stale v0.5 placeholder
+    <code>AUTHORED (none yet &mdash; see v0.6)</code> unconditionally &mdash; v0.6 IS this PR, and
+    <code>artifact.authored[]</code> is now populated. Now renders a one-line summary:</p>
+  <pre class="terminal"><span class="prompt">$</span> sivru explain foo.ts --repo=...
+<span class="muted">...</span>
+AUTHORED  <span class="ok">1 block(s); roles: clean-routing</span> <span class="muted">(full payload in --json)</span></pre>
+  <p>Full per-block markdown surfacing remains a v0.7 / DESIGN-0017 concern.</p>
+</div>
+
+<hr />
+
+<h2 id="detail">Per-pass detail</h2>
+
+<h3>QA1 &mdash; CLI failure-mode matrix</h3>
+<p>Built 8 fresh temp repos covering each failure mode; ran <code>sivru block validate</code> against each;
+  asserted exit code, stream routing, and diagnostic code.</p>
+<table>
+  <thead><tr><th>Fixture</th><th>Expected</th><th>Exit</th><th>Code</th></tr></thead>
+  <tbody>
+    <tr><td>clean</td><td>0 errors, 0 warnings</td><td>0</td><td>&mdash;</td></tr>
+    <tr><td>bad-schema (schema: 2)</td><td>1 error</td><td>1</td><td><code>SIVRU-E214</code></td></tr>
+    <tr><td>unclosed fence</td><td>1 error</td><td>1</td><td><code>SIVRU-E215</code></td></tr>
+    <tr><td>runaway (116 lines)</td><td>1 error</td><td>1</td><td><code>SIVRU-E212</code></td></tr>
+    <tr><td>missing responsibility</td><td>1 error</td><td>1</td><td><code>SIVRU-E217</code></td></tr>
+    <tr><td>maturity: production</td><td>1 error</td><td>1</td><td><code>SIVRU-E213</code></td></tr>
+    <tr><td>decision-no-revisit</td><td>1 warning, exit 0</td><td>0</td><td><code>SIVRU-E210</code></td></tr>
+    <tr><td>block-prose (36 lines)</td><td>1 warning, exit 0</td><td>0</td><td><code>SIVRU-E211</code></td></tr>
+  </tbody>
+</table>
+<p>Bonus: <code>extract --json</code> on the unclosed fixture returned <code>[{ block: null, diagnostics: [{ code: 'SIVRU-E215' }] }]</code> &mdash; confirming the never-silently-drop contract.</p>
+
+<h3>QA2 &mdash; MCP <code>sivru.explain.authored</code> round-trip</h3>
+<p>Called the in-memory MCP <code>explainTool</code> against the clean fixture; verified the envelope shape:</p>
+<pre class="terminal"><span class="prompt">$</span> node -e 'import("./dist/mcp-entry.js").then(...)' "$QA"
+ok: sivru.explain
+authored count: 1
+first authored: {
+  "kind": "symbol",
+  "startLine": 2,
+  "endLine": 6,
+  "block": {
+    "schema": 1,
+    "role": "clean-routing",
+    "responsibility": "clean baseline block",
+    "maturity": null,
+    "collaborators": [],
+    "invariants": [],
+    "decisions": []
+  },
+  "symbol": "clean"
+}</pre>
+
+<h3>QA3 &mdash; Config precedence</h3>
+<p>Built a 3-layer matrix:</p>
+<ul>
+  <li>Defaults: <code>maturityValues = [stable, experimental, deprecated, wip]</code></li>
+  <li>User config (<code>XDG_CONFIG_HOME=.../sivru/block.json</code>): <code>[bronze]</code></li>
+  <li>Project config (<code>.sivru/block.json</code>): <code>[gold]</code></li>
+</ul>
+<p>Verified:</p>
+<ul>
+  <li>Project beats user: a block with <code>maturity: gold</code> validates clean under both XDG-bronze user and gold project config.</li>
+  <li>User beats default: with XDG-bronze user config and no project config, <code>maturity: stable</code> fires <code>SIVRU-E213</code>.</li>
+  <li>Arrays REPLACE not extend: with project <code>[gold]</code>, <code>maturity: stable</code> rejects.</li>
+</ul>
+
+<h3>QA4 &mdash; 5-carrier round-trip parity</h3>
+<p>Copied the per-language fixtures out of <code>__fixtures__/</code> (CLI's default skip filter excludes that
+  path) and ran <code>extract --json</code> over all 5:</p>
+<pre class="terminal">count: 5
+distinct JSON shapes: <span class="ok">1</span>
+roles: [ 'routing-brain', 'routing-brain', 'routing-brain', 'routing-brain', 'routing-brain' ]
+symbols: [ 'ResolveRoute', 'SymbolBlock', 'resolveRoute', 'resolve_route', 'resolveRoute' ]</pre>
+<p>5 carriers (TS/JS/Java/Go/Python) &rarr; 1 distinct JSON shape. Round-trip holds.</p>
+
+<h3>QA5 &mdash; SKILL.md / help / version</h3>
+<pre class="terminal"><span class="prompt">$</span> pnpm sivru version
+<span class="ok">sivru 0.6.0</span>
+<span class="prompt">$</span> sivru help | grep block
+  block validate [path]       Lint every @sivru annotation block under path (default cwd)
+  block extract [path]        Emit every block + diagnostics (use with --json)
+block options:
+  --json                      (extract) Emit every block + diagnostics as JSON</pre>
+<p>SKILL.md authoring section reads in plain prose, no marketing voice, covers both the write-the-block-before-editing rule and the read-the-block-before-editing rule.</p>
+
+<h3>QA6 &mdash; CI gate dry-run (found bug 1)</h3>
+<p>See <a href="#bug-1">CRITICAL bug 1</a>. Post-fix:</p>
+<pre class="terminal"><span class="prompt">$</span> node packages/cli/dist/index.js block validate packages/
+<span class="ok">sivru block validate: 21 block(s); 0 error(s), 0 warning(s)</span>
+step1 exit=0
+
+<span class="prompt">$</span> node -e 'JSON.parse(execSync("node packages/cli/dist/index.js block extract --json packages/")) ...'
+<span class="ok">OK: 21 blocks, 21 distinct roles</span>
+step2 exit=0</pre>
+<p>Red-path verified: a fixture with <code>schema: 99</code> exits 1 with <code>SIVRU-E214</code> on stderr.</p>
+
+<h3>QA7 &mdash; Privacy boundary</h3>
+<p>Confirmed via <code>git diff main -- packages/observe/</code>: only change is the
+  <code>package.json</code> version bump. The egress test in <code>packages/observe/src/egress.test.ts</code>
+  is unchanged and still green (93/93). <code>js-yaml</code> is in <code>@sivru/search</code> only, not
+  <code>@sivru/observe</code>.</p>
+
+<h3>QA8 &mdash; YAML threat-model edges</h3>
+<p>Five adversarial fixtures, each ending in the same prototype-pollution check:</p>
+<table>
+  <thead><tr><th>Attack</th><th>Outcome</th></tr></thead>
+  <tbody>
+    <tr><td>Anchor expansion (4-deep <code>&amp;a</code> /  <code>*a</code> reference bomb)</td><td>BLOCK parsed clean, role &amp; responsibility extracted; bounded time</td></tr>
+    <tr><td><code>__proto__: { polluted: true, role: 'pwned' }</code> + <code>constructor: { prototype: ... }</code></td><td>BLOCK parsed, <code>__proto__</code> stripped by JSON_SCHEMA, no pollution</td></tr>
+    <tr><td>Merge key <code>&lt;&lt;: *base</code></td><td>BLOCK parsed, explicit fields not overridden</td></tr>
+    <tr><td>Duplicate keys (<code>role: first / role: second</code>)</td><td>BLOCK <code>null</code>, <code>SIVRU-E216</code> &mdash; js-yaml strict</td></tr>
+    <tr><td>50 KB single-line string value</td><td>BLOCK <code>null</code>, <code>SIVRU-E216</code> (multiline-key error)</td></tr>
+  </tbody>
+</table>
+<pre class="terminal">=== final prototype pollution check ===
+Object.prototype.polluted: <span class="ok">undefined</span>
+({}).polluted: <span class="ok">undefined</span>
+([]).polluted: <span class="ok">undefined</span></pre>
+
+<h3>QA9 &mdash; CRLF tolerance (found bug 3)</h3>
+<p>See <a href="#bug-3">MAJOR bug 3</a>. Post-fix:</p>
+<pre class="terminal"><span class="prompt">$</span> # foo.ts has \r\n line endings (199 bytes; od -c confirms)
+<span class="prompt">$</span> node dist/index.js block extract --json $CRLF/foo.ts
+count: 1 block: <span class="ok">PARSED</span> role: crlf-tolerant symbol: crlfTest</pre>
+
+<h3>QA10 &mdash; GitHub PR CI status (found bug 2)</h3>
+<p>See <a href="#bug-2">MAJOR bug 2</a>. CI evolution:</p>
+<ul>
+  <li><strong>Before fix:</strong> Node 20 all OS + Node 22 Windows red; <a href="https://github.com/sivru/sivru/actions/runs/26265976094">run 26265976094</a></li>
+  <li><strong>After 2ecb18a:</strong> Linux + macOS green on both Node versions; Windows still red on pre-existing observe issues; <a href="https://github.com/sivru/sivru/actions/runs/26266451429">run 26266451429</a></li>
+  <li><strong>After 548fa7f:</strong> same shape &mdash; Linux + macOS green; <a href="https://github.com/sivru/sivru/actions/runs/26266710247">run 26266710247</a></li>
+</ul>
+<p><strong>Windows-red root cause (pre-existing on main):</strong></p>
+<pre class="terminal"><span class="err">FAIL</span> packages/observe/src/server/server.test.ts &gt; lists runs newest-first
+  expected +0 to be 2
+
+<span class="err">FAIL</span> packages/observe/src/server/server.test.ts &gt; returns 410 on incompatible formatVersion
+  expected 404 to be 410
+
+<span class="err">FAIL</span> packages/observe/src/sources/jsonl/git-info.test.ts &gt; collapses a worktree to the main repo's project root
+  expected 'C:\Users\runneradmin\...' to be 'C:\Users\RUNNER~1\...'</pre>
+<p>Confirmed via <code>gh run view 26240188327</code> (last main push) that Windows was red on main too.</p>
+
+<h3>QA11 &mdash; markdown render path (found bug 4)</h3>
+<p>See <a href="#bug-4">MINOR-pair bug 4</a>. Post-fix:</p>
+<pre class="terminal"><span class="prompt">$</span> # file with @sivru block
+<span class="prompt">$</span> sivru explain foo.ts --repo=$QA/clean | grep -A 1 AUTHORED
+AUTHORED  <span class="ok">1 block(s); roles: clean-routing</span> (full payload in --json)
+
+<span class="prompt">$</span> # file without @sivru block
+<span class="prompt">$</span> sivru explain bar.ts --repo=$QA/no-block | grep -A 1 AUTHORED
+AUTHORED  <span class="muted">(no @sivru blocks attached)</span></pre>
+
+<hr />
+
+<h2 id="ci">CI status timeline</h2>
+
+<table>
+  <thead><tr><th>Push</th><th>Run</th><th>Linux 20</th><th>Linux 22</th><th>mac 20</th><th>mac 22</th><th>win 20</th><th>win 22</th><th>perf</th><th>pkg</th></tr></thead>
+  <tbody>
+    <tr><td><code>eb80e84</code> (initial)</td><td><a href="https://github.com/sivru/sivru/actions/runs/26265976094">26265976094</a></td><td><span class="pill fail">F</span></td><td><span class="pill pass">P</span></td><td><span class="pill fail">F</span></td><td><span class="pill pass">P</span></td><td><span class="pill fail">F</span></td><td><span class="pill fail">F</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td></tr>
+    <tr><td><code>2ecb18a</code> (grammar fix)</td><td><a href="https://github.com/sivru/sivru/actions/runs/26266451429">26266451429</a></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td><span class="pill fail">F</span></td><td><span class="pill fail">F</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td></tr>
+    <tr><td><code>548fa7f</code> (QA fixes)</td><td><a href="https://github.com/sivru/sivru/actions/runs/26266710247">26266710247</a></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td><td colspan="2"><em>pre-existing Windows-red on main</em></td><td><span class="pill pass">P</span></td><td><span class="pill pass">P</span></td></tr>
+  </tbody>
+</table>
+<p class="meta">P = pass, F = fail. Windows-red columns after 548fa7f are pre-existing main flakes in
+  <code>@sivru/observe</code> (realpath worktree, server bench-history) &mdash; confirmed on the last main
+  push CI run (<code>26240188327</code>).</p>
+
+<hr />
+
+<h2 id="commits">Branch commit log</h2>
+
+<table>
+  <thead><tr><th>SHA</th><th>Message</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td><code>51ed37a</code></td><td>auto-ship: block module spine &mdash; extract/validate/toJSON/config/module-locators + fixtures</td><td>auto-ship iter 1</td></tr>
+    <tr><td><code>8ed8309</code></td><td>auto-ship: sivru block validate / extract CLI subcommand</td><td>auto-ship iter 2</td></tr>
+    <tr><td><code>2859487</code></td><td>auto-ship: DESIGN-0004 reconciliation &mdash; fill artifact.authored[]</td><td>auto-ship iter 3</td></tr>
+    <tr><td><code>a0e8c3f</code></td><td>auto-ship: 21 dogfood @sivru blocks + extraction hardening</td><td>auto-ship iter 4</td></tr>
+    <tr><td><code>531166f</code></td><td>auto-ship: SKILL.md + CI gate + workspace sivru script + v0.6.0 bump + CHANGELOG</td><td>auto-ship iter 5</td></tr>
+    <tr><td><code>eb80e84</code></td><td>auto-ship: fix M1 &mdash; threat-model test exercises sivru's own pipeline</td><td>code-review fix</td></tr>
+    <tr><td><code>17cd5fc</code></td><td><strong>fix(cli): wait for stdout to drain before exit &mdash; CRITICAL pipe-buffer</strong></td><td>QA round 1</td></tr>
+    <tr><td><code>2ecb18a</code></td><td><strong>fix(chunker): serialize tree-sitter grammar first-loads</strong></td><td>QA round 2</td></tr>
+    <tr><td><code>548fa7f</code></td><td><strong>fix: QA-surfaced edges &mdash; single-file CLI, CRLF, authored render</strong></td><td>QA round 2</td></tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h2 id="deferred">Deferred register (not in this PR)</h2>
+
+<p>Recorded in <code>.auto-ship/deferred.md</code> from the original code-review pass. These are MINOR / NIT
+  items that did not warrant blocking the ship but are worth picking up later.</p>
+
+<ol>
+  <li><code>packages/search/src/block/extract.ts:69-74</code> &mdash; <code>makeFenceEndRegex</code> rebuilt per line inside the hot loop; cache once per opened fence.</li>
+  <li><code>packages/search/src/block/extract.ts:115</code> &mdash; regex permits no extra leading whitespace before prefix on <code>@end</code>; inconsistent indent inside a body fires <code>SIVRU-E215</code> instead of relaxing.</li>
+  <li><code>packages/search/src/block/extract.ts:353-355</code> &mdash; dead <code>if</code> block (comment only, no behavior).</li>
+  <li><code>packages/search/src/block/extract.ts:596-614</code> &mdash; TS/TSX/JS/JSX module-locator branch duplicates the Python branch verbatim; extract a helper.</li>
+  <li><code>packages/search/src/block/module-locators/python.ts:90-93</code> + <code>typescript.ts:94</code> &mdash; unreachable <code>void filePath</code> lines after <code>return</code>.</li>
+  <li><code>packages/cli/src/commands/block.ts:104-110</code> &mdash; skip-path matches any <code>/__fixtures__/</code> substring; a real source dir containing that name would be silently excluded (low risk; worth a comment).</li>
+  <li><code>.github/workflows/ci.yml:64-81</code> &mdash; CI role-coverage gate uses <code>execSync</code> with default <code>maxBuffer</code> (1 MB); pass <code>{ maxBuffer: 64 * 1024 * 1024 }</code> for headroom.</li>
+  <li><code>packages/search/src/block/validate.ts:118-125</code> &mdash; re-checks E212 even though extract.ts:393-402 already short-circuits; defensive, but a hand-called <code>validateBlock</code> on a runaway block would emit two E212 diagnostics.</li>
+  <li><code>packages/cli/src/commands/block.test.ts:27</code> &mdash; double <code>mkdir</code> call in <code>mkRepo</code> helper (redundant).</li>
+</ol>
+
+<hr />
+
+<h2 id="opportunities">Opportunities to make this better</h2>
+
+<p>Twelve concrete improvements surfaced by this QA pass, in roughly descending leverage order. The first
+  three are the highest-value: they target the failure patterns that produced the four bugs found here.</p>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O1 &mdash; <code>/code-review</code> should spawn the binary, not just read source</h3>
+  <p>Three of the four bugs (pipe-drain, CRLF, single-file input) were invisible to the static-read code review
+    because they live in the interaction between the code and the OS. The review correctly read all the source
+    files but had no observation of what the binary actually does when piped, on CRLF input, or given a file.
+    A <em>behavioural</em> review layer &mdash; one that exercises the artifact under several realistic
+    invocation patterns and diffs the result against the design's stated contract &mdash; would have caught
+    these. Worth specifying as a /code-review extension or a separate /behavior-review step.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O2 &mdash; Assertion-meaning linter for "tests that don't test"</h3>
+  <p>The original threat-model test (caught by /code-review M1, fixed in <code>eb80e84</code>) asserted that
+    js-yaml's library behaviour rejected hostile YAML &mdash; not that sivru's own pipeline did. This pattern
+    is common: a test reads as "we asserted the safe outcome" but actually exercises a different code path.
+    A small linter that flags tests where the imports in the test file don't include the production code path
+    they claim to be testing would catch this class.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O3 &mdash; Repo-wide CRLF audit</h3>
+  <p>The CRLF bug in <code>extract.ts</code> raises an obvious follow-up: does the <em>chunker</em> handle
+    CRLF correctly? Does <code>explain</code>'s region slicing handle CRLF correctly? Does the BM25 tokenizer?
+    Any code path that does <code>content.split("\n")</code> and then matches against tree-sitter byte
+    positions has the same potential bug class. A repo-wide grep for <code>split(&quot;\\n&quot;)</code> +
+    follow-up audit is worth ~30 minutes. The fix pattern is the same: normalise at the boundary.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O4 &mdash; CLI exit-path audit for the same pipe-drain pattern</h3>
+  <p>The pipe-drain CRITICAL fix replaced one <code>process.exit(code)</code> in <code>packages/cli/src/index.ts</code>.
+    Worth grepping for <code>process.exit</code> across the workspace &mdash; any other CLI exit path with a
+    large stdout payload (e.g. <code>sivru explain --json</code>, <code>sivru observe</code> static reports,
+    <code>sivru bench personal --json</code>) carries the same risk. <code>process.exitCode = code</code> is
+    the safer default for any CLI process; the only reason to call <code>process.exit</code> directly is to
+    short-circuit a hung event loop.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O5 &mdash; Concurrent multi-grammar load test in the chunker</h3>
+  <p>The tree-sitter grammar race was latent for several releases. Add a chunker integration test that
+    <code>Promise.all</code>s <code>getParser()</code> across all 5 grammars, in a fresh-process subprocess
+    (so the per-grammar cache doesn't mask the race). This locks in the fix and catches any future regression
+    where someone removes the <code>grammarLoadChain</code> serialisation.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O6 &mdash; Fix or formally drop Windows in CI</h3>
+  <p>Windows has been red on main for at least two release cycles
+    (<a href="https://github.com/sivru/sivru/actions/runs/26240188327">26240188327</a>). The failures are real
+    bugs in <code>@sivru/observe</code> (Windows short-name realpath, server bench-history fixture path
+    assumptions). Two viable paths:</p>
+  <ol>
+    <li>Fix them &mdash; ~3 hrs work; reuses <code>fs.realpathSync.native</code> normalisation already in
+      Node, fix fixture paths to be Windows-canonical.</li>
+    <li>Formally drop &mdash; remove <code>windows-latest</code> from the matrix and document the
+      support tier in README. Honest signal beats green-by-omission, but Windows is a real agent-runtime
+      target so option 1 is preferable.</li>
+  </ol>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O7 &mdash; Stress-test the CI gate at 1000 blocks</h3>
+  <p>The CI role-coverage gate's <code>execSync</code> has no explicit timeout (Node default is no timeout).
+    At today's 21 blocks the output is 23 KB; at 1000 blocks it would be ~1 MB &mdash; close to the default
+    <code>maxBuffer</code> of 1 MiB. Add the <code>{ maxBuffer: 64 * 1024 * 1024 }</code> documented in
+    deferred-item 7, and add a synthetic stress test that exercises the gate at 1000 blocks.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O8 &mdash; Use the maturity scale more deliberately</h3>
+  <p>All 21 dogfood blocks were authored as <code>maturity: stable</code>. A more deliberate distribution
+    would say more &mdash; the block module itself just shipped, so its three symbols
+    (<code>extractBlocks</code>, <code>validateBlock</code>, <code>blockToJSON</code>) are arguably
+    <code>experimental</code> until v0.7 lands and external consumers exercise the wire shape. Updating these
+    would also dogfood the maturity scale (currently nothing in the corpus has anything other than stable, so
+    we have zero evidence the warning paths render correctly).</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O9 &mdash; Per-attack pathological fixtures</h3>
+  <p>QA8 ran five YAML attack classes (anchors, <code>__proto__</code>, merge keys, duplicate keys, long
+    strings) but only inline, not as committed fixtures. They should live under
+    <code>packages/search/src/block/__fixtures__/pathological/</code> so the test suite covers each attack
+    permanently. Today's <code>pathological/deep-nest.ts</code> covers exactly one class.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O10 &mdash; Burn down the deferred register before v0.7 starts</h3>
+  <p>Nine items sit in <code>.auto-ship/deferred.md</code>. Two (items 1 and 7) are real performance /
+    correctness items that will compound with the new v0.7 surface. The remaining seven are pure cleanup
+    (~1 hr total). Worth a single "deferred sweep" commit before DESIGN-0017 work starts &mdash; cheaper to
+    do now while the context is fresh than once v0.7 adds its own deferred items.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O11 &mdash; Memory profile for the pathological fixture</h3>
+  <p>The integration test asserts <code>extractBlocks</code> finishes in &lt;200 ms on the deep-nest fixture
+    (loose bound; the design spec is 10 ms). It does NOT assert bounded memory allocation, which the design
+    explicitly calls for in §"Memory safety (F3)". Wiring a <code>v8.getHeapStatistics()</code> delta around
+    the call and asserting it stays under ~5 MiB would lock in the F3 invariant.</p>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top: 0;">O12 &mdash; Track v0.7 prerequisites surfaced by v0.6</h3>
+  <p>DESIGN-0016 §"DESIGN-0017 sync prerequisites" lists two items v0.7 must absorb. v0.6 covered one
+    (SKILL.md authoring section already shipped). The other (drift detector consumes
+    <code>SIVRU-E210 decision-no-revisit</code>) is design-doc text only and risks being forgotten when v0.7
+    work starts. Worth dropping a one-line TODO into <code>docs/design/0017-serving-authored-context.md</code>
+    or its task sidecar that explicitly says "drift detector adds E210 as fifth diagnostic, see DESIGN-0016
+    §forward-pointers".</p>
+</div>
+
+<hr />
+
+<h2>Sign-off</h2>
+
+<p>Two rounds of QA across 11 surfaces; 4 bugs surfaced; all fixed and committed to
+  <code>feat/sivru-annotation-blocks</code>; full <code>pnpm -r test</code> green on Node 20 and Node 22 locally;
+  CI green on Linux + macOS; Windows pre-existing red on <code>main</code>, not introduced by this PR; PR #25
+  ready for human merge review.</p>
+
+<p class="meta">Report generated 2026-05-22. Run journal:
+  <code>.auto-ship/runs/20260521-222604-sivru-annotation-blocks.md</code>. Deferred register:
+  <code>.auto-ship/deferred.md</code>.</p>
+
+</body>
+</html>
