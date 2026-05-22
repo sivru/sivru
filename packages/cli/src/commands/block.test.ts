@@ -1,12 +1,23 @@
 // CLI smoke tests for `sivru block`.
 
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { parseBlockArgs, runBlock } from "./block.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const created: string[] = [];
 
@@ -112,6 +123,54 @@ describe("runBlock — validate", () => {
     expect(allOutput).toContain("SIVRU-E214");
     stdout.mockRestore();
     stderr.mockRestore();
+  });
+});
+
+describe("runBlock — extract --json output complete (regression)", () => {
+  // Regression for the QA-found bug where the CLI's process.exit handler
+  // truncated piped stdout at the OS pipe-buffer boundary (~8 KiB on
+  // macOS). This silently corrupted extract --json output for any
+  // non-trivial repo and broke the CI role-coverage gate.
+  //
+  // Spawn the actual built binary as a child and read its full stdout
+  // via a pipe — this is the only way to exercise the drain path; an
+  // in-process spy mock would always observe the unfiltered output.
+  it("extract --json over a large input produces complete, parseable stdout", async () => {
+    // Skip when the built binary doesn't exist yet (clean checkout
+    // before `pnpm build`). Vitest runs from src/, so we check dist/.
+    const binPath = join(__dirname, "..", "..", "dist", "index.js");
+    if (!existsSync(binPath)) {
+      return;
+    }
+    // Build a fixture with enough blocks to easily exceed 8 KiB.
+    const dir = mkRepo(
+      Object.fromEntries(
+        Array.from({ length: 30 }, (_, i) => [
+          `file-${i}.ts`,
+          [
+            "/**",
+            " * @sivru",
+            " * schema: 1",
+            ` * role: role-${i}`,
+            ` * responsibility: file-${i} responsibility text padded to give the output real bulk for the drain test`,
+            ` * collaborators: [a-${i}, b-${i}, c-${i}]`,
+            " * @end",
+            " */",
+            `export function fn${i}(): void {}`,
+          ].join("\n"),
+        ]),
+      ),
+    );
+    const out = execFileSync("node", [binPath, "block", "extract", "--json", dir], {
+      encoding: "utf8",
+      // Default maxBuffer is 1 MiB; well above what 30 blocks emit but
+      // explicit so a future expansion of the fixture doesn't tip over.
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(out.length).toBeGreaterThan(8192);
+    // The whole array parses cleanly — no truncation at any boundary.
+    const data = JSON.parse(out) as unknown[];
+    expect(data).toHaveLength(30);
   });
 });
 

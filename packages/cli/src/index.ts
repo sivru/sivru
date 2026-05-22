@@ -97,10 +97,22 @@ async function main(): Promise<number> {
   }
 }
 
+// Setting process.exitCode (instead of calling process.exit) lets Node's
+// runtime exit naturally after stdout/stderr have drained. Calling
+// process.exit on a piped stdout truncates the write at the OS pipe-
+// buffer boundary (~8 KiB on macOS), silently corrupting `block extract
+// --json` and any other large stdout consumer downstream — including
+// the v0.6 CI role-coverage gate that parses the extract output.
+function exitWhenDrained(code: number): void {
+  process.exitCode = code;
+  // process.stdout is unref'd by default; nothing else holds the loop
+  // open, so Node exits as soon as the write buffer is flushed.
+}
+
 main().then(
-  (code) => process.exit(code),
+  (code) => exitWhenDrained(code),
   (err: unknown) => {
     process.stderr.write(`sivru: ${(err as Error).message ?? String(err)}\n`);
-    process.exit(1);
+    exitWhenDrained(1);
   },
 );
