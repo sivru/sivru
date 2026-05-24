@@ -75,9 +75,18 @@ export function runCmd(
           settle({ ok: true, stdout: so });
           return;
         }
-        // `signal === "SIGTERM"` is how Node surfaces the timeout kill.
-        const e = err as NodeJS.ErrnoException & { signal?: string | null };
-        if (e.signal === "SIGTERM") {
+        const e = err as NodeJS.ErrnoException & {
+          signal?: string | null;
+          killed?: boolean;
+        };
+        // ENOENT — binary missing from PATH.
+        if (e.code === "ENOENT") {
+          settle({ ok: false, reason: "missing", stderr: se });
+          return;
+        }
+        // Killed by timeout — Node sets `killed:true` and signals SIGTERM
+        // when the `timeout` option fires.
+        if (e.killed === true) {
           settle({ ok: false, reason: "timeout", stderr: se });
           return;
         }

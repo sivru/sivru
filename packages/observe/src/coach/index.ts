@@ -5,6 +5,8 @@
 // (`GET /api/checkup`). This file is the only stable export surface;
 // internal modules may move without breaking consumers.
 
+import { homedir } from "node:os";
+
 import { memoryClaudeAge } from "./checks/claude-age.js";
 import { memoryDeadReference } from "./checks/dead-reference.js";
 import { memorySkillToolsDrift } from "./checks/skill-tools-drift.js";
@@ -59,7 +61,10 @@ export async function runCheckup(
   repoRoot: string,
   opts: RunCheckupOptions = {},
 ): Promise<CheckupReport> {
-  const config = await loadCheckupConfig(repoRoot);
+  const config = await loadCheckupConfig(
+    repoRoot,
+    opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {},
+  );
   const noGit = opts.noGit === true;
 
   const filter = opts.check;
@@ -70,7 +75,10 @@ export async function runCheckup(
   });
 
   const diagnostics: ReportDiagnostic[] = [];
-  const files = await discoverMemoryFiles(repoRoot);
+  const files = await discoverMemoryFiles(
+    repoRoot,
+    opts.homeDir !== undefined ? { homeDir: opts.homeDir } : {},
+  );
 
   // Probe + populate per-file git stats unless --no-git.
   let isGitRepo = false;
@@ -85,6 +93,7 @@ export async function runCheckup(
         const stats = await perFileStats(repoRoot, f.path);
         if (stats !== null) {
           f.lastCommitTs = stats.lastCommitTs;
+          f.lastCommitHash = stats.lastCommitHash;
           const behind = await commitsBehindHead(repoRoot, stats.lastCommitHash);
           if (behind !== null) f.commitsBehindHead = behind;
         }
@@ -109,6 +118,7 @@ export async function runCheckup(
     config,
     noGit,
     isGitRepo,
+    homeDir: opts.homeDir ?? homedir(),
   };
 
   const findings: AuditFinding[] = [];

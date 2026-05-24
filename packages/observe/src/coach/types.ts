@@ -19,6 +19,8 @@ export interface MemoryFile {
   mtimeMs: number;
   /** Unix seconds of the file's last commit. Absent when --no-git or git unavailable. */
   lastCommitTs?: number;
+  /** sha of the file's last commit. Powers the D6a "what changed since" delight. Absent when --no-git or git unavailable. */
+  lastCommitHash?: string;
   /** `git rev-list --count <last-commit>..HEAD`. Absent when --no-git or git unavailable. */
   commitsBehindHead?: number;
   /**
@@ -56,6 +58,12 @@ export interface RunCheckupOptions {
    * `--check <id>` (repeatable). Unknown ids are silently ignored.
    */
   check?: readonly string[];
+  /**
+   * Override `os.homedir()` for hermetic testing. Production callers
+   * (CLI, MCP, HTTP route) should leave this unset; the discovery and
+   * config loaders fall back to the real homedir.
+   */
+  homeDir?: string;
 }
 
 /**
@@ -115,6 +123,13 @@ export interface AuditContext {
    * tree; null for runs against a non-repo path (user-global only).
    */
   isGitRepo: boolean;
+  /**
+   * Resolved homedir for the run. Used by dead-reference (for `~/`
+   * resolution) and skill-tools-drift (for `~/.claude/agents/`
+   * discovery). Production runs pass `os.homedir()`; tests pass a
+   * fixture path.
+   */
+  homeDir: string;
 }
 
 /**

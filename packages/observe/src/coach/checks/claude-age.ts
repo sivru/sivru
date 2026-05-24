@@ -9,6 +9,7 @@
 // file would ever flag, which would defeat the check's purpose.
 
 import type { AuditContext, AuditFinding, MemoryCheck, MemoryFile } from "../types.js";
+import { diffBucketsByFirstSegment } from "../git-stats.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -46,13 +47,29 @@ export const memoryClaudeAge: MemoryCheck = {
         data["mode"] = "mtime";
       }
 
+      // D6a "what changed since" delight — bucket the diff between the
+      // file's last commit and HEAD by first path segment, top-3 by
+      // count. Delight, not correctness — finding emits without the
+      // preview when git is unavailable or the diff fails.
+      let preview = "";
+      if (!ctx.noGit && ctx.isGitRepo && file.lastCommitHash !== undefined) {
+        const buckets = await diffBucketsByFirstSegment(ctx.repoRoot, file.lastCommitHash);
+        if (buckets !== null && buckets.length > 0) {
+          const parts = buckets.map((b) => `\`${b.segment}\` (${b.count} ${b.count === 1 ? "file" : "files"})`);
+          preview = ` Biggest changes since: ${parts.join(", ")}.`;
+          data["diffBuckets"] = buckets;
+        }
+      }
+
+      const baseSummary = hasCommitData
+        ? `${file.displayPath} last edited ${ageDays} days ago, ${commitsBehind} commits behind HEAD.`
+        : `${file.displayPath} last touched ${ageDays} days ago (mtime mode; commit count unavailable).`;
+
       out.push({
         checkId: memoryClaudeAge.id,
         severity: memoryClaudeAge.defaultSeverity,
         filePath: file.path,
-        summary: hasCommitData
-          ? `${file.displayPath} last edited ${ageDays} days ago, ${commitsBehind} commits behind HEAD.`
-          : `${file.displayPath} last touched ${ageDays} days ago (mtime mode; commit count unavailable).`,
+        summary: baseSummary + preview,
         detail:
           "File age is descriptive only — sivru does not know whether the content has drifted. Open the file and decide whether anything has gone stale since the last edit.",
         data,

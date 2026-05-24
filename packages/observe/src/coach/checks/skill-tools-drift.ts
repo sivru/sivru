@@ -11,7 +11,6 @@
 // uses (`tools: [A, B]` and the block-sequence form).
 
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 
 import type { AuditContext, AuditFinding, MemoryCheck } from "../types.js";
 import { discoverAgentNames, isBuiltInTool } from "../known-tools.js";
@@ -24,8 +23,7 @@ export const memorySkillToolsDrift: MemoryCheck = {
   appliesTo: ["skill", "agent"],
 
   async run(ctx: AuditContext): Promise<AuditFinding[]> {
-    const home = homedir();
-    const agentNames = await discoverAgentNames(ctx.repoRoot, home);
+    const agentNames = await discoverAgentNames(ctx.repoRoot, ctx.homeDir);
     const out: AuditFinding[] = [];
 
     for (const file of ctx.memoryFiles) {

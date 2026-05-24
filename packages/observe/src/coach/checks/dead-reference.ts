@@ -13,7 +13,6 @@
 // question for v0.10.
 
 import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 import type {
@@ -23,6 +22,8 @@ import type {
   MemoryFile,
 } from "../types.js";
 import { readFile } from "node:fs/promises";
+import { findRecentRename } from "../git-stats.js";
+import { relative } from "node:path";
 
 const MAX_FILE_BYTES = 200 * 1024;
 
@@ -47,7 +48,7 @@ export const memoryDeadReference: MemoryCheck = {
   appliesTo: ["*"],
 
   async run(ctx: AuditContext): Promise<AuditFinding[]> {
-    const home = homedir();
+    const home = ctx.homeDir;
     const out: AuditFinding[] = [];
 
     for (const file of ctx.memoryFiles) {
@@ -70,14 +71,30 @@ export const memoryDeadReference: MemoryCheck = {
         // typically short and exact matches cover the real-world cases.
         if (ctx.config.skipPaths.includes(filtered)) continue;
 
+        // D6b rename-suggestion delight. Look up rename history for the
+        // resolved path (relative to repoRoot — git understands repo-
+        // relative paths). Delight degrades silently on git failure.
+        let renameHint = "";
+        const data: Record<string, unknown> = { reference: filtered, resolved };
+        if (!ctx.noGit && ctx.isGitRepo) {
+          const repoRel = relative(ctx.repoRoot, resolved);
+          if (repoRel.length > 0 && !repoRel.startsWith("..")) {
+            const rename = await findRecentRename(ctx.repoRoot, repoRel);
+            if (rename !== null) {
+              renameHint = ` May have been renamed to \`${rename.target}\` in commit \`${rename.commit}\`.`;
+              data["renameSuggestion"] = rename;
+            }
+          }
+        }
+
         out.push({
           checkId: memoryDeadReference.id,
           severity: memoryDeadReference.defaultSeverity,
           filePath: file.path,
           line: cand.line,
-          summary: `${file.displayPath}:${cand.line} references \`${filtered}\` — no such file in the repo today.`,
+          summary: `${file.displayPath}:${cand.line} references \`${filtered}\` — no such file in the repo today.${renameHint}`,
           detail: `Resolved path: ${resolved}`,
-          data: { reference: filtered, resolved },
+          data,
         });
       }
 
