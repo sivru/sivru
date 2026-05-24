@@ -493,6 +493,57 @@ describe("mcp-entry — explain routing hint", () => {
   });
 });
 
+describe("mcp-entry — checkup tool over the in-memory client", () => {
+  it("returns a valid CheckupReport for a tmp path", async () => {
+    const { client, close } = await connectedClient();
+    try {
+      const result = await client.callTool({
+        name: "checkup",
+        arguments: { path: root, noGit: true },
+      });
+      expect(result.isError).toBe(false);
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content.length).toBeGreaterThan(0);
+      const report = JSON.parse(content[0]?.text ?? "{}") as {
+        schema: number;
+        files: unknown[];
+        findings: unknown[];
+        diagnostics: unknown[];
+      };
+      expect(report.schema).toBe(1);
+      expect(Array.isArray(report.files)).toBe(true);
+      expect(Array.isArray(report.findings)).toBe(true);
+      expect(Array.isArray(report.diagnostics)).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it("filters checks via the `check` argument", async () => {
+    const { client, close } = await connectedClient();
+    try {
+      const result = await client.callTool({
+        name: "checkup",
+        arguments: {
+          path: root,
+          noGit: true,
+          check: ["memory-claude-age"],
+        },
+      });
+      expect(result.isError).toBe(false);
+      const content = result.content as Array<{ type: string; text: string }>;
+      const report = JSON.parse(content[0]?.text ?? "{}") as {
+        findings: Array<{ checkId: string }>;
+      };
+      for (const f of report.findings) {
+        expect(f.checkId).toBe("memory-claude-age");
+      }
+    } finally {
+      await close();
+    }
+  });
+});
+
 describe("mcp-entry — index cache", () => {
   it("does not rebuild the index on a second search of the same path", async () => {
     await write("a.ts", "function alpha() {}");

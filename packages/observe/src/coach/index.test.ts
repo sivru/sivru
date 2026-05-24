@@ -147,6 +147,41 @@ describe("runCheckup — integration", () => {
     expect(report.findings.find((f) => f.checkId === "memory-dead-reference")).toBeUndefined();
   });
 
+  it("D6a delight: aged finding includes 'Biggest changes since:' preview", async () => {
+    if (!(await gitAvailable())) return;
+    // Lower thresholds to 0 so the file flags immediately. Adds a few
+    // commits across two segments so the diff bucket has content.
+    await mkdir(join(tmp, ".sivru"), { recursive: true });
+    await writeFile(
+      join(tmp, ".sivru", "checkup.json"),
+      JSON.stringify({ ageDays: 0, ageCommits: 0 }),
+    );
+    await commit(tmp, { "CLAUDE.md": "# anchor" }, "init claude");
+    // Add commits across two first-path segments so D6a has content to bucket.
+    await commit(tmp, { "src/a.ts": "1", "src/b.ts": "2" }, "src");
+    await commit(tmp, { "docs/x.md": "y" }, "docs");
+
+    const report = await runCheckup(tmp, { homeDir: tmp });
+    const aged = report.findings.find((f) => f.checkId === "memory-claude-age");
+    expect(aged).toBeDefined();
+    expect(aged?.summary).toMatch(/Biggest changes since:/);
+    expect(aged?.summary).toMatch(/(src|docs)\//);
+  });
+
+  it("D6b delight: dead-reference includes 'May have been renamed to' on a known rename", async () => {
+    if (!(await gitAvailable())) return;
+    await commit(tmp, { "scanner.ts": "export const x = 1;\nexport const y = 2;\n" }, "init");
+    await runCmd("git", ["mv", "scanner.ts", "audit.ts"], { cwd: tmp });
+    await runCmd("git", ["commit", "-q", "-m", "rename"], { cwd: tmp });
+    await commit(tmp, { "CLAUDE.md": "See `scanner.ts` for details." }, "add claude");
+
+    const report = await runCheckup(tmp, { homeDir: tmp });
+    const drf = report.findings.find((f) => f.checkId === "memory-dead-reference");
+    expect(drf).toBeDefined();
+    expect(drf?.summary).toMatch(/scanner\.ts/);
+    expect(drf?.summary).toMatch(/May have been renamed to.*audit\.ts/);
+  });
+
   it("emits SIVRU-E244 diagnostic when run against a non-git dir", async () => {
     const dir = await mkdtemp(join(tmpdir(), "sivru-nogit-"));
     await writeFile(join(dir, "CLAUDE.md"), "# x");

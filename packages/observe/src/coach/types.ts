@@ -75,7 +75,15 @@ export interface CheckupConfig {
   ageCommits: number;
   disabled: string[];
   severityOverrides: Record<string, Severity>;
-  /** Globs of paths whose missing-target findings should be suppressed in dead-reference. */
+  /**
+   * Exact reference strings to suppress in dead-reference findings.
+   *
+   * v0.9.0 limitation: literal match only. The design (§8) describes
+   * glob semantics; v0.9.x will swap in minimatch once a dep approval
+   * is in place (CLAUDE.md forbids adding deps silently). Today a value
+   * of `"docs/x.md"` suppresses only the literal `\`docs/x.md\`` mention;
+   * `"docs/**"` would NOT suppress `\`docs/y.md\``.
+   */
   skipPaths: string[];
   pathExtensions: string[];
 }

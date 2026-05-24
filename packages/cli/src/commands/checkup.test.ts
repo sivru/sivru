@@ -1,8 +1,38 @@
-// Argument-parsing tests for `sivru checkup`.
+// Argument-parsing + end-to-end spawn tests for `sivru checkup`.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { parseCheckupArgs } from "./checkup.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CLI_BIN = resolve(HERE, "../../dist/index.js");
+
+function runCli(
+  args: readonly string[],
+  cwd: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolveFn) => {
+    execFile(
+      "node",
+      [CLI_BIN, ...args],
+      { cwd, timeout: 30_000, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        const e = err as NodeJS.ErrnoException | null;
+        const code = e === null ? 0 : (typeof (e as { code?: unknown }).code === "number" ? Number((e as { code: number }).code) : 1);
+        resolveFn({
+          code,
+          stdout: typeof stdout === "string" ? stdout : "",
+          stderr: typeof stderr === "string" ? stderr : "",
+        });
+      },
+    );
+  });
+}
 
 describe("parseCheckupArgs", () => {
   it("defaults path to cwd", () => {
@@ -52,5 +82,36 @@ describe("parseCheckupArgs", () => {
   it("rejects more than one positional", () => {
     const r = parseCheckupArgs(["a", "b"]);
     expect(r.kind).toBe("err");
+  });
+});
+
+describe("sivru checkup — CLI end-to-end (spawn)", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(join(tmpdir(), "sivru-cli-checkup-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("exits 1 with SIVRU-E241 when the path argument doesn't exist", async () => {
+    const r = await runCli(["checkup", join(tmp, "nope")], tmp);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/SIVRU-E241/);
+  });
+
+  it("exits 0 with --json and emits a valid CheckupReport for an empty dir", async () => {
+    const r = await runCli(["checkup", "--no-git", "--json", tmp], tmp);
+    expect(r.code).toBe(0);
+    const parsed = JSON.parse(r.stdout) as { schema: number };
+    expect(parsed.schema).toBe(1);
+  });
+
+  it("exits 0 and prints the 'everything checked' message on a clean tmp", async () => {
+    const r = await runCli(["checkup", "--no-git", tmp], tmp);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/Everything checked|files scanned/);
   });
 });
