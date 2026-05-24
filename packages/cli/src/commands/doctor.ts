@@ -9,12 +9,13 @@
 //
 // Exit code: 0 if no checks failed (warnings are fine), 1 if any failed.
 
-import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { runCmd, type ExecResult } from "@sivru/observe/coach";
 
 import { SIVRU_VERSION } from "./version.js";
 
@@ -46,29 +47,20 @@ export function parseNodeVersion(raw: string): ParsedNodeVersion | null {
   };
 }
 
-function exec(
+// Doctor's checks consume the legacy shape `{ code, stdout, stderr }`
+// where `code === 127` denotes "binary missing". The shared `runCmd`
+// wrapper (DESIGN-0005 A3) returns a discriminated union; we adapt
+// here so the rest of doctor.ts and its tests stay unchanged.
+async function exec(
   cmd: string,
   args: readonly string[],
   timeoutMs = 4000,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolveFn) => {
-    const child = execFile(
-      cmd,
-      args,
-      { timeout: timeoutMs, encoding: "utf8" },
-      (err, stdout, stderr) => {
-        resolveFn({
-          code: err === null ? 0 : ((err as NodeJS.ErrnoException).code === undefined ? 1 : 1),
-          stdout: typeof stdout === "string" ? stdout : "",
-          stderr: typeof stderr === "string" ? stderr : "",
-        });
-      },
-    );
-    child.on("error", () => {
-      // Spawning failed (binary missing); resolve with code 127.
-      resolveFn({ code: 127, stdout: "", stderr: "" });
-    });
-  });
+  const r: ExecResult = await runCmd(cmd, args, { timeoutMs });
+  if (r.ok) return { code: 0, stdout: r.stdout, stderr: "" };
+  if (r.reason === "missing") return { code: 127, stdout: "", stderr: r.stderr };
+  // Both "non-zero" and "timeout" map to exit-1 for the legacy callers.
+  return { code: 1, stdout: "", stderr: r.stderr };
 }
 
 // ---------------------------------------------------------------------------

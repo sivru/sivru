@@ -21,6 +21,7 @@ import { Banner } from "./components/Banner";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SavingsFooter } from "./components/SavingsFooter";
 import { BenchView } from "./components/BenchView";
+import { CheckupView } from "./components/CheckupView";
 import { CostsView } from "./components/CostsView";
 import { ReplayView } from "./components/ReplayView";
 import { SetupChecklist } from "./components/SetupChecklist";
@@ -30,7 +31,7 @@ import { computeSearchProvenance } from "./search-provenance";
 import type { Session, SessionSavings, SivruEvent } from "./types";
 import { isLive, isSivruSearchTool } from "./util";
 
-type View = "sessions" | "replay" | "costs" | "bench";
+type View = "sessions" | "checkup" | "replay" | "costs" | "bench";
 
 type LoadState<T> =
   | { status: "idle" }
@@ -39,6 +40,26 @@ type LoadState<T> =
   | { status: "error"; message: string };
 
 const WIRE_UP_HELP_URL = "https://github.com/sivru/sivru#observe";
+
+/**
+ * DESIGN-0005 E2: Checkup tab reads `selectedProject` from App state
+ * (the sidebar filter); falls back to the most-recent session's
+ * `projectRoot` when null. Returns null when neither is available so
+ * the tab can render the empty state.
+ */
+function resolveCheckupPath(
+  selectedProject: string | null,
+  sessionsState: LoadState<Session[]>,
+): string | null {
+  if (selectedProject !== null && selectedProject.length > 0) return selectedProject;
+  if (sessionsState.status !== "ready") return null;
+  // sessions are already sorted by updatedAt desc in the API layer; the
+  // first one is the most recently-active.
+  const first = sessionsState.data[0];
+  if (first === undefined) return null;
+  if (first.projectRoot.length === 0) return null;
+  return first.projectRoot;
+}
 
 // Stable reference for the "no events yet" state. Avoids feeding a fresh
 // `[]` into useMemo deps on each render while a session is loading.
@@ -484,7 +505,7 @@ export function App(): JSX.Element {
           <span>observe</span>
         </div>
         <nav className="flex gap-1 text-xs">
-          {(["sessions", "replay", "costs", "bench"] as const).map((v) => {
+          {(["sessions", "checkup", "replay", "costs", "bench"] as const).map((v) => {
             const active = view === v;
             return (
               <button
@@ -514,6 +535,8 @@ export function App(): JSX.Element {
       </header>
       {view === "bench" ? (
         <BenchView />
+      ) : view === "checkup" ? (
+        <CheckupView path={resolveCheckupPath(selectedProject, sessionsState)} />
       ) : view === "costs" ? (
         <main className="min-h-0 flex-1">
           <CostsView

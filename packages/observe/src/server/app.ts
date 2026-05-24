@@ -29,6 +29,8 @@ import type { JsonlSourceOptions } from "../sources/jsonl/index.js";
 import type { SivruEvent } from "../types.js";
 import { estimateSavings } from "../cost/savings.js";
 import { aggregateReplay, replaySession } from "../replay/index.js";
+import { runCheckup, CheckupConfigError } from "../coach/index.js";
+import { probeGit } from "../coach/git-stats.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
@@ -348,6 +350,86 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     return c.json({ runs });
   });
 
+  // ----- /api/checkup (DESIGN-0005 §2) -----
+  //
+  // Returns the CheckupReport for `path`. Path safety: must be an
+  // existing absolute directory contained under the user's homedir OR
+  // under any git working tree. When the git binary isn't on PATH, the
+  // containment check degrades to homedir-only and surfaces an
+  // SIVRU-E244 info diagnostic in the response body.
+  app.get("/api/checkup", async (c) => {
+    const rawPath = c.req.query("path") ?? "";
+    if (rawPath.length === 0) {
+      return c.json({ error: "missing path query param" }, 400);
+    }
+    if (!isAbsolutePathStrict(rawPath)) {
+      return c.json(
+        { error: "SIVRU-E245 path must be absolute", code: "SIVRU-E245" },
+        400,
+      );
+    }
+    const abs = normalize(rawPath);
+
+    let st: { isDirectory(): boolean };
+    try {
+      st = await stat(abs);
+    } catch {
+      return c.json(
+        { error: "SIVRU-E241 path doesn't exist", code: "SIVRU-E241" },
+        400,
+      );
+    }
+    if (!st.isDirectory()) {
+      return c.json(
+        { error: "SIVRU-E241 not a directory", code: "SIVRU-E241" },
+        400,
+      );
+    }
+
+    const containment = await checkupPathContained(abs);
+    if (!containment.allowed) {
+      return c.json(
+        { error: "SIVRU-E245 checkup-path-unsafe", code: "SIVRU-E245" },
+        400,
+      );
+    }
+
+    const noGit = parseTruthy(c.req.query("noGit"));
+    const checkParams = c.req.queries("check") ?? [];
+    const check: string[] = [];
+    for (const p of checkParams) {
+      // Accept comma-separated values too: ?check=A,B
+      for (const v of p.split(",")) {
+        const t = v.trim();
+        if (t.length > 0) check.push(t);
+      }
+    }
+
+    try {
+      const report = await runCheckup(abs, {
+        noGit,
+        ...(check.length > 0 ? { check } : {}),
+      });
+      // Forward A7 graceful-degradation diagnostic when the
+      // containment check fell back to homedir-only.
+      if (containment.degraded === true) {
+        report.diagnostics.push({
+          code: "SIVRU-E244",
+          severity: "info",
+          message:
+            "git binary missing on the server — path-safety check ran in homedir-only mode.",
+        });
+      }
+      return c.json(report);
+    } catch (err) {
+      if (err instanceof CheckupConfigError) {
+        return c.json({ error: `${err.code}: ${err.message}`, code: err.code }, 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 500);
+    }
+  });
+
   app.get("/api/bench-history/:id", async (c) => {
     const id = c.req.param("id");
     // Reject any path-shaped id — directory traversal guard.
@@ -428,4 +510,47 @@ function parseLimit(raw: string | undefined): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_EVENT_LIMIT;
   return n;
+}
+
+function parseTruthy(raw: string | undefined): boolean {
+  if (raw === undefined) return false;
+  if (raw === "" || raw === "1" || raw.toLowerCase() === "true") return true;
+  return false;
+}
+
+function isAbsolutePathStrict(p: string): boolean {
+  // node:path.isAbsolute accepts both POSIX and Windows shapes; we want
+  // platform-native absolute paths only.
+  if (process.platform === "win32") return /^[a-zA-Z]:[\\/]/.test(p);
+  return p.startsWith("/");
+}
+
+interface ContainmentResult {
+  allowed: boolean;
+  degraded?: true;
+}
+
+/**
+ * DESIGN-0005 §2 path-safety: allow `abs` if it is under `homedir()` OR
+ * inside (or a descendant of) a git working tree. When the git binary
+ * is missing on the server, degrade to homedir-only and surface the
+ * fallback via `degraded: true` so the caller can attach SIVRU-E244.
+ */
+async function checkupPathContained(abs: string): Promise<ContainmentResult> {
+  const home = homedir();
+  if (isUnder(abs, home)) return { allowed: true };
+  const probe = await probeGit(abs);
+  if (probe.available) return { allowed: true };
+  if (probe.reason === "missing") {
+    return { allowed: false, degraded: true };
+  }
+  return { allowed: false };
+}
+
+function isUnder(child: string, parent: string): boolean {
+  const c = normalize(child);
+  const p = normalize(parent);
+  if (c === p) return true;
+  const pTrim = p.endsWith(sep) ? p : p + sep;
+  return c.startsWith(pTrim);
 }

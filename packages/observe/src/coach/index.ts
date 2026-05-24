@@ -39,6 +39,7 @@ export type {
 export { CheckupConfigError, DEFAULT_CONFIG, loadCheckupConfig } from "./config.js";
 export { discoverMemoryFiles } from "./load.js";
 export { BUILT_IN_CLAUDE_CODE_TOOLS, discoverAgentNames, isBuiltInTool } from "./known-tools.js";
+export { runCmd, type ExecOptions, type ExecResult } from "./exec.js";
 export { memoryClaudeAge } from "./checks/claude-age.js";
 export { memoryDeadReference } from "./checks/dead-reference.js";
 export { memorySkillToolsDrift } from "./checks/skill-tools-drift.js";

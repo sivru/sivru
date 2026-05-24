@@ -7,6 +7,143 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-05-24
+
+**Coach loop v1 — skill drift.** Three deterministic, descriptive checks
+that surface drift in Claude Code memory files (`CLAUDE.md`, every
+`SKILL.md`, every agent file) against the current state of the repo. The
+checks render the fact, never a judgment — "your CLAUDE.md is 130 days
+old, 487 commits behind HEAD" — and the user decides whether the file
+needs attention. Library + CLI + MCP + HTTP route + observe-ui Checkup
+tab ship together. See
+[DESIGN-0005](docs/design/0005-coach-loop-skill-drift.md).
+
+### Added
+
+- **`@sivru/observe/coach` library entry**:
+  `runCheckup(repoRoot, opts): Promise<CheckupReport>`. Schema version
+  pinned to `1`. Returns every memory file considered, every finding,
+  the resolved config (echoed back), and any infrastructure
+  diagnostics (e.g. `SIVRU-E244` git unavailable).
+- **Three built-in checks**:
+  - `memory-claude-age` (default `info`) — fires when a file is
+    BOTH ≥ 90 days old AND ≥ 50 commits behind HEAD; mtime fallback
+    when git is unavailable. **D6a delight:** the finding's summary
+    appends a one-line "Biggest changes since: <segment> (N files),
+    …" preview when `git diff --name-only --diff-filter=AMD
+    <last-commit>..HEAD` succeeds.
+  - `memory-dead-reference` (default `warning`) — flags inline-code
+    path mentions inside memory files that don't resolve on disk
+    today. Filters by "path-separator OR known extension" so bare
+    identifiers / npm packages stay out (mostly). Skips fenced code
+    blocks per CommonMark §4.3 + §4.4. **D6b delight:** when a
+    matching rename is found in the file's git history (the
+    deletion commit's `git show --name-status` carries an `R<score>`
+    line with `<score> >= 90`), the finding appends "May have been
+    renamed to `<target>` in commit `<sha>`."
+  - `memory-skill-tools-drift` (default `warning`) — validates
+    `tools:` entries in SKILL.md and agent-file YAML front-matter
+    against the documented Claude Code built-in tool set (pinned
+    in `known-tools.ts` with a `LAST_VERIFIED:` header asserted by
+    CI) plus discoverable subagent names from `.claude/agents/`.
+- **CLI:** `sivru checkup [path] [--json] [--check <id>] [--no-git]`
+  in `packages/cli/src/commands/checkup.ts`. Defaults `path` to cwd.
+  Exit codes: 0 on findings (descriptive only — not an error); 1 on
+  config-malformed (`SIVRU-E240`) or path-missing (`SIVRU-E241`).
+- **MCP:** `checkup` tool registered in the stdio MCP server. Args:
+  `{ path?: string, noGit?: boolean, check?: string[] }`. Returns
+  the `CheckupReport` JSON shape.
+- **HTTP:** `GET /api/checkup?path=<absolute>` on the observe Hono
+  app. Path safety: must be (a) absolute, (b) an existing directory,
+  AND (c) contained under `homedir()` OR a git working tree. Falls
+  back to homedir-only containment when the server's git binary is
+  missing — surfaces a `SIVRU-E244` info diagnostic in the response.
+  Reuses the existing localhost-only CORS.
+- **observe-ui Checkup tab** between Sessions and Replay (tab order:
+  Sessions / Checkup / Replay / Costs / Bench). Reads
+  `selectedProject` from App state (sidebar filter), falls back to
+  the most-recent session's `projectRoot` when null. Findings table
+  groups by file with severity-descending sort within each file
+  (errors → warnings → info, design-D1). Files-without-findings
+  collapse to a disclosure at the bottom; unreadable files render
+  italic with a "Skipped: cannot read" badge.
+- **Three-layer config** (`packages/observe/src/coach/config.ts`):
+  built-in defaults → user-global `~/.config/sivru/checkup.json` →
+  project `<repoRoot>/.sivru/checkup.json` (wins). Schema:
+  `{ ageDays, ageCommits, disabled, severityOverrides, skipPaths,
+  pathExtensions }`. `pathExtensions` is override-replaces-default
+  (matches v0.6 `maturityValues` precedent); `disabled` and
+  `severityOverrides` merge additively.
+- **Stub deletion:** `packages/cli/src/lib/memory-audit/types.ts`
+  removed (superseded by the new module; nothing imported it).
+- **Shared exec wrapper** at `packages/observe/src/coach/exec.ts`
+  (per eng-review A3). `packages/cli/src/commands/doctor.ts` now
+  consumes it through a thin compat adapter; the duplication never
+  landed.
+
+### Diagnostic codes (DESIGN-0005 §4)
+
+- `SIVRU-E240` `checkup-config-malformed` — error, blocks the run.
+- `SIVRU-E241` `checkup-path-missing` — error, blocks the run.
+- `SIVRU-E242` `checkup-file-too-large` — warning; file scanned to
+  the first 200KB only.
+- `SIVRU-E244` `checkup-git-unavailable` — info; mtime-only mode.
+- `SIVRU-E245` `checkup-path-unsafe` — error; HTTP route rejects.
+- `SIVRU-E243` reserved for v0.10's dynamic `.sivru/checkup/*.ts`
+  loader (deferred from v0.9 entirely per the customization shape).
+
+### Privacy
+
+- The new `coach/` module is covered by the existing
+  `packages/observe/src/egress.test.ts` static + runtime checks: no
+  `fetch` / `node:http` / `node:https` / `node:net` / `node:tls` /
+  `undici` imports. `node:child_process` is allowed for the
+  `git`-shell-out path (local IO, not network egress); a new test
+  asserts this is the only sub-process boundary.
+
+### Known false-positive patterns (deferred to v0.9.x)
+
+The `memory-dead-reference` check's "path-shape" filter follows the
+design's spec literally (DESIGN-0005 §3b: `path separator OR known
+extension`). Dogfooding this repo surfaced several real-world
+patterns that match the filter but aren't file paths:
+
+- Scoped npm packages (`@scope/package`).
+- GitHub Action refs (`pnpm/action-setup@v4`).
+- Slash-command names from gstack-style skills (`/freeze`,
+  `/sync-gbrain`).
+- Pattern strings (`.test.ts`).
+- Directory references with trailing `/` (`src/commands/`).
+
+The design's < 10% FP-rate gate is meant to catch this — an honest
+real-world FP corpus is in scope per D7 but **NOT included in v0.9.0**
+(see "Deferred" below). A v0.9.x point release will tighten the
+filter once the FP-corpus exists to measure against.
+
+### Deferred
+
+- **FP-rate corpus** — DESIGN-0005 §Test plan requires 10–20
+  anonymized real-world OSS memory files with per-span labels and
+  per-file `attribution.md`. v0.9.0 ships without this; it requires
+  manual judgment (which OSS repos? what counts as "personal info"?
+  is partial anonymization honest?) that a single autonomous run
+  couldn't credibly produce. **Tracked as a v0.9.x follow-up.**
+- **Performance gate measurement.** Design asks for a measured
+  number on this repo (< 200ms p95) + a 50-file fixture (< 1s).
+  v0.9.0 demonstrates the library works end-to-end on this repo
+  (51 memory files, ~800ms with both git delights enabled), but
+  the formal perf gate with a 50-file synthesized fixture is a
+  v0.9.x follow-up.
+- **observe-ui browser smoke test.** The Checkup tab ships with
+  logic-only unit tests for `groupFindings`. A React-mount smoke
+  test against a mocked `/api/checkup` is deferred — observe-ui
+  does not declare `@testing-library/react`, and CLAUDE.md forbids
+  adding dependencies without explicit approval. Manual browser
+  verification needed before promoting to a stable release.
+- **Repo-mixed and repo-rename fixture repos.** The integration
+  test in `coach/index.test.ts` covers the same paths through
+  seeded temp git repos; standalone fixtures are a v0.9.x add.
+
 ## [0.6.0] — 2026-05-22
 
 `@sivru` annotation blocks — small, structured, language-neutral blocks of

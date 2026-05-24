@@ -42,6 +42,7 @@ import type {
   SearchHit,
   SivruIndex,
 } from "@sivru/search";
+import { runCheckup, CheckupConfigError } from "@sivru/observe/coach";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
@@ -92,6 +93,29 @@ const EXPLAIN_INPUT_SCHEMA = {
     repoRoot: { type: "string", default: "." },
   },
   required: ["path"],
+};
+
+const CHECKUP_TOOL_NAME = "checkup";
+// Routing hint: the trust-the-memory-file workflow. Before reading
+// CLAUDE.md / a SKILL.md / an agent file as authoritative, this tool
+// tells you whether it's aged or has dead references — staleness is
+// data, not judgment.
+export const CHECKUP_TOOL_DESCRIPTION =
+  "Inspect Claude Code memory files (CLAUDE.md, SKILL.md, agent " +
+  "files) for drift against the current repo state. Returns three " +
+  "built-in checks: memory-claude-age (descriptive file age + churn), " +
+  "memory-dead-reference (inline-code path mentions that no longer " +
+  "resolve), and memory-skill-tools-drift (front-matter `tools:` " +
+  "entries that name no built-in or discoverable subagent). Use " +
+  "before trusting a memory file you didn't just edit.";
+const CHECKUP_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    path: { type: "string", default: "." },
+    noGit: { type: "boolean", default: false },
+    check: { type: "array", items: { type: "string" } },
+  },
+  required: [],
 };
 
 const FIND_RELATED_TOOL_NAME = "find_related";
@@ -695,6 +719,34 @@ export async function explainTool(rawArgs: unknown): Promise<ToolResult> {
   }
 }
 
+/**
+ * MCP envelope for the checkup tool (DESIGN-0005 §2). Returns the full
+ * CheckupReport JSON shape.
+ */
+async function checkupTool(args: Record<string, unknown>): Promise<ToolResult> {
+  const rawPath = typeof args["path"] === "string" ? args["path"] : ".";
+  const path = resolvePath(rawPath);
+  const noGit = args["noGit"] === true;
+  const checkArg = args["check"];
+  const check = Array.isArray(checkArg)
+    ? checkArg.filter((s): s is string => typeof s === "string")
+    : undefined;
+
+  try {
+    const report = await runCheckup(path, {
+      noGit,
+      ...(check !== undefined && check.length > 0 ? { check } : {}),
+    });
+    return ok(JSON.stringify(report));
+  } catch (err) {
+    if (err instanceof CheckupConfigError) {
+      return fail(`${err.code}: ${err.message}`);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return fail(`checkup failed: ${message}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Server wiring — exported so tests can drive it over an in-memory transport.
 // ---------------------------------------------------------------------------
@@ -722,6 +774,11 @@ export function createMcpServer(): Server {
         description: EXPLAIN_TOOL_DESCRIPTION,
         inputSchema: EXPLAIN_INPUT_SCHEMA,
       },
+      {
+        name: CHECKUP_TOOL_NAME,
+        description: CHECKUP_TOOL_DESCRIPTION,
+        inputSchema: CHECKUP_INPUT_SCHEMA,
+      },
     ],
   }));
 
@@ -735,6 +792,8 @@ export function createMcpServer(): Server {
           return await findRelatedTool(args ?? {});
         case EXPLAIN_TOOL_NAME:
           return await explainTool(args ?? {});
+        case CHECKUP_TOOL_NAME:
+          return await checkupTool(args ?? {});
         default:
           return fail(`unknown tool: ${name}`);
       }
