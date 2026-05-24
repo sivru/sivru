@@ -34,7 +34,7 @@ import { probeGit } from "../coach/git-stats.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
-const SIVRU_OBSERVE_VERSION = "0.1.0";
+const SIVRU_OBSERVE_VERSION = "0.9.0";
 
 export type ObserveAppOptions = {
   /**
