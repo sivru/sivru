@@ -132,7 +132,7 @@ function formatHumanReport(r: CheckupReport): string {
   if (r.diagnostics.length > 0) lines.push("");
 
   if (r.findings.length === 0) {
-    lines.push(`✓ Everything checked, nothing aged or dead. (${r.files.length} files)`);
+    lines.push(`Everything checked, nothing aged or dead. (${r.files.length} files)`);
     return lines.join("\n") + "\n";
   }
 

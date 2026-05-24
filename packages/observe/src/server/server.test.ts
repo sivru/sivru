@@ -515,14 +515,30 @@ describe("@sivru/observe — HTTP server", () => {
       expect(body.code).toBe("SIVRU-E245");
     });
 
-    it("rejects with 400 + SIVRU-E241 for a missing path", async () => {
+    it("rejects with 400 + SIVRU-E241 for a missing path inside the allowed surface", async () => {
+      // The missing path must be inside the user's homedir (or a git
+      // tree) so containment passes — then the stat fails and we get
+      // SIVRU-E241. Otherwise containment rejects first with SIVRU-E245
+      // (correct security order: don't leak existence outside the
+      // allowed surface).
+      const { homedir } = await import("node:os");
+      const app = buildApp();
+      const res = await app.fetch(
+        new Request(`http://localhost/api/checkup?path=${encodeURIComponent(`${homedir()}/nope-no-such-dir-${Date.now()}`)}`),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("SIVRU-E241");
+    });
+
+    it("rejects with 400 + SIVRU-E245 for missing paths OUTSIDE the allowed surface (no existence leak)", async () => {
       const app = buildApp();
       const res = await app.fetch(
         new Request("http://localhost/api/checkup?path=/nope/does/not/exist/anywhere"),
       );
       expect(res.status).toBe(400);
       const body = (await res.json()) as { code: string };
-      expect(body.code).toBe("SIVRU-E241");
+      expect(body.code).toBe("SIVRU-E245");
     });
 
     it("rejects with 400 when path is outside homedir AND not a git tree", async () => {

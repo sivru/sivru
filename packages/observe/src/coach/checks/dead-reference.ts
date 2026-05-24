@@ -277,6 +277,12 @@ export function filterAndNormalize(
   let s = raw;
   // Whitespace-containing strings are almost never paths.
   if (/\s/.test(s)) return null;
+  // URL-scheme prefixes (`https://`, `mailto:`, `git@`-via-scheme, etc.)
+  // are never file paths. Mirrors the same check the markdown-link
+  // extractor applies to its targets — without this, an inline-code
+  // span like `\`https://example.com/spec.md\`` would qualify via the
+  // "/" separator + ".md" extension and produce a SIVRU false positive.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return null;
   // Strip fragment / query if present.
   const hashIdx = s.indexOf("#");
   if (hashIdx >= 0) s = s.slice(0, hashIdx);

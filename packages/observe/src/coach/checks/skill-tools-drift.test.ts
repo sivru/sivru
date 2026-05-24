@@ -106,4 +106,17 @@ describe("memorySkillToolsDrift (integration)", () => {
     const out = await memorySkillToolsDrift.run(ctx([claudeMd]));
     expect(out).toEqual([]);
   });
+
+  it("attributes the finding to the actual line of `tools:` in the file", async () => {
+    // 5 lines of front-matter content; `tools:` is on line 5 of the file.
+    const f = await writeSkill(
+      "with-offset",
+      "---\nname: x\ndescription: y\nappliesTo:\n  - .*\ntools: [BogusTool]\n---\nbody",
+    );
+    const out = await memorySkillToolsDrift.run(ctx([f]));
+    expect(out).toHaveLength(1);
+    // The `tools:` line is line 6 (1-indexed: `---`, `name`, `description`,
+    // `appliesTo:`, `  - .*`, `tools:`).
+    expect(out[0]?.line).toBe(6);
+  });
 });

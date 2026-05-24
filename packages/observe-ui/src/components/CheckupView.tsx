@@ -110,9 +110,7 @@ export function CheckupView({ path }: CheckupViewProps): JSX.Element {
           {state.status === "loading" ? "Refreshing…" : "Refresh"}
         </button>
         {state.status === "ready" && (
-          <span aria-live="polite">
-            Fetched {formatRelative(state.fetchedAtMs)}
-          </span>
+          <span aria-live="polite">{formatFetchLabel(state.fetchedAtMs)}</span>
         )}
       </div>
 
@@ -299,10 +297,10 @@ export function groupFindings(report: CheckupReport): Grouped {
   return { withFindings, noFindings, unreadable };
 }
 
-function formatRelative(thenMs: number): string {
+function formatFetchLabel(thenMs: number): string {
   const dt = Math.max(0, Date.now() - thenMs);
-  if (dt < 5_000) return "just now";
-  if (dt < 60_000) return `${Math.floor(dt / 1000)}s ago`;
-  if (dt < 3_600_000) return `${Math.floor(dt / 60_000)}m ago`;
-  return `${Math.floor(dt / 3_600_000)}h ago`;
+  if (dt < 5_000) return "Just fetched";
+  if (dt < 60_000) return `Fetched ${Math.floor(dt / 1000)}s ago`;
+  if (dt < 3_600_000) return `Fetched ${Math.floor(dt / 60_000)}m ago`;
+  return `Fetched ${Math.floor(dt / 3_600_000)}h ago`;
 }

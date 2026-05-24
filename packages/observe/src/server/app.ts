@@ -370,6 +370,18 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     }
     const abs = normalize(rawPath);
 
+    // Containment check runs BEFORE `stat` so we don't leak the
+    // existence (or non-existence) of paths outside the allowed
+    // surface — e.g. probing `/etc/shadow` returns SIVRU-E245
+    // uniformly whether the file exists or not.
+    const containment = await checkupPathContained(abs);
+    if (!containment.allowed) {
+      return c.json(
+        { error: "SIVRU-E245 checkup-path-unsafe", code: "SIVRU-E245" },
+        400,
+      );
+    }
+
     let st: { isDirectory(): boolean };
     try {
       st = await stat(abs);
@@ -382,14 +394,6 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     if (!st.isDirectory()) {
       return c.json(
         { error: "SIVRU-E241 not a directory", code: "SIVRU-E241" },
-        400,
-      );
-    }
-
-    const containment = await checkupPathContained(abs);
-    if (!containment.allowed) {
-      return c.json(
-        { error: "SIVRU-E245 checkup-path-unsafe", code: "SIVRU-E245" },
         400,
       );
     }

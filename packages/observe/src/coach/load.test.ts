@@ -51,6 +51,18 @@ describe("discoverMemoryFiles", () => {
     expect(out.find((f) => f.path.includes("/d/SKILL.md"))).toBeUndefined();
   });
 
+  it("depth-3-below-anchor matches; depth-4-below-anchor rejects (the exact design boundary)", async () => {
+    // .claude/skills/foo/SKILL.md → depth 3 below .claude/ → matches.
+    // .claude/skills/foo/sub/SKILL.md → depth 4 → rejects.
+    await mkdir(join(repoRoot, ".claude", "skills", "foo", "sub"), { recursive: true });
+    await writeFile(join(repoRoot, ".claude", "skills", "foo", "SKILL.md"), "# shallow");
+    await writeFile(join(repoRoot, ".claude", "skills", "foo", "sub", "SKILL.md"), "# nested");
+    const out = await discoverMemoryFiles(repoRoot, { homeDir });
+    const paths = out.map((f) => f.displayPath);
+    expect(paths).toContain("./.claude/skills/foo/SKILL.md");
+    expect(paths).not.toContain("./.claude/skills/foo/sub/SKILL.md");
+  });
+
   it("finds agent files in .claude/agents/*.md", async () => {
     await mkdir(join(repoRoot, ".claude", "agents"), { recursive: true });
     await writeFile(join(repoRoot, ".claude", "agents", "Foo.md"), "# foo agent");

@@ -40,6 +40,12 @@ describe("filterAndNormalize", () => {
   it("rejects whitespace-containing strings", () => {
     expect(filterAndNormalize("foo bar", exts)).toBeNull();
   });
+
+  it("rejects URL-scheme strings inside inline-code spans (false-positive guard)", () => {
+    expect(filterAndNormalize("https://example.com/spec.md", exts)).toBeNull();
+    expect(filterAndNormalize("mailto:x@example.com", exts)).toBeNull();
+    expect(filterAndNormalize("git+ssh://github.com/foo/bar.git", exts)).toBeNull();
+  });
 });
 
 describe("scanForPathCandidates — fence handling", () => {

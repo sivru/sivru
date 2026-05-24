@@ -118,16 +118,25 @@ async function isFile(p: string): Promise<boolean> {
  * and accepted).
  */
 async function walkSkills(root: string): Promise<string[]> {
-  return walkForFile(root, SKILLS_GLOB_FILE, /*startDepth*/ 1);
+  // The walker increments depth on every recursion. `<root>` is the
+  // `.claude/skills/` directory — already 2 segments below the repo
+  // root (`.claude` + `skills`). Starting at 2 means the cap (3) is
+  // hit when we'd descend into a sub-directory below
+  // `.claude/skills/<one>/`, correctly rejecting depth-4-from-root
+  // SKILL.md per DESIGN-0005 §5.
+  return walkForFile(root, SKILLS_GLOB_FILE, /*startDepth*/ 2);
 }
 
 /**
  * Walk `<root>` for any `*.md` file. `<root>` is conventionally
- * `<...>/.claude/agents/`. Same depth-cap rules as walkSkills.
+ * `<...>/.claude/agents/`. Same depth-cap rules as walkSkills — start
+ * at depth 2 (`.claude` + `agents`) so `.claude/agents/foo.md` matches
+ * (depth 2 in the walker = depth 3 from repo root, with the file at
+ * depth 3 = OK; deeper subdirs reject).
  */
 async function walkAgents(root: string): Promise<string[]> {
   const out: string[] = [];
-  await walkAnyMd(root, /*startDepth*/ 1, out);
+  await walkAnyMd(root, /*startDepth*/ 2, out);
   return out;
 }
 

@@ -39,10 +39,10 @@ export const memorySkillToolsDrift: MemoryCheck = {
       const tools = parseToolsField(fm.body);
       if (tools === null) continue;
 
-      // fm.lineOffset is the 1-indexed line of the first front-matter
-      // content line — i.e. the line right after the opening `---`.
-      // The `tools:` key may land further into the front matter; we
-      // attribute findings to the first content line for stability.
+      // Find the actual line `tools:` lives on so the finding points at
+      // the right place. Falls back to the first front-matter line if
+      // the key isn't on its own line (shouldn't happen, but bounded).
+      const toolsLine = findToolsLine(text);
       for (const tool of tools) {
         if (isBuiltInTool(tool)) continue;
         if (agentNames.has(tool)) continue;
@@ -50,7 +50,7 @@ export const memorySkillToolsDrift: MemoryCheck = {
           checkId: memorySkillToolsDrift.id,
           severity: memorySkillToolsDrift.defaultSeverity,
           filePath: file.path,
-          line: fm.lineOffset,
+          line: toolsLine ?? fm.lineOffset,
           summary: `${file.displayPath} front-matter lists tool \`${tool}\` — not a built-in Claude Code tool and no \`.claude/agents/${tool}.md\` found.`,
           data: { tool },
         });
@@ -133,6 +133,19 @@ export function parseToolsField(body: string): string[] | null {
       }
       return items;
     }
+  }
+  return null;
+}
+
+/**
+ * Find the 1-indexed line in `text` where `tools:` appears as a
+ * top-level YAML key. Returns null when no such line exists (caller
+ * falls back to the front-matter offset).
+ */
+function findToolsLine(text: string): number | null {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (/^tools\s*:/.test(lines[i] ?? "")) return i + 1;
   }
   return null;
 }
