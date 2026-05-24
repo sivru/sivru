@@ -46,6 +46,11 @@ describe("filterAndNormalize", () => {
     expect(filterAndNormalize("mailto:x@example.com", exts)).toBeNull();
     expect(filterAndNormalize("git+ssh://github.com/foo/bar.git", exts)).toBeNull();
   });
+
+  it("does NOT reject Windows drive-letter paths (1-char prefix before colon)", () => {
+    expect(filterAndNormalize("c:/Users/dev/foo.ts", exts)).toBe("c:/Users/dev/foo.ts");
+    expect(filterAndNormalize("D:/repo/README.md", exts)).toBe("D:/repo/README.md");
+  });
 });
 
 describe("scanForPathCandidates — fence handling", () => {
