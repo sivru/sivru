@@ -757,6 +757,28 @@ extract then.
 tab + CLI are the dogfood loop that surfaces issues before the
 agent does. MCP exposure is a third surface, not the only one.
 
+**The earlier `CHECKUP.md` unified design** (lived on the
+`feature/checkup-stage-1` branch, now superseded). That spec
+bundled six signals — `spec-driven-ratio`, `agents-md-present`,
+`skill-load-efficiency`, `skill-drift`, `security-review-on-risk`,
+`plan-before-code` — plus a stage profile and a recommendation
+engine, into one stage-1 release. Superseded by the current
+roadmap, which splits that scope across v0.9 (this release,
+narrow drift signal), v0.10 (looped-on-error), v0.11
+(low-context-edit), and v0.12 (skill recommender) per
+[ROADMAP.md](../../ROADMAP.md) principle 3 — *Depth over
+breadth. Coaching signals get tuned for false-positive rate one
+at a time.* The earlier `agents-md-present` and `skill-drift`
+signals are the closest cousins of v0.9's `memory-claude-age` +
+`memory-skill-tools-drift`, but the v0.9 versions are
+deliberately narrower (file-age + structured front-matter
+checks only — no session-context awareness, no recommendation
+engine). The earlier `packages/checkup/` package layout is
+superseded by `packages/observe/src/coach/` (D1). Decisions
+from the earlier doc that survive: descriptive-not-judgmental
+finding tone; three-surface delivery (CLI + slash command +
+observe-ui tab); deterministic-only signals at first release.
+
 ## Open questions
 
 - **Pathological CLAUDE.md sizes.** Some real CLAUDE.md files are
