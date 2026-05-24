@@ -16,6 +16,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./coach": {
+      "types": "./dist/coach/index.d.ts",
+      "import": "./dist/coach/index.js"
     }
   },
   "files": ["dist", "README.md"],
