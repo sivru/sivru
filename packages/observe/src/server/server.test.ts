@@ -472,4 +472,105 @@ describe("@sivru/observe — HTTP server", () => {
       }
     });
   });
+
+  describe("GET /api/checkup (DESIGN-0005 §2)", () => {
+    // The route is path-contained under homedir() or any git working tree.
+    // We test against a tmp dir that's a git working tree.
+    async function gitRepo(): Promise<string> {
+      const { runCmd } = await import("../coach/exec.js");
+      const dir = mkdtempSync(join(tmpdir(), "sivru-http-checkup-"));
+      await runCmd("git", ["init", "-q", "-b", "main"], { cwd: dir });
+      await runCmd("git", ["config", "user.email", "t@e.com"], { cwd: dir });
+      await runCmd("git", ["config", "user.name", "t"], { cwd: dir });
+      await runCmd("git", ["config", "commit.gpgsign", "false"], { cwd: dir });
+      writeFileSync(join(dir, "CLAUDE.md"), "# fresh\n");
+      await runCmd("git", ["add", "-A"], { cwd: dir });
+      await runCmd("git", ["commit", "-q", "-m", "init"], { cwd: dir });
+      return dir;
+    }
+
+    it("returns a CheckupReport for a git-tree path", async () => {
+      const dir = await gitRepo();
+      try {
+        const app = buildApp();
+        const res = await app.fetch(
+          new Request(`http://localhost/api/checkup?path=${encodeURIComponent(dir)}`),
+        );
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { schema: number; files: unknown[] };
+        expect(body.schema).toBe(1);
+        expect(Array.isArray(body.files)).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects with 400 + SIVRU-E245 for a relative path", async () => {
+      const app = buildApp();
+      const res = await app.fetch(
+        new Request("http://localhost/api/checkup?path=relative/dir"),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("SIVRU-E245");
+    });
+
+    it("rejects with 400 + SIVRU-E241 for a missing path inside the allowed surface", async () => {
+      // The missing path must be inside the user's homedir (or a git
+      // tree) so containment passes — then the stat fails and we get
+      // SIVRU-E241. Otherwise containment rejects first with SIVRU-E245
+      // (correct security order: don't leak existence outside the
+      // allowed surface).
+      const { homedir } = await import("node:os");
+      const app = buildApp();
+      const res = await app.fetch(
+        new Request(`http://localhost/api/checkup?path=${encodeURIComponent(`${homedir()}/nope-no-such-dir-${Date.now()}`)}`),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("SIVRU-E241");
+    });
+
+    it("rejects with 400 + SIVRU-E245 for missing paths OUTSIDE the allowed surface (no existence leak)", async () => {
+      const app = buildApp();
+      const res = await app.fetch(
+        new Request("http://localhost/api/checkup?path=/nope/does/not/exist/anywhere"),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("SIVRU-E245");
+    });
+
+    it("rejects with 400 when path is outside homedir AND not a git tree", async () => {
+      // /tmp/<random>-not-git is outside the test runner's homedir and
+      // isn't a git working tree.
+      const dir = mkdtempSync(join(tmpdir(), "sivru-http-notgit-"));
+      try {
+        const app = buildApp();
+        const res = await app.fetch(
+          new Request(`http://localhost/api/checkup?path=${encodeURIComponent(dir)}`),
+        );
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as { code: string };
+        expect(body.code).toBe("SIVRU-E245");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("accepts the noGit query param", async () => {
+      const dir = await gitRepo();
+      try {
+        const app = buildApp();
+        const res = await app.fetch(
+          new Request(
+            `http://localhost/api/checkup?path=${encodeURIComponent(dir)}&noGit=1`,
+          ),
+        );
+        expect(res.status).toBe(200);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });

@@ -62,12 +62,12 @@ async function connectedClient(): Promise<{
 }
 
 describe("mcp-entry — tools/list", () => {
-  it("advertises exactly the search and find_related tools", async () => {
+  it("advertises the search, find_related, explain, and checkup tools", async () => {
     const { client, close } = await connectedClient();
     try {
       const result = await client.listTools();
       const names = result.tools.map((t) => t.name).sort();
-      expect(names).toEqual(["explain", "find_related", "search"]);
+      expect(names).toEqual(["checkup", "explain", "find_related", "search"]);
 
       const search = result.tools.find((t) => t.name === "search");
       expect(search?.description).toMatch(/semantic \+ lexical code search/i);
@@ -86,6 +86,11 @@ describe("mcp-entry — tools/list", () => {
       const explain = result.tools.find((t) => t.name === "explain");
       expect(explain?.description).toMatch(/public API, callers, callees/i);
       expect(explain?.inputSchema.required).toEqual(["path"]);
+
+      const checkup = result.tools.find((t) => t.name === "checkup");
+      expect(checkup?.description).toMatch(/memory files|drift|aged/i);
+      // checkup has no required params — `path` defaults to cwd.
+      expect(checkup?.inputSchema.required).toEqual([]);
     } finally {
       await close();
     }
@@ -485,6 +490,57 @@ describe("mcp-entry — explain routing hint", () => {
   it("description carries the before-edit hint", () => {
     expect(EXPLAIN_TOOL_DESCRIPTION).toMatch(/before editing/i);
     expect(EXPLAIN_TOOL_DESCRIPTION).toMatch(/callers, callees/i);
+  });
+});
+
+describe("mcp-entry — checkup tool over the in-memory client", () => {
+  it("returns a valid CheckupReport for a tmp path", async () => {
+    const { client, close } = await connectedClient();
+    try {
+      const result = await client.callTool({
+        name: "checkup",
+        arguments: { path: root, noGit: true },
+      });
+      expect(result.isError).toBe(false);
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content.length).toBeGreaterThan(0);
+      const report = JSON.parse(content[0]?.text ?? "{}") as {
+        schema: number;
+        files: unknown[];
+        findings: unknown[];
+        diagnostics: unknown[];
+      };
+      expect(report.schema).toBe(1);
+      expect(Array.isArray(report.files)).toBe(true);
+      expect(Array.isArray(report.findings)).toBe(true);
+      expect(Array.isArray(report.diagnostics)).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it("filters checks via the `check` argument", async () => {
+    const { client, close } = await connectedClient();
+    try {
+      const result = await client.callTool({
+        name: "checkup",
+        arguments: {
+          path: root,
+          noGit: true,
+          check: ["memory-claude-age"],
+        },
+      });
+      expect(result.isError).toBe(false);
+      const content = result.content as Array<{ type: string; text: string }>;
+      const report = JSON.parse(content[0]?.text ?? "{}") as {
+        findings: Array<{ checkId: string }>;
+      };
+      for (const f of report.findings) {
+        expect(f.checkId).toBe("memory-claude-age");
+      }
+    } finally {
+      await close();
+    }
   });
 });
 

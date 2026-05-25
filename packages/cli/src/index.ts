@@ -7,6 +7,7 @@ import {
   runBenchModels,
   runBenchPersonal,
   runBlock,
+  runCheckupCmd,
   runConfig,
   runDoctor,
   runExplain,
@@ -75,6 +76,9 @@ async function main(): Promise<number> {
 
     case "block":
       return runBlock(argv.slice(1));
+
+    case "checkup":
+      return runCheckupCmd(argv.slice(1));
 
     case "help":
     case "--help":

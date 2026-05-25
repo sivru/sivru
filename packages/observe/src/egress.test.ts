@@ -57,6 +57,25 @@ describe("@sivru/observe — privacy boundary (DESIGN.md §5.5)", () => {
     }
   });
 
+  it("coach/ may import node:child_process (git shell-outs are local IO, DESIGN-0005)", async () => {
+    // Documented carve-out — `node:child_process` is local process IO,
+    // not network egress. The coach module shells out to `git` for
+    // age + rename detection. Egress test stays green for this import.
+    const coachFile = join(SRC_DIR, "coach", "git-stats.ts");
+    const text = await readFile(coachFile, "utf8");
+    expect(text).toMatch(/from\s+["']\.\/exec\.js["']/);
+    const execFile = join(SRC_DIR, "coach", "exec.ts");
+    const execText = await readFile(execFile, "utf8");
+    expect(execText).toMatch(/from\s+["']node:child_process["']/);
+    // Re-run the static banned-imports check explicitly against exec.ts
+    // to assert that even this file does NOT pick up an http/https/etc
+    // import as a side effect.
+    for (const mod of BANNED_IMPORTS) {
+      const pattern = new RegExp(`from\\s+["']${mod.replace(":", "[:]")}["']`);
+      expect(execText, `exec.ts must not import ${mod}`).not.toMatch(pattern);
+    }
+  });
+
   describe("runtime egress check", () => {
     let fetchSpy: ReturnType<typeof vi.spyOn> | null = null;
     let tmp: string;

@@ -5,7 +5,7 @@
 // This package MUST NOT make network calls. Enforced at lint + runtime tests.
 // Model file download lives in @sivru/search only.
 
-export const SIVRU_OBSERVE_VERSION = "0.1.0";
+export const SIVRU_OBSERVE_VERSION = "0.9.0";
 
 export type { Session, SivruEvent, SivruEventKind } from "./types.js";
 export type { SessionSource } from "./sources/adapter.js";

@@ -55,3 +55,5 @@ openai.json
 DESIGN.md
 docs/planning/
 docs/internal/
+.gstack/
+.auto-ship/

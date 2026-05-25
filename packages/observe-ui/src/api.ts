@@ -51,6 +51,51 @@ export function fetchAggregateSavings(sinceDays?: number): Promise<AggregateSavi
   return getJson<AggregateSavings>(`/api/savings${q}`);
 }
 
+// /api/checkup — DESIGN-0005 §2 + §6. Returns a CheckupReport JSON shape.
+// The UI types mirror the library types (kept local so the UI package
+// doesn't take a runtime dep on @sivru/observe).
+export type CheckupSeverity = "info" | "warning" | "error";
+export type CheckupMemoryFileKind = "claude-md" | "skill" | "agent";
+
+export type CheckupMemoryFile = {
+  path: string;
+  displayPath: string;
+  kind: CheckupMemoryFileKind;
+  mtimeMs: number;
+  lastCommitTs?: number;
+  commitsBehindHead?: number;
+  unreadable?: boolean;
+};
+
+export type CheckupFinding = {
+  checkId: string;
+  severity: CheckupSeverity;
+  filePath: string;
+  line?: number;
+  summary: string;
+  detail?: string;
+  data?: Record<string, unknown>;
+};
+
+export type CheckupDiagnostic = {
+  code: string;
+  severity: CheckupSeverity;
+  message: string;
+};
+
+export type CheckupReport = {
+  schema: 1;
+  repoRoot: string;
+  ranAt: string;
+  files: CheckupMemoryFile[];
+  findings: CheckupFinding[];
+  diagnostics: CheckupDiagnostic[];
+};
+
+export function fetchCheckup(path: string): Promise<CheckupReport> {
+  return getJson<CheckupReport>(`/api/checkup?path=${encodeURIComponent(path)}`);
+}
+
 // Bench history — feeds the "Bench" tab. Returns past `sivru bench
 // personal` runs written to ~/.cache/sivru/bench-history/. Schema lives
 // alongside the writer in packages/cli/src/lib/bench-history.ts; the
