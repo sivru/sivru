@@ -4,10 +4,10 @@
 // DESIGN-0005 §1 + A4: built-in Claude Code tool list, pinned at release
 // time. A newly-added Claude Code tool will false-positive-flag in
 // `memory-skill-tools-drift` until a sivru release updates this set —
-// v0.9 accepts that lag as an honest cost. The `LAST_VERIFIED:` header
+// v0.7 accepts that lag as an honest cost. The `LAST_VERIFIED:` header
 // is asserted by `known-tools.test.ts` so it can't silently rot.
 //
-// v0.10+ may add a user-side `knownTools` config field as an escape
+// v0.7.x+ may add a user-side `knownTools` config field as an escape
 // hatch (already implied by §8 layer-2 extensibility).
 
 import { readdir } from "node:fs/promises";

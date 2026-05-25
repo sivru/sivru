@@ -32,7 +32,7 @@ async function commit(dir: string, files: Record<string, string>, msg: string): 
 }
 
 describe("BUILT_IN_CHECKS", () => {
-  it("exposes the three v0.9 checks in stable order", () => {
+  it("exposes the three v0.7 checks in stable order", () => {
     expect(BUILT_IN_CHECKS.map((c) => c.id)).toEqual([
       "memory-claude-age",
       "memory-dead-reference",

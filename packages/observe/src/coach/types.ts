@@ -105,7 +105,7 @@ export interface CheckupReport {
 /**
  * Infrastructure-level diagnostic — not a finding. Examples: git binary
  * missing, the run fell back to mtime-only, a file exceeded the
- * 200KB scan ceiling. Codes follow the v0.9 partition: SIVRU-E240–E249.
+ * 200KB scan ceiling. Codes follow the v0.7 partition: SIVRU-E240–E249.
  */
 export interface ReportDiagnostic {
   code: string;
@@ -141,9 +141,10 @@ export interface AuditContext {
 }
 
 /**
- * The contract every built-in check satisfies. v0.10 will surface this
- * to user-supplied `.sivru/checkup/*.ts` files; v0.9 ships the
- * interface without the dynamic loader (per §8 customization shape).
+ * The contract every built-in check satisfies. A future coach-loop
+ * release will surface this to user-supplied `.sivru/checkup/*.ts`
+ * files; v0.7 ships the interface without the dynamic loader (per
+ * §8 customization shape).
  */
 export interface MemoryCheck {
   /** Stable id (e.g. "memory-claude-age"). */

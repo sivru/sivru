@@ -34,7 +34,7 @@ precise than `ripgrep` + multiple `Read` calls (the path Claude Code's
 **Product 2 — Agent session observability.** Reads the JSONL session files
 that Claude Code already writes to `~/.claude/projects/<cwd>/<uuid>.jsonl`,
 normalizes them to a stable `SivruEvent` shape, exposes a localhost-only
-HTTP API, and ships a four-tab web UI (Sessions / Replay / Costs / Bench).
+HTTP API, and ships a five-tab web UI (Sessions / Checkup / Replay / Costs / Bench).
 Counterfactual savings analysis (`sivru observe replay`/`costs`) is
 offline and zero-API-cost.
 

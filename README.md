@@ -39,9 +39,9 @@ coaching loop that catches low-context edits. See [`ROADMAP.md`](ROADMAP.md).
 | Package | What it does |
 |---|---|
 | `@sivru/search` | Engine. Walker → chunker → BM25 + cosine + RRF → optional cross-encoder rerank. Pluggable embedders (Model2Vec, Transformers.js, OpenAI-compatible HTTP) with asymmetric query encoding for BGE / Nomic / E5. On-disk cache + mid-session `refreshStale()`. |
-| `sivru` (CLI) | `search`, `index`, `from-git`, `mcp`, `observe`, `session`, `bench personal`, `bench models`, `config`, `doctor`. Persistent embedder + reranker via `sivru config`. |
-| `@sivru/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. No network egress, ever — enforced by lint rule + runtime fetch spy. |
-| `@sivru/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Replay / Costs / Bench. Dark-only. |
+| `sivru` (CLI) | `search`, `index`, `from-git`, `mcp`, `observe`, `session`, `bench personal`, `bench models`, `config`, `doctor`, `explain`, `block`, `skill`, `checkup`. Persistent embedder + reranker via `sivru config`. |
+| `@sivru/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. Also hosts the coach loop (`@sivru/observe/coach`) that surfaces drift in CLAUDE.md / SKILL.md / agent files. No network egress, ever — enforced by lint rule + runtime fetch spy. |
+| `@sivru/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Checkup / Replay / Costs / Bench. Dark-only. |
 | `benchmarks/` | NDCG@10, agent-task token economy, perf gate. Raw data committed; see [BENCHMARKS.md](BENCHMARKS.md). |
 
 ## Numbers

@@ -41,7 +41,7 @@ export const DEFAULT_CONFIG: CheckupConfig = {
 const VALID_SEVERITIES: ReadonlySet<Severity> = new Set<Severity>(["info", "warning", "error"]);
 
 export class CheckupConfigError extends Error {
-  /** Always SIVRU-E240 at v0.9. */
+  /** Always SIVRU-E240 at v0.7. */
   readonly code = "SIVRU-E240";
   /** Absolute path of the malformed config file. */
   readonly file: string;

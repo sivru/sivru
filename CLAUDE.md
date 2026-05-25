@@ -79,9 +79,13 @@ in one npm package; one MCP server. Public pitch in
   prompt, progress) in `src/lib/`.
 - **Observe:** `packages/observe/` — session readers (jsonl), event
   normalizer, cost / savings estimator, counterfactual replay,
-  Hono HTTP server.
+  Hono HTTP server. Hosts the v0.7 coach loop at
+  `src/coach/` (`@sivru/observe/coach` subpath export) — three
+  drift checks against CLAUDE.md, SKILL.md, and agent files; runs
+  via the `sivru checkup` CLI command, `mcp__sivru__checkup` MCP
+  tool, or `GET /api/checkup` HTTP route.
 - **Observe UI:** `packages/observe-ui/` — Vite/React/Tailwind,
-  dark-only. Tabs: Sessions / Replay / Costs / Bench.
+  dark-only. Tabs: Sessions / Checkup / Replay / Costs / Bench.
 - **Benchmarks:** `benchmarks/` — NDCG@10 corpus + agent-task suite +
   perf gate.
 
@@ -92,13 +96,22 @@ See [`ROADMAP.md`](ROADMAP.md) for direction.
 - Embed code only; BM25-only-index docs and configs
 - Real-agent replay via the Anthropic SDK (opt-in)
 - `sivru completion` + `sivru bench tthw`
-- `@sivru`-block annotations (v0.6 — DESIGN-0016) — fills the
-  `artifact.authored` slot that v0.5 reserves as `[]`.
+- Serving authored context — surface `@sivru` blocks through
+  `sivru explain` (DESIGN-0017; next planned release).
+- Codebase explainer (DESIGN-0018).
+- Coach loop v2 — looped-on-error (DESIGN-0006).
+- Coach loop v3 — low-context-edit (DESIGN-0007).
 
 (Shipped since this list was last cut: tree-sitter chunker — v0.2;
 per-model chunk-windowing — v0.3; the sivru skill — v0.4;
 `sivru explain` (CLI + MCP + region + --diff) — v0.5
-[DESIGN-0004](docs/design/0004-sivru-explain.md).)
+[DESIGN-0004](docs/design/0004-sivru-explain.md); `@sivru`
+annotation blocks — v0.6 [DESIGN-0016](docs/design/0016-sivru-annotation-blocks.md);
+coach loop v1 / skill drift — v0.7
+[DESIGN-0005](docs/design/0005-coach-loop-skill-drift.md), shipped
+out of original sequence: it was retargeted v0.6 → v0.9 during
+planning but claimed v0.7 at ship time since the other v0.7/v0.8
+work hadn't landed yet.)
 
 ## Don't do without asking
 

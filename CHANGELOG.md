@@ -89,8 +89,9 @@ tab ship together. See
   the first 200KB only.
 - `SIVRU-E244` `checkup-git-unavailable` — info; mtime-only mode.
 - `SIVRU-E245` `checkup-path-unsafe` — error; HTTP route rejects.
-- `SIVRU-E243` reserved for v0.10's dynamic `.sivru/checkup/*.ts`
-  loader (deferred from v0.9 entirely per the customization shape).
+- `SIVRU-E243` reserved for a future coach-loop release's dynamic
+  `.sivru/checkup/*.ts` loader (deferred from v0.7 entirely per the
+  customization shape).
 
 ### Privacy
 

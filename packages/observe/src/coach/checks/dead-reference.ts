@@ -9,8 +9,8 @@
 // (path-separator OR known extension) and bare identifiers out (a bare
 // word like `runScan` doesn't qualify). Reference-style links
 // (`[text][id]` with a separate `[id]: target` definition) are NOT
-// scanned at v0.9 — uncommon in real memory files; tracked as an open
-// question for v0.10.
+// scanned at v0.7 — uncommon in real memory files; tracked as an open
+// question for v0.7.x.
 
 import { stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";

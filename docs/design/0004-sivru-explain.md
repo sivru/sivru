@@ -52,7 +52,7 @@ to exist.
 
 `sivru explain <path>` emits five descriptive sections. Every
 section is **descriptive only** — no "you should refactor this",
-no quality judgements (v0.9's coach loop does judgement; this does
+no quality judgements (v0.7's coach loop does judgement; this does
 not).
 
 The CLI markdown rendering is one cut over the same JSON the MCP
@@ -170,7 +170,7 @@ The SKILL.md body (from v0.4) is updated to mention `explain` in
 the after-editing-locate-the-file workflow. v0.4's measured
 routing data (76% with skill, 56% without, sub-agents bypass the
 skill entirely) is acknowledged context for v0.5: the coach loop
-(v0.9–11) is the named release that addresses low-context-edit
+(v0.7+) is the named release line that addresses low-context-edit
 detection. v0.5 does not try to fix delegation.
 
 **Argument parsing.** Hand-rolled, no zod — matches the codebase
@@ -585,7 +585,7 @@ What v0.5 deliberately is *not*:
   cross-language go-to-definition. Identifier + import is the
   signal; precision tradeoffs are stated in the output.
 - **Not a quality judgement.** No "this file is too long" or
-  "consider splitting." That is v0.9's coach loop, with FP-rate
+  "consider splitting." That is v0.7's coach loop, with FP-rate
   discipline.
 - **Not a search replacement.** `sivru.search` finds *where*;
   this tells you *what* about a known location.
@@ -643,8 +643,8 @@ engine over `Chunk[]` (cosine + BM25), not a structured-metadata
 surface. Reading its implementation
 (`packages/cli/src/mcp-entry.ts:424-481`) confirms the two
 tools are different in kind. The v0.4 routing-gap critique is
-acknowledged context; the coach loop (v0.9–11) is the named
-place it gets addressed.
+acknowledged context; the coach loop (v0.7+) is the named release
+line it gets addressed in.
 
 ## Open questions resolved by CEO + eng + outside-voice review
 
@@ -912,7 +912,7 @@ precision = accept with footer + D16; TS path aliases = defer.
 **Outside-voice (locked iter-4):**
 
 - **D13** — Stay the course on v0.5 scope. v0.4 routing data
-  acknowledged; coach loop (v0.9–11) is the named answer.
+  acknowledged; coach loop (v0.7+) is the named answer.
 - **D14** — Defer shared-parse optimisation to TODOS.md.
 - **D15** — Flip MCP cap sort from `mtime-desc` to **commit-count-
   asc, mtime-asc tiebreaker**.
