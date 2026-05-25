@@ -7,7 +7,7 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-## [0.9.0] — 2026-05-24
+## [0.7.0] — 2026-05-25
 
 **Coach loop v1 — skill drift.** Three deterministic, descriptive checks
 that surface drift in Claude Code memory files (`CLAUDE.md`, every
@@ -101,7 +101,7 @@ tab ship together. See
   `git`-shell-out path (local IO, not network egress); a new test
   asserts this is the only sub-process boundary.
 
-### Known false-positive patterns (deferred to v0.9.x)
+### Known false-positive patterns (deferred to v0.7.x)
 
 The `memory-dead-reference` check's "path-shape" filter follows the
 design's spec literally (DESIGN-0005 §3b: `path separator OR known
@@ -116,24 +116,24 @@ patterns that match the filter but aren't file paths:
 - Directory references with trailing `/` (`src/commands/`).
 
 The design's < 10% FP-rate gate is meant to catch this — an honest
-real-world FP corpus is in scope per D7 but **NOT included in v0.9.0**
-(see "Deferred" below). A v0.9.x point release will tighten the
+real-world FP corpus is in scope per D7 but **NOT included in v0.7.0**
+(see "Deferred" below). A v0.7.x point release will tighten the
 filter once the FP-corpus exists to measure against.
 
 ### Deferred
 
 - **FP-rate corpus** — DESIGN-0005 §Test plan requires 10–20
   anonymized real-world OSS memory files with per-span labels and
-  per-file `attribution.md`. v0.9.0 ships without this; it requires
+  per-file `attribution.md`. v0.7.0 ships without this; it requires
   manual judgment (which OSS repos? what counts as "personal info"?
   is partial anonymization honest?) that a single autonomous run
-  couldn't credibly produce. **Tracked as a v0.9.x follow-up.**
+  couldn't credibly produce. **Tracked as a v0.7.x follow-up.**
 - **Performance gate measurement.** Design asks for a measured
   number on this repo (< 200ms p95) + a 50-file fixture (< 1s).
-  v0.9.0 demonstrates the library works end-to-end on this repo
+  v0.7.0 demonstrates the library works end-to-end on this repo
   (51 memory files, ~800ms with both git delights enabled), but
   the formal perf gate with a 50-file synthesized fixture is a
-  v0.9.x follow-up.
+  v0.7.x follow-up.
 - **observe-ui browser smoke test.** The Checkup tab ships with
   logic-only unit tests for `groupFindings`. A React-mount smoke
   test against a mocked `/api/checkup` is deferred — observe-ui
@@ -142,7 +142,7 @@ filter once the FP-corpus exists to measure against.
   verification needed before promoting to a stable release.
 - **Repo-mixed and repo-rename fixture repos.** The integration
   test in `coach/index.test.ts` covers the same paths through
-  seeded temp git repos; standalone fixtures are a v0.9.x add.
+  seeded temp git repos; standalone fixtures are a v0.7.x add.
 
 ## [0.6.0] — 2026-05-22
 

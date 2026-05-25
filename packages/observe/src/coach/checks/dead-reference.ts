@@ -66,9 +66,9 @@ export const memoryDeadReference: MemoryCheck = {
 
         if (await pathExists(resolved)) continue;
 
-        // skipPaths is a v0.9.0 LITERAL-match list — see types.ts
+        // skipPaths is a v0.7.0 LITERAL-match list — see types.ts
         // CheckupConfig comment for the design-vs-impl gap (glob
-        // support is a v0.9.x follow-up pending a minimatch dep).
+        // support is a v0.7.x follow-up pending a minimatch dep).
         if (ctx.config.skipPaths.includes(filtered)) continue;
 
         // D6b rename-suggestion delight. Look up rename history for the

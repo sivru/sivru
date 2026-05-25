@@ -96,22 +96,25 @@ describe("sivru checkup — CLI end-to-end (spawn)", () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
+  // Per-test timeouts are 30s — the spawn wrapper itself is 30s, and these
+  // tests pull in real user-global memory files on the developer's machine
+  // which can take >5s (vitest default) under parallel test load.
   it("exits 1 with SIVRU-E241 when the path argument doesn't exist", async () => {
     const r = await runCli(["checkup", join(tmp, "nope")], tmp);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/SIVRU-E241/);
-  });
+  }, 30_000);
 
   it("exits 0 with --json and emits a valid CheckupReport for an empty dir", async () => {
     const r = await runCli(["checkup", "--no-git", "--json", tmp], tmp);
     expect(r.code).toBe(0);
     const parsed = JSON.parse(r.stdout) as { schema: number };
     expect(parsed.schema).toBe(1);
-  });
+  }, 30_000);
 
   it("exits 0 and prints the 'everything checked' message on a clean tmp", async () => {
     const r = await runCli(["checkup", "--no-git", tmp], tmp);
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/Everything checked|files scanned/);
-  });
+  }, 30_000);
 });

@@ -78,8 +78,8 @@ export interface CheckupConfig {
   /**
    * Exact reference strings to suppress in dead-reference findings.
    *
-   * v0.9.0 limitation: literal match only. The design (§8) describes
-   * glob semantics; v0.9.x will swap in minimatch once a dep approval
+   * v0.7.0 limitation: literal match only. The design (§8) describes
+   * glob semantics; v0.7.x will swap in minimatch once a dep approval
    * is in place (CLAUDE.md forbids adding deps silently). Today a value
    * of `"docs/x.md"` suppresses only the literal `\`docs/x.md\`` mention;
    * `"docs/**"` would NOT suppress `\`docs/y.md\``.

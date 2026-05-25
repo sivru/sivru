@@ -11,8 +11,8 @@ after folds; one design decision absorbed (D1 severity sort:
 errors → warnings → info within each file).)
 <!-- Draft → Accepted → Implemented → Superseded -->
 **Class:** Spine (per [GOALS.md](../../GOALS.md))
-**Targets:** v0.9.0
-**Issue:** filed when v0.9 work starts
+**Targets:** v0.7.0 (shipped 2026-05-25; design was retargeted v0.6.0 → v0.9.0 on 2026-05-23 per ROADMAP sequencing, but actually shipped BEFORE DESIGN-0006/0007/0017/0018 so claimed the next-sequential slot v0.7.0 rather than the reserved v0.9.0 slot)
+**Issue:** filed when v0.7 work starts
 **Created:** 2026-05-08
 **Updated:** 2026-05-24 — eng-review iter-1 absorbed two architectural
 decisions: E1 (batch-and-cache git shell-outs — one `git log` per

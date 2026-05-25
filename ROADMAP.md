@@ -85,9 +85,9 @@ honest?* When versions compete for execution priority, Spine wins.
 | 0.4.0 | `@sivru/skill` package | Spine |
 | 0.5.0 | `sivru explain <path>` | Spine |
 | 0.6.0 | `@sivru` annotation blocks | Spine |
-| 0.7.0 | Serving authored context | Spine |
-| 0.8.0 | Codebase explainer | Spine |
-| 0.9.0 | Coach loop: skill drift | Spine |
+| 0.7.0 | Coach loop: skill drift | Spine | (SHIPPED 2026-05-25 — out of original sequence)
+| 0.8.0 | Serving authored context | Spine |
+| 0.9.0 | Codebase explainer | Spine |
 | 0.10.0 | Coach loop: looped-on-error | Spine |
 | 0.11.0 | Coach loop: low-context edit | Spine |
 | 0.12.0 | Skill recommender | Supporting |
@@ -175,6 +175,15 @@ per-language extraction a small comment-locator instead of five
 separate parsers.
 
 **Design:** [DESIGN-0016](docs/design/0016-sivru-annotation-blocks.md)
+
+> **Note on shipped sequence (added 2026-05-25):** Coach loop v1 (skill
+> drift, DESIGN-0005) shipped at v0.7.0, ahead of the originally-planned
+> v0.7 "Serving authored context" and v0.8 "Codebase explainer" work.
+> The summary table above reflects the actual ship order; the detail
+> sections below preserve the original plan and have NOT been renumbered.
+> Treat each "### 0.X.0 — Name" header below as planned-version, not
+> shipped-version. The next-planned-after-0.7.0 work is "Serving
+> authored context" but it will likely ship at 0.8.0 or later.
 
 ### 0.7.0 — Serving authored context (~2 weeks)
 
