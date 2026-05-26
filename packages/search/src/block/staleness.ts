@@ -20,7 +20,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
+import { isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 
 import { extractBlocks } from "./extract.js";
@@ -159,12 +159,15 @@ export async function staleBlocks(opts: StalenessOptions): Promise<StalenessRepo
 
   // Restrict to files under the user-supplied `rootPath` (when it's
   // narrower than the repo) so `block staleness packages/search/` is
-  // scoped, not repo-wide.
+  // scoped, not repo-wide. `path.relative` is the right tool here:
+  // a sibling path like `packages/search2/` produces a leading `..`,
+  // which a `startsWith` check would have silently let through.
   const scope = resolvePath(opts.rootPath);
 
   for (const rel of changed) {
     const abs = resolvePath(repoRoot, rel);
-    if (!abs.startsWith(scope)) continue;
+    const scopedRel = relative(scope, abs);
+    if (scopedRel.startsWith("..") || isAbsolute(scopedRel)) continue;
 
     // HEAD-side blocks: prefer the cache (one parse already paid) if
     // it has an entry for this file; otherwise extract on the fly.

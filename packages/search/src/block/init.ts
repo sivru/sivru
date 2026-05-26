@@ -81,12 +81,22 @@ function firstSentence(docText: string): string {
 
 function listImports(content: string, language: string): string[] {
   const out = new Set<string>();
+  // Helper: record the LOCAL identifier the file uses, not the source
+  // export name. `import { X as L }` puts L in scope; the file's
+  // collaborator graph should reference L (matches the rename
+  // heuristic + graph reciprocity check).
+  const localName = (raw: string): string => {
+    const parts = raw.trim().split(/\s+as\s+/);
+    if (parts.length >= 2 && parts[1] !== undefined) return parts[1]!.trim();
+    return parts[0]!.trim();
+  };
+
   if (language === "typescript" || language === "javascript" || language === "tsx" || language === "jsx") {
     for (const m of content.matchAll(/import\s+(?:\{([^}]+)\}|(\w+))(?:\s*,\s*\{([^}]+)\})?\s+from/g)) {
       const blocks = [m[1], m[3]].filter((s): s is string => typeof s === "string");
       for (const b of blocks) {
         for (const name of b.split(",")) {
-          const trimmed = name.trim().split(/\s+as\s+/)[0]!.trim();
+          const trimmed = localName(name);
           if (trimmed.length > 0) out.add(trimmed);
         }
       }
@@ -96,7 +106,7 @@ function listImports(content: string, language: string): string[] {
   } else if (language === "python") {
     for (const m of content.matchAll(/(?:^|\n)\s*from\s+\S+\s+import\s+([^\n]+)/g)) {
       for (const name of m[1]!.split(",")) {
-        const trimmed = name.trim().split(/\s+as\s+/)[0]!.trim();
+        const trimmed = localName(name);
         if (trimmed.length > 0) out.add(trimmed);
       }
     }
@@ -107,7 +117,18 @@ function listImports(content: string, language: string): string[] {
       if (tail.length > 0 && tail !== "*") out.add(tail);
     }
   } else if (language === "go") {
-    for (const m of content.matchAll(/"([\w./]+)"/g)) {
+    // Go imports live in either a single-line `import "path/to/pkg"`
+    // or a parenthesised block `import ( ... )`. Scoping the regex
+    // here is critical — a bare `/"[\w./]+"/g` would also match
+    // error messages, struct tags, and format strings.
+    const blockMatch = content.match(/import\s*\(([\s\S]*?)\)/);
+    if (blockMatch !== null) {
+      for (const m of blockMatch[1]!.matchAll(/"([\w./]+)"/g)) {
+        const parts = m[1]!.split("/");
+        out.add(parts[parts.length - 1]!);
+      }
+    }
+    for (const m of content.matchAll(/^\s*import\s+"([^"]+)"/gm)) {
       const parts = m[1]!.split("/");
       out.add(parts[parts.length - 1]!);
     }

@@ -44,9 +44,12 @@ function rewriteLine(
   diagnosticCode: string,
 ): { rewrote: boolean; line: string; reason?: string } {
   // Some source files carry the YAML inside doc comments — strip the
-  // comment-syntax prefix (`*` / `//` / `#`) once before running the
-  // value match, then reapply the prefix to the rewritten line.
-  const commentMatch = line.match(/^(\s*(?:\*|\/\/|#|\/\/\/)\s?)(.*)$/);
+  // comment-syntax prefix once before running the value match, then
+  // reapply the prefix to the rewritten line. Alternation order
+  // matters: `///` must come before `//`, otherwise the regex matches
+  // `//` first and leaves a stray `/` in the value half. See
+  // `extract.ts:FENCE_START_REGEX` for the same ordering rule.
+  const commentMatch = line.match(/^(\s*(?:\/\/\/|\/\/|\*|#)\s?)(.*)$/);
   const commentPrefix = commentMatch !== null ? commentMatch[1]! : "";
   const yamlPortion = commentMatch !== null ? commentMatch[2]! : line;
 
@@ -141,7 +144,7 @@ export async function autofixFile(filePath: string): Promise<AutofixResult> {
       // running the heuristic so the trap is found in the YAML half.
       let rewroteAny = false;
       const stripComment = (l: string): string =>
-        l.replace(/^\s*(?:\*|\/\/|#|\/\/\/)\s?/, "");
+        l.replace(/^\s*(?:\/\/\/|\/\/|\*|#)\s?/, "");
       // E237 trap signature: an array-item line whose value contains
       // a colon, OR a `chose:` / `because:` / `valid-while:` / `revisit-if:`
       // field whose value contains an internal colon. Both collapse to

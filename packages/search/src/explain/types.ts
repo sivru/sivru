@@ -87,12 +87,14 @@ export type SymbolIndexEntry = {
   /** mtime in millis since epoch at index time. */
   mtimeMs: number;
   /**
-   * DESIGN-0019 slot 2 (D3): per-file `@sivru` block cache. Empty array
-   * when the file contains no blocks. Populated lazily by callers that
-   * opt into block-aware indexing — `buildSymbolIndex` does NOT extract
-   * blocks by default to keep the cost off the explain hot path.
+   * DESIGN-0019 slot 2 (D3): per-file `@sivru` block cache. Optional —
+   * `buildSymbolIndex` does NOT extract blocks by default (keeps the
+   * cost off the explain hot path), so existing entries created before
+   * the slot-2 patch and entries from callers that don't opt in have
+   * this field absent. Consumers should treat `undefined` and `[]`
+   * identically.
    */
-  blocks: BlockCacheEntry[];
+  blocks?: BlockCacheEntry[];
 };
 
 export type SymbolIndex = {
