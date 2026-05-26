@@ -24,6 +24,7 @@ import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 
 import { extractBlocks } from "./extract.js";
+import type { BlockCache } from "./block-cache.js";
 import type { BlockDiagnostic, ExtractedBlock, SourceRange } from "./types.js";
 
 const execFileP = promisify(execFile);
@@ -31,6 +32,14 @@ const execFileP = promisify(execFile);
 export type StalenessOptions = {
   rootPath: string;
   since: string;
+  /**
+   * DESIGN-0019 §2 / D3: when supplied, the HEAD-side block extraction
+   * is skipped — staleness reads block ranges + content hashes from
+   * the pre-built cache instead. Saves one parse per changed file.
+   * The "before" side still needs `git show + extract` because the
+   * cache only covers HEAD.
+   */
+  cache?: BlockCache;
 };
 
 export type StalenessReport = {
@@ -156,32 +165,64 @@ export async function staleBlocks(opts: StalenessOptions): Promise<StalenessRepo
   for (const rel of changed) {
     const abs = resolvePath(repoRoot, rel);
     if (!abs.startsWith(scope)) continue;
-    let currentContent: string;
-    try {
-      currentContent = await readFile(abs, "utf8");
-    } catch {
-      continue;
+
+    // HEAD-side blocks: prefer the cache (one parse already paid) if
+    // it has an entry for this file; otherwise extract on the fly.
+    let currentBlocks: Array<{
+      symbolName: string;
+      range: SourceRange;
+      contentHash: string | null;
+    }>;
+    const cached = opts.cache?.get(abs);
+    if (cached !== undefined) {
+      currentBlocks = cached.map((c) => ({
+        symbolName: c.symbolName,
+        range: {
+          filePath: abs,
+          startLine: c.startLine,
+          endLine: c.endLine,
+        },
+        contentHash: c.contentHash,
+      }));
+    } else {
+      let currentContent: string;
+      try {
+        currentContent = await readFile(abs, "utf8");
+      } catch {
+        continue;
+      }
+      const extracted = await extractBlocks(abs, { content: currentContent });
+      currentBlocks = extracted.map((eb): {
+        symbolName: string;
+        range: SourceRange;
+        contentHash: string | null;
+      } => ({
+        symbolName: eb.symbolName ?? "(module)",
+        range: eb.range,
+        contentHash: eb.block === null ? null : hashContent(JSON.stringify(eb.block)),
+      }));
     }
+
+    if (currentBlocks.length === 0) continue;
+
+    // BEFORE-side: still requires `git show` + extract (the cache only
+    // covers HEAD). DESIGN-0017's authored-baseline drift detector
+    // would carry historical state; until then, the git path is the
+    // authority.
     const before = await gitShow(repoRoot, opts.since, rel);
     if (before === null) continue;
-
-    const currentBlocks = await extractBlocks(abs, { content: currentContent });
     const beforeBlocks = await extractBlocks(abs, { content: before });
-
     const beforeBySymbol = new Map<string, ExtractedBlock>();
     for (const b of beforeBlocks) {
-      const key = b.symbolName ?? "(module)";
-      beforeBySymbol.set(key, b);
+      beforeBySymbol.set(b.symbolName ?? "(module)", b);
     }
 
     for (const cur of currentBlocks) {
-      const key = cur.symbolName ?? "(module)";
-      const beforeMatch = beforeBySymbol.get(key);
-      if (beforeMatch === undefined) continue;
-      if (cur.block === null || beforeMatch.block === null) continue;
-      const curHash = hashContent(JSON.stringify(cur.block));
+      if (cur.contentHash === null) continue;
+      const beforeMatch = beforeBySymbol.get(cur.symbolName);
+      if (beforeMatch === undefined || beforeMatch.block === null) continue;
       const beforeHash = hashContent(JSON.stringify(beforeMatch.block));
-      if (curHash !== beforeHash) continue;
+      if (cur.contentHash !== beforeHash) continue;
 
       const outside = await gitHunksOutsideRange(repoRoot, opts.since, rel, cur.range);
       if (outside > 0) {

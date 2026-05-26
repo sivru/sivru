@@ -120,6 +120,7 @@ export async function parseOneFile(
       imports: [],
       commitCount: opts.commitCount,
       mtimeMs,
+      blocks: [],
     };
   }
   const resolver: Resolver | null = resolverFor(language);
@@ -131,6 +132,7 @@ export async function parseOneFile(
       imports: [],
       commitCount: opts.commitCount,
       mtimeMs,
+      blocks: [],
     };
   }
   let chunks: readonly Chunk[] | undefined = opts.parseCache?.get(absPath, mtimeMs);
@@ -173,6 +175,7 @@ export async function parseOneFile(
     imports,
     commitCount: opts.commitCount,
     mtimeMs,
+    blocks: [],
   };
 }
 

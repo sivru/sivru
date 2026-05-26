@@ -71,6 +71,10 @@ export type {
 export { buildSymbolMap } from "./enforcement.js";
 export type { EnforcementIndex } from "./enforcement.js";
 
+export { buildBlockCache } from "./block-cache.js";
+export type { BlockCache } from "./block-cache.js";
+export type { BlockCacheEntry } from "../explain/types.js";
+
 export { initBlock } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";
 
