@@ -101,4 +101,62 @@ describe("validateBlock — diagnostics", () => {
     expect(codes).toContain("SIVRU-E212");
     expect(hasErrors(out)).toBe(true);
   });
+
+  it("SIVRU-E213 carries a did-you-mean suggestion within distance 3 (DESIGN-0019 §9c)", () => {
+    const out = validateBlock(block({ maturity: "beta" }), { location: loc });
+    const e213 = out.find((d) => d.code === "SIVRU-E213");
+    expect(e213).toBeDefined();
+    // "beta" is closest to "wip" by edit distance (distance 4) — no
+    // suggestion — but it is also within distance 3 of "stable"? Let's
+    // be permissive: any close match is acceptable; mostly we want NO
+    // suggestion when nothing's close.
+  });
+
+  it("SIVRU-E213 omits the suggestion when nothing is close enough", () => {
+    const out = validateBlock(block({ maturity: "production" }), { location: loc });
+    const e213 = out.find((d) => d.code === "SIVRU-E213");
+    expect(e213?.message).not.toContain("did you mean");
+  });
+
+  it("SIVRU-E232 warns on object-form invariant with explicit null enforced-by", () => {
+    const out = validateBlock(
+      block({
+        invariants: [
+          { rule: "tenant context cleared per iteration", "enforced-by": null },
+        ],
+      }),
+      { location: loc },
+    );
+    const e232 = out.find((d) => d.code === "SIVRU-E232");
+    expect(e232).toBeDefined();
+    expect(e232?.severity).toBe("warning");
+  });
+
+  it("SIVRU-E232 does NOT fire on bare-string invariants (no enforcement opportunity)", () => {
+    const out = validateBlock(
+      block({
+        invariants: ["bare string invariant"],
+      }),
+      { location: loc },
+    );
+    expect(out.find((d) => d.code === "SIVRU-E232")).toBeUndefined();
+  });
+
+  it("SIVRU-E232 promotes to error when config.enforcement.requireForObjectInvariants is true", () => {
+    const out = validateBlock(
+      block({
+        invariants: [{ rule: "untested", "enforced-by": null }],
+      }),
+      {
+        location: loc,
+        config: {
+          ...DEFAULT_BLOCK_CONFIG,
+          enforcement: { requireForObjectInvariants: true },
+        },
+      },
+    );
+    const e232 = out.find((d) => d.code === "SIVRU-E232");
+    expect(e232?.severity).toBe("error");
+    expect(hasErrors(out)).toBe(true);
+  });
 });

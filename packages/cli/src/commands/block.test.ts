@@ -56,19 +56,80 @@ describe("parseBlockArgs", () => {
   it("parses validate subcommand with default path", () => {
     const out = parseBlockArgs(["validate"]);
     expect(out.kind).toBe("ok");
-    if (out.kind === "ok") {
-      expect(out.args.subcommand).toBe("validate");
-      expect(out.args.json).toBe(false);
+    if (out.kind === "ok" && out.args.subcommand === "validate") {
+      expect(out.args.rootPaths.length).toBe(1);
+      expect(out.args.autofix).toBe(false);
+      expect(out.args.changedSince).toBeNull();
     }
   });
 
-  it("parses extract --json subcommand", () => {
+  it("parses extract --json subcommand with a single path", () => {
     const out = parseBlockArgs(["extract", "--json", "/some/path"]);
     expect(out.kind).toBe("ok");
-    if (out.kind === "ok") {
-      expect(out.args.subcommand).toBe("extract");
+    if (out.kind === "ok" && out.args.subcommand === "extract") {
       expect(out.args.json).toBe(true);
-      expect(out.args.rootPath).toBe("/some/path");
+      expect(out.args.rootPaths).toEqual(["/some/path"]);
+    }
+  });
+
+  it("parses validate with multiple paths (DESIGN-0019 §5)", () => {
+    const out = parseBlockArgs(["validate", "/a", "/b", "/c"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "validate") {
+      expect(out.args.rootPaths).toEqual(["/a", "/b", "/c"]);
+    }
+  });
+
+  it("parses validate with --changed-since=<ref>", () => {
+    const out = parseBlockArgs(["validate", "--changed-since=origin/main"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "validate") {
+      expect(out.args.changedSince).toBe("origin/main");
+    }
+  });
+
+  it("parses validate --autofix --force", () => {
+    const out = parseBlockArgs(["validate", "--autofix", "--force"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "validate") {
+      expect(out.args.autofix).toBe(true);
+      expect(out.args.force).toBe(true);
+    }
+  });
+
+  it("parses check-enforcement subcommand", () => {
+    const out = parseBlockArgs(["check-enforcement", "/a", "/b"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "check-enforcement") {
+      expect(out.args.rootPaths).toEqual(["/a", "/b"]);
+    }
+  });
+
+  it("parses staleness with --since", () => {
+    const out = parseBlockArgs(["staleness", "--since=HEAD~5", "--strict"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "staleness") {
+      expect(out.args.since).toBe("HEAD~5");
+      expect(out.args.strict).toBe(true);
+    }
+  });
+
+  it("parses graph --check --json", () => {
+    const out = parseBlockArgs(["graph", "--check", "--json"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "graph") {
+      expect(out.args.check).toBe(true);
+      expect(out.args.json).toBe(true);
+    }
+  });
+
+  it("parses init with --symbol --write", () => {
+    const out = parseBlockArgs(["init", "/some/file.ts", "--symbol=Foo", "--write"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok" && out.args.subcommand === "init") {
+      expect(out.args.filePath).toBe("/some/file.ts");
+      expect(out.args.symbol).toBe("Foo");
+      expect(out.args.write).toBe(true);
     }
   });
 

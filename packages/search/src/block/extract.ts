@@ -26,15 +26,18 @@ import yaml from "js-yaml";
 
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
+import { javaModuleLocator } from "./module-locators/java.js";
 import { pythonModuleLocator } from "./module-locators/python.js";
 import { typescriptModuleLocator } from "./module-locators/typescript.js";
 import { RUNAWAY_LINES } from "./config.js";
+import { wrapYamlError } from "./yaml-errors.js";
 import type {
   BlockDiagnostic,
   ExtractedBlock,
   ExtractedBlockKind,
   SivruBlock,
   SivruDecision,
+  SivruInvariant,
   SourceRange,
 } from "./types.js";
 
@@ -170,25 +173,42 @@ function collectDeclarations(root: SyntaxNode, language: string): SyntaxNode[] {
     language === "python"
       ? ["function_definition", "class_definition"]
       : language === "go"
-        ? ["function_declaration", "method_declaration", "type_declaration"]
+        ? [
+            "function_declaration",
+            "method_declaration",
+            "type_declaration",
+            // Patch series: top-level var/const declarations also host
+            // blocks via the leading `// Foo: …` doc comment.
+            "var_declaration",
+            "const_declaration",
+          ]
         : language === "java"
           ? [
               "class_declaration",
               "interface_declaration",
               "enum_declaration",
+              // DESIGN-0019 slot 4: Java records, sealed types, annotation
+              // types, and nested type members all host their own blocks.
+              "record_declaration",
+              "annotation_type_declaration",
               "method_declaration",
               "constructor_declaration",
             ]
           : [
-              // TS / JS / TSX / JSX
+              // TS / JS / TSX / JSX. DESIGN-0019 slot 4 adds `enum`
+              // (`enum_declaration`) and `abstract class` (handled by
+              // class_declaration). `type` aliases and `interface`
+              // were already supported.
               "function_declaration",
               "generator_function_declaration",
               "class_declaration",
+              "abstract_class_declaration",
               "interface_declaration",
               "method_definition",
               "lexical_declaration",
               "variable_declaration",
               "type_alias_declaration",
+              "enum_declaration",
             ],
   );
   const visit = (n: SyntaxNode): void => {
@@ -278,17 +298,9 @@ function parseFenceBody(
       schema: yaml.JSON_SCHEMA,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     return {
       block: null,
-      diagnostics: [
-        {
-          code: "SIVRU-E216",
-          severity: "error",
-          message: `yaml-malformed: ${msg}`,
-          location: range,
-        },
-      ],
+      diagnostics: [wrapYamlError(err, yamlText, range)],
     };
   }
   if (parsed === null || parsed === undefined) {
@@ -325,10 +337,58 @@ function parseFenceBody(
       (x): x is string => typeof x === "string",
     );
   }
+  const driftDiagnostics: BlockDiagnostic[] = [];
   if (Array.isArray(obj["invariants"])) {
-    block.invariants = (obj["invariants"] as unknown[]).filter(
-      (x): x is string => typeof x === "string",
-    );
+    const items: (string | SivruInvariant)[] = [];
+    for (const item of obj["invariants"] as unknown[]) {
+      if (typeof item === "string") {
+        items.push(item);
+      } else if (
+        typeof item === "object" &&
+        item !== null &&
+        !Array.isArray(item) &&
+        typeof (item as Record<string, unknown>)["rule"] === "string"
+      ) {
+        const rec = item as Record<string, unknown>;
+        const enforcedBy = rec["enforced-by"];
+        items.push({
+          rule: rec["rule"] as string,
+          "enforced-by":
+            typeof enforcedBy === "string"
+              ? enforcedBy
+              : enforcedBy === null
+                ? null
+                : null,
+        });
+      } else if (
+        typeof item === "object" &&
+        item !== null &&
+        !Array.isArray(item)
+      ) {
+        // DESIGN-0019 §9a silent-drift detection: a non-string item
+        // without a `rule` field is almost always the colon-in-prose
+        // trap (`- tx: REQUIRES_NEW per-row failure`) parsing as a
+        // map. Surface as SIVRU-E237 and drop the drifted item from
+        // the invariants list (the autofix will rewrite the line).
+        const rec = item as Record<string, unknown>;
+        const keys = Object.keys(rec);
+        const trapKey = keys[0] ?? "<key>";
+        const trapValue = typeof rec[trapKey] === "string"
+          ? (rec[trapKey] as string)
+          : JSON.stringify(rec[trapKey]);
+        driftDiagnostics.push({
+          code: "SIVRU-E237",
+          severity: "error",
+          message:
+            `yaml-colon-in-prose: invariant parsed as YAML mapping ` +
+            `\`${trapKey}: ${trapValue}\` instead of a prose string. ` +
+            `Wrap the value in double quotes, or run ` +
+            `\`sivru block validate --autofix\` to apply the rewrite.`,
+          location: range,
+        });
+      }
+    }
+    block.invariants = items;
   }
   if (Array.isArray(obj["decisions"])) {
     block.decisions = (obj["decisions"] as unknown[])
@@ -353,7 +413,7 @@ function parseFenceBody(
   if (typeof obj["role"] !== "string" && typeof obj["responsibility"] !== "string") {
     // Block returned anyway so validate can produce the precise diagnostic.
   }
-  return { block, diagnostics: [] };
+  return { block, diagnostics: driftDiagnostics };
 }
 
 /**
@@ -619,6 +679,14 @@ export async function extractBlocks(
           for (const fence of fences) {
             out.push(buildExtractedBlock(filePath, "module", fence));
           }
+        }
+      }
+    } else if (language === "java") {
+      const located = javaModuleLocator(filePath, root, lines);
+      if (located !== null && located.carrier !== undefined) {
+        const fences = extractFences(located.carrier.text, located.carrier.startLine);
+        for (const fence of fences) {
+          out.push(buildExtractedBlock(filePath, "module", fence));
         }
       }
     }

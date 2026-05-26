@@ -34,7 +34,13 @@ export function blockToJSON(block: SivruBlock): SivruBlockJSON {
     responsibility: block.responsibility,
     maturity: block.maturity ?? null,
     collaborators: block.collaborators ?? [],
-    invariants: block.invariants ?? [],
+    // DESIGN-0019 §1: bare-string invariants project to the object form
+    // with `enforcedBy: null`. Downstream consumers see a uniform shape.
+    invariants: (block.invariants ?? []).map((inv) =>
+      typeof inv === "string"
+        ? { rule: inv, enforcedBy: null }
+        : { rule: inv.rule, enforcedBy: inv["enforced-by"] },
+    ),
     decisions: (block.decisions ?? []).map((d) => ({
       chose: d.chose,
       because: d.because,

@@ -7,7 +7,9 @@
 //
 // E219 is reserved for v0.6 implementation needs.
 
-import { DEFAULT_BLOCK_CONFIG, RUNAWAY_LINES } from "./config.js";
+import { DEFAULT_BLOCK_CONFIG, resolveMaxLines, RUNAWAY_LINES } from "./config.js";
+import { detectLanguage } from "../chunker/language.js";
+import { closestMatch } from "./levenshtein.js";
 import type {
   BlockDiagnostic,
   ExtractedBlock,
@@ -74,15 +76,39 @@ export function validateBlock(
     }
   }
 
-  // E213 maturity-invalid (only when maturity is present).
+  // E213 maturity-invalid (only when maturity is present). Includes a
+  // "did you mean" suggestion when the supplied value is within
+  // Levenshtein distance 3 of a valid value (DESIGN-0019 §9c).
   if (block.maturity !== undefined) {
     if (!cfg.maturityValues.includes(block.maturity)) {
+      const suggestion = closestMatch(block.maturity, cfg.maturityValues, 3);
+      const hint =
+        suggestion !== undefined ? ` (did you mean \`${suggestion}\`?)` : "";
       out.push({
         code: "SIVRU-E213",
         severity: "error",
-        message: `maturity-invalid: \`${block.maturity}\` not in {${cfg.maturityValues.join(", ")}}`,
+        message: `maturity-invalid: \`${block.maturity}\` not in {${cfg.maturityValues.join(", ")}}${hint}`,
         location: ctx.location,
       });
+    }
+  }
+
+  // E232 enforcement-unset (DESIGN-0019 §1): an object-form invariant
+  // with explicit `enforced-by: null` is a tracked signal — the next
+  // test to write. Default severity is warning; promote to error via
+  // `enforcement.requireForObjectInvariants: true`.
+  if (block.invariants !== undefined) {
+    const requireEnforced =
+      cfg.enforcement?.requireForObjectInvariants === true;
+    for (const inv of block.invariants) {
+      if (typeof inv === "object" && inv["enforced-by"] === null) {
+        out.push({
+          code: "SIVRU-E232",
+          severity: requireEnforced ? "error" : "warning",
+          message: `enforcement-unset: invariant "${inv.rule}" has \`enforced-by: null\` — no test enforces it yet`,
+          location: ctx.location,
+        });
+      }
     }
   }
 
@@ -101,13 +127,18 @@ export function validateBlock(
     }
   }
 
-  // E211 block-prose (warning when block exceeds maxLines).
+  // E211 block-prose (warning when block exceeds maxLines). Per-
+  // language thresholds (DESIGN-0019 §8) consulted via resolveMaxLines.
   const spannedLines = ctx.location.endLine - ctx.location.startLine + 1;
-  if (spannedLines > cfg.maxLines) {
+  const language = detectLanguage(ctx.location.filePath) ?? undefined;
+  const effectiveMaxLines = resolveMaxLines(cfg.maxLines, language);
+  if (spannedLines > effectiveMaxLines) {
     out.push({
       code: "SIVRU-E211",
       severity: "warning",
-      message: `block-prose: ${spannedLines} lines exceeds maxLines=${cfg.maxLines}`,
+      message: `block-prose: ${spannedLines} lines exceeds maxLines=${effectiveMaxLines}${
+        language !== undefined ? ` (${language})` : ""
+      }`,
       location: ctx.location,
     });
   }

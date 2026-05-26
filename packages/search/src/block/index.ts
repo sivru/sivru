@@ -16,8 +16,11 @@ export type {
   SivruBlock,
   SivruBlockConfig,
   SivruBlockJSON,
+  SivruBlockMaxLines,
   SivruDecision,
   SivruDecisionJSON,
+  SivruInvariant,
+  SivruInvariantJSON,
   SourceRange,
 } from "./types.js";
 
@@ -34,6 +37,46 @@ export { blockToJSON } from "./toJSON.js";
 
 export {
   DEFAULT_BLOCK_CONFIG,
+  DEFAULT_MAX_LINES,
   RUNAWAY_LINES,
   loadBlockConfig,
+  resolveMaxLines,
 } from "./config.js";
+
+export { wrapYamlError } from "./yaml-errors.js";
+
+export {
+  checkEnforcement,
+  parseEnforcedBy,
+  resolveEnforcement,
+} from "./enforcement.js";
+export type { ParsedReference } from "./enforcement.js";
+
+export { autofixFile, autofixFiles } from "./autofix.js";
+export type { AutofixResult } from "./autofix.js";
+
+export { closestMatch, levenshtein } from "./levenshtein.js";
+
+export { staleBlocks } from "./staleness.js";
+export type { StalenessOptions, StalenessReport } from "./staleness.js";
+
+export { computeBlockGraph } from "./graph.js";
+export type { BlockGraph, GraphEdge, GraphNode } from "./graph.js";
+
+export { initBlock } from "./init.js";
+export type { InitOptions, InitResult } from "./init.js";
+
+export { checkBridges } from "./check-bridges.js";
+
+export {
+  JAVA_BRIDGES,
+  resolveJavaBridges,
+} from "./bridges/java.js";
+export type { AnnotationBridge } from "./bridges/java.js";
+
+export {
+  PYTHON_BRIDGES,
+  resolvePythonBridges,
+} from "./bridges/python.js";
+
+export { checkDeprecatedMaturitySync } from "./deprecated-sync.js";
