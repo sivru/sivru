@@ -446,7 +446,12 @@ export async function checkEnforcement(
   // so we know whether we need the symbol map at all. Build it lazily
   // (a `check-enforcement` run with only null/file-anchored refs
   // should never walk the repo).
-  type Ref = { ref: ParsedReference; raw: string; block: ExtractedBlock };
+  //
+  // `ref: null` represents a malformed `enforced-by` string — keeping
+  // it as a discriminated `ParsedReference | null` (rather than a
+  // sentinel `{ name: "" }`) means the malformed-check below is an
+  // honest null-check, not a magic empty-string comparison.
+  type Ref = { ref: ParsedReference | null; raw: string; block: ExtractedBlock };
   const refs: Ref[] = [];
   for (const eb of blocks) {
     if (eb.block === null || eb.block.invariants === undefined) continue;
@@ -454,9 +459,8 @@ export async function checkEnforcement(
       if (typeof inv === "string") continue;
       const enforcedBy = inv["enforced-by"];
       if (enforcedBy === null) continue;
-      const ref = parseEnforcedBy(enforcedBy);
       refs.push({
-        ref: ref ?? { kind: "symbol", qualifier: null, name: "" },
+        ref: parseEnforcedBy(enforcedBy),
         raw: enforcedBy,
         block: eb,
       });
@@ -465,14 +469,14 @@ export async function checkEnforcement(
 
   // Lazy symbol-map build. One repo walk + parse for the whole batch.
   let symbolIndex: EnforcementIndex | null = null;
-  const needsSymbolMap = refs.some((r) => r.ref.kind === "symbol" && r.ref.name !== "");
+  const needsSymbolMap = refs.some((r) => r.ref !== null && r.ref.kind === "symbol");
   if (needsSymbolMap) {
     symbolIndex = await buildSymbolMap(repoRoot);
   }
 
   const diagnostics: BlockDiagnostic[] = [];
   for (const { ref, raw, block: eb } of refs) {
-    if (ref.name === "") {
+    if (ref === null) {
       diagnostics.push({
         code: "SIVRU-E230",
         severity: "error",
@@ -481,10 +485,21 @@ export async function checkEnforcement(
       });
       continue;
     }
-    const result: ResolveResult =
-      ref.kind === "file-anchored"
-        ? await resolveFileAnchored(ref, repoRoot)
-        : lookupSymbol(symbolIndex!, ref);
+    let result: ResolveResult;
+    if (ref.kind === "file-anchored") {
+      result = await resolveFileAnchored(ref, repoRoot);
+    } else {
+      // The needsSymbolMap predicate above guarantees symbolIndex is
+      // populated whenever we reach this branch with a symbol-form ref.
+      // Guard it explicitly so a future refactor can't break the
+      // invariant silently.
+      if (symbolIndex === null) {
+        throw new Error(
+          "enforcement: symbolIndex was expected to be built — bug in needsSymbolMap predicate",
+        );
+      }
+      result = lookupSymbol(symbolIndex, ref);
+    }
     if (result.kind === "missing") {
       diagnostics.push({
         code: "SIVRU-E230",

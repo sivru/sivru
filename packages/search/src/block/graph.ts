@@ -141,7 +141,10 @@ export async function computeBlockGraph(
     if (allowedAsymmetric.has(edgeKey)) continue;
     if (edge.reciprocal) continue;
 
-    const source = nodes.find((n) => n.name === edge.from);
+    // O(1) source-node lookup via the byName map already built above.
+    // Previously this was `nodes.find(...)` inside the per-edge loop:
+    // O(N × E) for a graph with many edges per node.
+    const source = byName.get(edge.from)?.[0];
 
     // E235 rename-suspect requires real evidence, not just "any node
     // lists A". The signal is:
@@ -202,7 +205,7 @@ export async function computeBlockGraph(
       for (const b of others) {
         const bAfters = afterRefs.get(b);
         if (bAfters?.has(a) === true) {
-          const sourceNode = nodes.find((n) => n.name === a);
+          const sourceNode = byName.get(a)?.[0];
           diagnostics.push({
             code: "SIVRU-E236",
             severity: "warning",
