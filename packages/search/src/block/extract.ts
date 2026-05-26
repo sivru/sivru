@@ -26,6 +26,7 @@ import yaml from "js-yaml";
 
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
+import { declTypesFor } from "./decl-types.js";
 import { javaModuleLocator } from "./module-locators/java.js";
 import { pythonModuleLocator } from "./module-locators/python.js";
 import { typescriptModuleLocator } from "./module-locators/typescript.js";
@@ -167,50 +168,8 @@ function collectComments(root: SyntaxNode): SyntaxNode[] {
 
 /** Walk node tree and collect declaration-like nodes that can carry symbols. */
 function collectDeclarations(root: SyntaxNode, language: string): SyntaxNode[] {
+  const declTypes = declTypesFor(language);
   const out: SyntaxNode[] = [];
-  // Languages where the per-symbol carrier is a *leading* doc comment.
-  const declTypes = new Set<string>(
-    language === "python"
-      ? ["function_definition", "class_definition"]
-      : language === "go"
-        ? [
-            "function_declaration",
-            "method_declaration",
-            "type_declaration",
-            // Patch series: top-level var/const declarations also host
-            // blocks via the leading `// Foo: …` doc comment.
-            "var_declaration",
-            "const_declaration",
-          ]
-        : language === "java"
-          ? [
-              "class_declaration",
-              "interface_declaration",
-              "enum_declaration",
-              // DESIGN-0019 slot 4: Java records, sealed types, annotation
-              // types, and nested type members all host their own blocks.
-              "record_declaration",
-              "annotation_type_declaration",
-              "method_declaration",
-              "constructor_declaration",
-            ]
-          : [
-              // TS / JS / TSX / JSX. DESIGN-0019 slot 4 adds `enum`
-              // (`enum_declaration`) and `abstract class` (handled by
-              // class_declaration). `type` aliases and `interface`
-              // were already supported.
-              "function_declaration",
-              "generator_function_declaration",
-              "class_declaration",
-              "abstract_class_declaration",
-              "interface_declaration",
-              "method_definition",
-              "lexical_declaration",
-              "variable_declaration",
-              "type_alias_declaration",
-              "enum_declaration",
-            ],
-  );
   const visit = (n: SyntaxNode): void => {
     if (declTypes.has(n.type)) out.push(n);
     for (const c of n.namedChildren) visit(c);
@@ -283,6 +242,31 @@ function sliceLines(
   endLine: number,
 ): string {
   return lines.slice(startLine - 1, endLine).join("\n");
+}
+
+/**
+ * Find the source-file line number of an invariant-array item whose
+ * YAML mapping key is `trapKey`. Returns null when no match.
+ *
+ * The body starts immediately after `@sivru` (one line below the
+ * fence start), so body line index `i` corresponds to source line
+ * `fenceStartLine + 1 + i`.
+ */
+function findTrapLineInYaml(
+  yamlText: string,
+  fenceStartLine: number,
+  trapKey: string,
+): number | null {
+  const bodyLines = yamlText.split("\n");
+  // Escape regex metacharacters in the key.
+  const escaped = trapKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pat = new RegExp(`^\\s*-\\s+${escaped}:\\s+`);
+  for (let i = 0; i < bodyLines.length; i++) {
+    if (pat.test(bodyLines[i]!)) {
+      return fenceStartLine + 1 + i;
+    }
+  }
+  return null;
 }
 
 /** YAML-parse a fence body to a SivruBlock. Diagnostics on failure. */
@@ -370,12 +354,25 @@ function parseFenceBody(
         // trap (`- tx: REQUIRES_NEW per-row failure`) parsing as a
         // map. Surface as SIVRU-E237 and drop the drifted item from
         // the invariants list (the autofix will rewrite the line).
+        //
+        // Narrow `location` to the specific drifted line (not the
+        // whole block range) so the diagnostic points the author at
+        // the exact source line that needs quoting.
         const rec = item as Record<string, unknown>;
         const keys = Object.keys(rec);
         const trapKey = keys[0] ?? "<key>";
         const trapValue = typeof rec[trapKey] === "string"
           ? (rec[trapKey] as string)
           : JSON.stringify(rec[trapKey]);
+        const trapLine = findTrapLineInYaml(yamlText, range.startLine, trapKey);
+        const trapRange: SourceRange =
+          trapLine !== null
+            ? {
+                filePath: range.filePath,
+                startLine: trapLine,
+                endLine: trapLine,
+              }
+            : range;
         driftDiagnostics.push({
           code: "SIVRU-E237",
           severity: "error",
@@ -384,7 +381,7 @@ function parseFenceBody(
             `\`${trapKey}: ${trapValue}\` instead of a prose string. ` +
             `Wrap the value in double quotes, or run ` +
             `\`sivru block validate --autofix\` to apply the rewrite.`,
-          location: range,
+          location: trapRange,
         });
       }
     }

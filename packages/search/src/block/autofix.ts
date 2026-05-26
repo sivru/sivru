@@ -22,7 +22,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 import { extractBlocks } from "./extract.js";
-import { _internal as yamlInternal } from "./yaml-errors.js";
+import { unbalancedApostrophes } from "./yaml-heuristics.js";
 import type { BlockDiagnostic } from "./types.js";
 
 export type AutofixResult = {
@@ -33,8 +33,6 @@ export type AutofixResult = {
   /** Diagnostics that were rewritten away. */
   fixed: BlockDiagnostic[];
 };
-
-const { unbalancedApostrophes, unquotedColonColumnInValue } = yamlInternal;
 
 /**
  * Decide whether `line` is rewriteable to a safe form. Returns the
@@ -106,9 +104,9 @@ function rewriteLine(
  * collaborators: [extractBlocks, wrapYamlError]
  * invariants:
  *   - rule: refuse to autofix values containing `"` — those need human review
- *     enforced-by: refusesToAutofixEmbeddedDoubleQuote
+ *     enforced-by: "packages/search/src/block/autofix.test.ts::refuses to rewrite values containing embedded double-quotes"
  *   - rule: re-running on a clean file is a no-op (idempotent)
- *     enforced-by: idempotentOnCleanFile
+ *     enforced-by: "packages/search/src/block/autofix.test.ts::is idempotent on a clean file"
  *   - rule: preserve indentation and trailing whitespace exactly
  *     enforced-by: null
  * decisions:
@@ -145,10 +143,12 @@ export async function autofixFile(filePath: string): Promise<AutofixResult> {
       const stripComment = (l: string): string =>
         l.replace(/^\s*(?:\*|\/\/|#|\/\/\/)\s?/, "");
       // E237 trap signature: an array-item line whose value contains
-      // a colon, OR a field-line value with an internal colon. Both
-      // collapse to "the value of this line contains a `:` and was
-      // parsed as a map by YAML".
-      const E237_PATTERN = /^\s*(?:-\s+\S.*:\s+\S|\w+:\s+\S.*:\s+\S)/;
+      // a colon, OR a `chose:` / `because:` / `valid-while:` / `revisit-if:`
+      // field whose value contains an internal colon. Both collapse to
+      // "the value of this line contains a `:` and YAML parsed it as a
+      // nested mapping instead of a string."
+      const E237_PATTERN =
+        /^\s*(?:-\s+\S.*:\s+\S|(?:chose|because|valid-while|revisit-if|rule|responsibility):\s+\S.*:\s+\S)/;
       for (let i = loc.startLine; i <= loc.endLine; i++) {
         const idx = i - 1;
         if (idx < 0 || idx >= lines.length) continue;

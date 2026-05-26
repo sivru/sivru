@@ -18,8 +18,9 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve as resolvePath } from "node:path";
+import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 
 import { extractBlocks } from "./extract.js";
@@ -98,10 +99,20 @@ async function gitHunksOutsideRange(
   }
 }
 
+/**
+ * Walk upward from `start` looking for a `.git` directory; return the
+ * first ancestor that contains one, else `start` (best-effort).
+ *
+ * Critical for staleness because `git diff --name-only` returns paths
+ * relative to the repo root — if the user invokes `block staleness` from
+ * a subdirectory and we mis-detect the root, we produce wrong absolute
+ * paths and the file-existence check silently drops every changed file.
+ */
 function findRepoRoot(start: string): string {
-  let cur = start;
+  let cur = resolvePath(start);
   for (let i = 0; i < 32; i++) {
-    const parent = dirname(cur);
+    if (existsSync(resolvePath(cur, ".git"))) return cur;
+    const parent = resolvePath(cur, "..");
     if (parent === cur) break;
     cur = parent;
   }
@@ -130,28 +141,33 @@ function findRepoRoot(start: string): string {
  * @end
  */
 export async function staleBlocks(opts: StalenessOptions): Promise<StalenessReport> {
-  const rootPath = opts.rootPath;
-  const repoRoot = findRepoRoot(rootPath);
-  void repoRoot; // git invocations run with cwd = rootPath; repoRoot detection is best-effort.
-  const changed = await gitChangedFiles(rootPath, opts.since);
+  // git diff returns paths relative to the repo root; we resolve to the
+  // top-level .git ancestor up-front so `resolvePath(repoRoot, rel)`
+  // always lands on a real file.
+  const repoRoot = findRepoRoot(opts.rootPath);
+  const changed = await gitChangedFiles(repoRoot, opts.since);
   const diagnostics: BlockDiagnostic[] = [];
 
+  // Restrict to files under the user-supplied `rootPath` (when it's
+  // narrower than the repo) so `block staleness packages/search/` is
+  // scoped, not repo-wide.
+  const scope = resolvePath(opts.rootPath);
+
   for (const rel of changed) {
-    const abs = resolvePath(rootPath, rel);
+    const abs = resolvePath(repoRoot, rel);
+    if (!abs.startsWith(scope)) continue;
     let currentContent: string;
     try {
       currentContent = await readFile(abs, "utf8");
     } catch {
       continue;
     }
-    const before = await gitShow(rootPath, opts.since, rel);
+    const before = await gitShow(repoRoot, opts.since, rel);
     if (before === null) continue;
 
     const currentBlocks = await extractBlocks(abs, { content: currentContent });
     const beforeBlocks = await extractBlocks(abs, { content: before });
 
-    // Index before-blocks by symbol name (best-effort match — module-level
-    // matches by the literal `(module)` key).
     const beforeBySymbol = new Map<string, ExtractedBlock>();
     for (const b of beforeBlocks) {
       const key = b.symbolName ?? "(module)";
@@ -160,14 +176,14 @@ export async function staleBlocks(opts: StalenessOptions): Promise<StalenessRepo
 
     for (const cur of currentBlocks) {
       const key = cur.symbolName ?? "(module)";
-      const before = beforeBySymbol.get(key);
-      if (before === undefined) continue;
-      if (cur.block === null || before.block === null) continue;
+      const beforeMatch = beforeBySymbol.get(key);
+      if (beforeMatch === undefined) continue;
+      if (cur.block === null || beforeMatch.block === null) continue;
       const curHash = hashContent(JSON.stringify(cur.block));
-      const beforeHash = hashContent(JSON.stringify(before.block));
+      const beforeHash = hashContent(JSON.stringify(beforeMatch.block));
       if (curHash !== beforeHash) continue;
 
-      const outside = await gitHunksOutsideRange(rootPath, opts.since, rel, cur.range);
+      const outside = await gitHunksOutsideRange(repoRoot, opts.since, rel, cur.range);
       if (outside > 0) {
         diagnostics.push({
           code: "SIVRU-E233",

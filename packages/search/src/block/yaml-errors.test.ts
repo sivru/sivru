@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import yaml from "js-yaml";
 
-import { wrapYamlError, _internal } from "./yaml-errors.js";
+import { wrapYamlError } from "./yaml-errors.js";
+import { unbalancedApostrophes } from "./yaml-heuristics.js";
 
 const RANGE = { filePath: "fixture.ts", startLine: 1, endLine: 10 };
 
@@ -40,9 +41,9 @@ describe("wrapYamlError", () => {
   });
 });
 
-describe("_internal heuristics", () => {
+describe("yaml-heuristics", () => {
   it("unbalancedApostrophes detects single-quote imbalance", () => {
-    expect(_internal.unbalancedApostrophes("  - chose: 'foo'")).toBe(false);
-    expect(_internal.unbalancedApostrophes("  - chose: 'foo")).toBe(true);
+    expect(unbalancedApostrophes("  - chose: 'foo'")).toBe(false);
+    expect(unbalancedApostrophes("  - chose: 'foo")).toBe(true);
   });
 });

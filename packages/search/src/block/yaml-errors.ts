@@ -2,11 +2,7 @@
 // (DESIGN-0019 §9). The bare js-yaml message is preserved underneath
 // the wrapped diagnostic so debugging never loses context.
 //
-// Three families:
-//   - SIVRU-E237 yaml-colon-in-prose: unquoted `:` in a value that
-//     should be a string scalar. The Java idiom `tx: REQUIRES_NEW`
-//     written as `- tx: REQUIRES_NEW per-row …` collides with YAML's
-//     mapping syntax.
+// Two families:
 //   - SIVRU-E238 yaml-quote-context: apostrophes around an identifier-
 //     like token (`'this.commit()'`) parse as a single-quoted string;
 //     a trailing comma then triggers an opaque "mapping entry not
@@ -14,10 +10,14 @@
 //   - SIVRU-E216 yaml-malformed: every other parse error keeps the
 //     original v0.6 behavior (no message change).
 //
-// The diagnostic carries `data` with the original line text + 1-indexed
-// column so `autofix.ts` can rewrite the offending line without
-// re-parsing the YAML.
+// SIVRU-E237 yaml-colon-in-prose is NOT detected here — when YAML
+// fails on a structural issue we'd usually see E238 or E216. The
+// colon-in-prose case is a SILENT drift (YAML succeeds, but parses
+// the prose as a nested mapping); `extract.ts:parseFenceBody` catches
+// that case post-parse by inspecting the shape of the parsed
+// invariants array.
 
+import { unbalancedApostrophes } from "./yaml-heuristics.js";
 import type { BlockDiagnostic, SourceRange } from "./types.js";
 
 /**
@@ -55,64 +55,6 @@ function lineAtMark(yamlText: string, mark: YamlMark | undefined): string {
   if (mark === undefined) return "";
   const lines = yamlText.split("\n");
   return lines[mark.line] ?? "";
-}
-
-/**
- * Crude apostrophe-balance check: count single quotes outside any
- * `"..."` region of the line. Odd count → unterminated single-quote
- * suspect. This is the §9b heuristic.
- */
-function unbalancedApostrophes(line: string): boolean {
-  let inDouble = false;
-  let apostrophes = 0;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === "\\") {
-      i += 1;
-      continue;
-    }
-    if (ch === '"') {
-      inDouble = !inDouble;
-      continue;
-    }
-    if (!inDouble && ch === "'") apostrophes += 1;
-  }
-  return apostrophes % 2 === 1;
-}
-
-/**
- * Find the column of an unquoted colon inside the "value" half of a
- * YAML line. Returns -1 if no candidate found. We look only AFTER the
- * first `: ` (the mapping-key separator) — colons inside the key half
- * are real YAML structure, not the §9a trap.
- */
-function unquotedColonColumnInValue(line: string): number {
-  // For "- foo: bar: baz", the structural `:` is the first one. Find
-  // the value half after the first ": ".
-  const valueStart = line.search(/: \S/);
-  if (valueStart === -1) {
-    // Array-item form: `  - tx: REQUIRES_NEW …` — the `- ` makes
-    // the rest a scalar by default, and a colon further in is the
-    // ambiguity. Detect it directly.
-    const dashIdx = line.search(/^\s*-\s+/);
-    if (dashIdx === -1) return -1;
-    const afterDash = line.replace(/^\s*-\s+/, "");
-    const colonInValue = afterDash.indexOf(":");
-    if (colonInValue === -1) return -1;
-    // Skip if the dashed value is already double-quoted.
-    if (afterDash.trim().startsWith('"')) return -1;
-    return line.length - afterDash.length + colonInValue;
-  }
-  // After "key: ", look for another colon followed by a space or EOL.
-  const afterKey = line.slice(valueStart + 2);
-  // Skip if already quoted.
-  if (afterKey.trim().startsWith('"') || afterKey.trim().startsWith("'")) {
-    return -1;
-  }
-  const m = afterKey.match(/[^"]*?(:)(?:\s|$)/);
-  if (m === null || m.index === undefined) return -1;
-  // Reconstruct file column.
-  return valueStart + 2 + m.index + m[0].indexOf(":");
 }
 
 /**
@@ -160,24 +102,6 @@ export function wrapYamlError(
     };
   }
 
-  // §9a: colon-in-prose check.
-  if (failingLine !== "") {
-    const colonCol = unquotedColonColumnInValue(failingLine);
-    if (colonCol !== -1) {
-      return {
-        code: "SIVRU-E237",
-        severity: "error",
-        message:
-          `yaml-colon-in-prose: unquoted \`:\` inside a prose value. ` +
-          `Wrap the value in double quotes, or run ` +
-          `\`sivru block validate --autofix\` to apply the rewrite.` +
-          `${snippet(failingLine, colonCol)}\n  ` +
-          `(original yaml error: ${message})`,
-        location: range,
-      };
-    }
-  }
-
   return {
     code: "SIVRU-E216",
     severity: "error",
@@ -185,13 +109,3 @@ export function wrapYamlError(
     location: range,
   };
 }
-
-/**
- * Re-export the heuristics so the autofix module can replay them on a
- * line and decide whether to rewrite. Keeping these private to this
- * file would force the autofix to re-parse js-yaml and re-detect.
- */
-export const _internal = {
-  unbalancedApostrophes,
-  unquotedColonColumnInValue,
-};

@@ -22,6 +22,7 @@ import { readFile } from "node:fs/promises";
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
 import { walk } from "../walker/walk.js";
+import { declTypesFor } from "./decl-types.js";
 import type { BlockDiagnostic, ExtractedBlock } from "./types.js";
 
 /**
@@ -102,12 +103,28 @@ function detectSkip(node: SyntaxNode, language: string, source: string): boolean
     return false;
   }
   if (language === "go") {
-    // For a Go test, check whether the body contains a `t.Skip(` or
-    // `t.SkipNow(` call near the top. We use textual scan for simplicity
-    // — the tree-sitter walk would otherwise need to enumerate every
-    // call_expression in the body.
-    const text = node.text;
-    return /\bt\.Skip(?:Now)?\s*\(/.test(text);
+    // For a Go test, look for an actual `t.Skip(` / `t.SkipNow(` call
+    // expression inside the function body — not just any textual match
+    // (which would false-positive on comments, strings, sub-tests, etc.).
+    const body = node.childForFieldName("body");
+    if (body === null) return false;
+    let skipped = false;
+    const visit = (n: SyntaxNode): void => {
+      if (skipped) return;
+      if (n.type === "call_expression") {
+        const callee = n.childForFieldName("function");
+        if (callee !== null) {
+          const text = callee.text;
+          if (text === "t.Skip" || text === "t.SkipNow") {
+            skipped = true;
+            return;
+          }
+        }
+      }
+      for (const c of n.namedChildren) visit(c);
+    };
+    visit(body);
+    return skipped;
   }
   // TS / JS / TSX / JSX: handled by the caller (it()/test() resolution
   // path); declarations passed here are top-level functions which don't
@@ -127,37 +144,15 @@ function findDeclaration(
   language: string,
   source: string,
 ): { node: SyntaxNode; skipped: boolean } | null {
-  // declTypes mirrors the set in extract.ts but is duplicated here to
-  // avoid a circular import. Keep the two in sync when slot 4 adds
-  // Java records/enums/etc.
+  // Pull from the shared decl-types module + augment with Python's
+  // `decorated_definition` (used to surface decorators around test
+  // functions for skip detection — not a block-carrier kind, but a
+  // wrapper enforcement needs to traverse).
+  const shared = declTypesFor(language);
   const declTypes: ReadonlySet<string> =
     language === "python"
-      ? new Set([
-          "function_definition",
-          "class_definition",
-          "decorated_definition",
-        ])
-      : language === "go"
-        ? new Set(["function_declaration", "method_declaration", "type_declaration"])
-        : language === "java"
-          ? new Set([
-              "class_declaration",
-              "interface_declaration",
-              "enum_declaration",
-              "record_declaration",
-              "method_declaration",
-              "constructor_declaration",
-            ])
-          : new Set([
-              "function_declaration",
-              "generator_function_declaration",
-              "class_declaration",
-              "interface_declaration",
-              "method_definition",
-              "lexical_declaration",
-              "variable_declaration",
-              "type_alias_declaration",
-            ]);
+      ? new Set([...shared, "decorated_definition"])
+      : shared;
 
   let found: { node: SyntaxNode; skipped: boolean } | null = null;
   const visit = (n: SyntaxNode): void => {
@@ -360,11 +355,11 @@ export async function resolveEnforcement(
  * collaborators: [extractBlocks, getParser, walk]
  * invariants:
  *   - rule: file-anchored references resolve by leaf it()/test() name; describe path is informative only
- *     enforced-by: resolveFileAnchoredFindsItCall
+ *     enforced-by: "packages/search/src/block/enforcement.test.ts::finds an it() callsite by name"
  *   - rule: symbol-form prefers a file whose path contains the qualifier; otherwise first match wins
  *     enforced-by: null
- *   - rule: SIVRU-E231 skipped detection covers vitest, jest, JUnit, pytest, and Go t.Skip
- *     enforced-by: detectsSkippedTests
+ *   - rule: SIVRU-E231 skipped detection covers vitest at minimum (Java/Python/Go covered by integration fixtures)
+ *     enforced-by: "packages/search/src/block/enforcement.test.ts::detects an it.skip() as skipped"
  * decisions:
  *   - chose: tree-sitter walk per candidate file rather than reusing buildSymbolIndex
  *     because: the symbol index carries chunk metadata sivru doesn't need here; a direct walk keeps enforcement.ts free of the index dependency

@@ -16,12 +16,15 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 
+import yaml from "js-yaml";
+
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
 import { extractBlocks } from "./extract.js";
 import { resolveJavaBridges } from "./bridges/java.js";
 import { resolvePythonBridges } from "./bridges/python.js";
 import { loadBlockConfig } from "./config.js";
+import { declTypesFor } from "./decl-types.js";
 
 export type InitOptions = {
   targetSymbol?: string | undefined;
@@ -54,6 +57,12 @@ function inferRole(name: string): string {
   return "TODO";
 }
 
+/**
+ * Strip comment-syntax prefixes and return the first sentence of the
+ * cleaned text. Returns "" when no usable content survives — caller is
+ * responsible for the TODO fallback so it can distinguish "extracted
+ * from doc" from "made up the responsibility" (the marker case).
+ */
 function firstSentence(docText: string): string {
   const cleaned = docText
     .replace(/^\s*\/\*\*?/, "")
@@ -64,9 +73,10 @@ function firstSentence(docText: string): string {
     .replace(/^\s*"""/gm, "")
     .replace(/"""\s*$/gm, "")
     .trim();
+  if (cleaned.length === 0) return "";
   const match = cleaned.match(/^(.+?[.!?])\s/);
   if (match !== null) return match[1]!.trim();
-  return cleaned.split("\n")[0]?.trim() ?? "TODO: one-sentence role in the system";
+  return cleaned.split("\n")[0]?.trim() ?? "";
 }
 
 function listImports(content: string, language: string): string[] {
@@ -122,51 +132,35 @@ function findDeclarationNode(
   language: string,
   targetSymbol: string | undefined,
 ): { node: SyntaxNode; name: string } | null {
-  const declTypes: ReadonlySet<string> =
-    language === "python"
-      ? new Set(["function_definition", "class_definition"])
-      : language === "go"
-        ? new Set(["function_declaration", "method_declaration", "type_declaration"])
-        : language === "java"
-          ? new Set([
-              "class_declaration",
-              "interface_declaration",
-              "enum_declaration",
-              "record_declaration",
-              "method_declaration",
-            ])
-          : new Set([
-              "function_declaration",
-              "class_declaration",
-              "interface_declaration",
-              "type_alias_declaration",
-              "lexical_declaration",
-            ]);
+  const declTypes = declTypesFor(language);
 
-  let best: { node: SyntaxNode; name: string; size: number } | null = null;
+  // When no `--symbol` is given, prefer the FIRST top-level declaration
+  // we see (typically the file's primary export). "Largest by char
+  // count" — the previous default — surprised users with multi-export
+  // files where a small `Foo` export was overshadowed by a sprawling
+  // helper. First-encountered matches what an author would expect when
+  // they say "scaffold a block for this file."
+  let firstMatch: { node: SyntaxNode; name: string } | null = null;
+  let targetMatch: { node: SyntaxNode; name: string } | null = null;
   const visit = (n: SyntaxNode): void => {
+    if (targetMatch !== null) return;
     if (declTypes.has(n.type)) {
       const nameNode = n.childForFieldName("name");
-      const name = nameNode?.text ?? null;
-      if (name !== null) {
+      const name = nameNode?.text;
+      if (typeof name === "string" && name.length > 0) {
         if (targetSymbol !== undefined && name === targetSymbol) {
-          best = { node: n, name, size: n.endIndex - n.startIndex };
+          targetMatch = { node: n, name };
           return;
         }
-        if (targetSymbol === undefined) {
-          const size = n.endIndex - n.startIndex;
-          if (best === null || size > best.size) {
-            best = { node: n, name, size };
-          }
+        if (targetSymbol === undefined && firstMatch === null) {
+          firstMatch = { node: n, name };
         }
       }
     }
     for (const c of n.namedChildren) visit(c);
   };
   visit(root);
-  if (best === null) return null;
-  const { node, name } = best;
-  return { node, name };
+  return targetMatch ?? firstMatch;
 }
 
 function leadingDocText(
@@ -227,31 +221,53 @@ function collectAnnotations(
   return out;
 }
 
+/**
+ * Generate the block body via js-yaml's `dump` so quote-escaping is
+ * handled correctly. `responsibility` carries a leading "auto-generated,
+ * replace" marker (DESIGN-0019 §"Acceptance criteria — Slot 3") so
+ * reviewers catch the auto-pull.
+ *
+ * The output is wrapped in `@sivru` / `@end` fences; the YAML body
+ * between them is whatever js-yaml emits, guaranteeing it round-trips
+ * through `extractBlocks` / `parseFenceBody` cleanly.
+ */
 function generateBlock(opts: {
   name: string;
   role: string;
   responsibility: string;
   collaborators: string[];
   invariants: string[];
+  responsibilitySource: "doc-comment" | "todo";
 }): string {
-  const lines = [
-    "@sivru",
-    "schema: 1",
-    `role: ${opts.role}`,
-    `responsibility: "${opts.responsibility}"`,
-    `collaborators:`,
-    ...opts.collaborators.map((c) => `  - ${c}`),
-    `invariants:`,
-    ...opts.invariants.map((inv) => `  - rule: "${inv}"\n    enforced-by: null`),
-    `decisions:`,
-    `  - chose: "TODO"`,
-    `    because: "TODO"`,
-    `    valid-while: "TODO"`,
-    `    revisit-if: "TODO"`,
-    `maturity: experimental`,
-    "@end",
+  const responsibilityValue =
+    opts.responsibilitySource === "doc-comment"
+      ? `${opts.responsibility} # auto-generated, replace`
+      : opts.responsibility;
+  const body: Record<string, unknown> = {
+    schema: 1,
+    role: opts.role,
+    responsibility: responsibilityValue,
+  };
+  if (opts.collaborators.length > 0) {
+    body["collaborators"] = opts.collaborators;
+  }
+  body["invariants"] = opts.invariants.map((rule) => ({
+    rule,
+    "enforced-by": null,
+  }));
+  body["decisions"] = [
+    {
+      chose: "TODO",
+      because: "TODO",
+      "valid-while": "TODO",
+      "revisit-if": "TODO",
+    },
   ];
-  return lines.join("\n");
+  body["maturity"] = "experimental";
+  // `lineWidth: -1` disables line-folding so long invariant prose stays
+  // on one line and survives autofix's per-line rewriter contract.
+  const yamlBody = yaml.dump(body, { lineWidth: -1, noRefs: true, quotingType: '"' });
+  return ["@sivru", yamlBody.trimEnd(), "@end"].join("\n");
 }
 
 /**
@@ -312,7 +328,10 @@ export async function initBlock(
     }
 
     const doc = leadingDocText(content, decl.node, language);
-    const responsibility = firstSentence(doc) || "TODO: one-sentence role in the system";
+    const docFirst = firstSentence(doc);
+    const responsibility = docFirst !== "" ? docFirst : "TODO: one-sentence role in the system";
+    const responsibilitySource: "doc-comment" | "todo" =
+      docFirst !== "" ? "doc-comment" : "todo";
 
     const collaborators = listImports(content, language);
 
@@ -338,6 +357,7 @@ export async function initBlock(
       name: decl.name,
       role: inferRole(decl.name),
       responsibility,
+      responsibilitySource,
       collaborators,
       invariants: seedInvariants,
     });

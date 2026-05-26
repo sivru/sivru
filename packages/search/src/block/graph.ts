@@ -118,37 +118,57 @@ export async function computeBlockGraph(rootPath: string): Promise<BlockGraph> {
   const diagnostics: BlockDiagnostic[] = [];
   const allowedAsymmetric = new Set(cfg.graph?.allowedAsymmetric ?? []);
 
+  // E235 needs back-reference candidates indexed once per graph build:
+  // for each node, which nodes list it as a collaborator?
+  const backRefsByTarget = new Map<string, GraphNode[]>();
+  for (const node of nodes) {
+    for (const coll of node.collaborators) {
+      const arr = backRefsByTarget.get(coll);
+      if (arr === undefined) backRefsByTarget.set(coll, [node]);
+      else arr.push(node);
+    }
+  }
+
   // SIVRU-E234 / SIVRU-E235.
   for (const edge of edges) {
     const edgeKey = `${edge.from}->${edge.to}`;
     if (allowedAsymmetric.has(edgeKey)) continue;
-    if (!edge.reciprocal) {
-      // E235 rename-suspect: A → "OldName" doesn't resolve, but some
-      // other symbol "X" includes A.
-      const resolved = byName.has(edge.to);
-      if (!resolved) {
-        const renameCandidate = nodes.find((n) =>
-          n.collaborators.includes(edge.from) && n.name !== edge.from,
-        );
-        if (renameCandidate !== undefined && renameCandidate.name !== edge.to) {
-          const source = nodes.find((n) => n.name === edge.from);
-          diagnostics.push({
-            code: "SIVRU-E235",
-            severity: "warning",
-            message: `collaborator-rename-suspect: ${edge.from} → "${edge.to}" does not resolve, but ${renameCandidate.name} lists ${edge.from} — suggested rename to ${renameCandidate.name}`,
-            ...(source?.range !== undefined ? { location: source.range } : {}),
-          });
-          continue;
-        }
+    if (edge.reciprocal) continue;
+
+    const source = nodes.find((n) => n.name === edge.from);
+
+    // E235 rename-suspect requires real evidence, not just "any node
+    // lists A". The signal is:
+    //   1. edge.to doesn't resolve (no node with that name)
+    //   2. EXACTLY ONE other node Y back-references edge.from
+    //      (multiple candidates → can't pick a winner; skip)
+    //   3. Y is not edge.from itself and not edge.to
+    // Without uniqueness we'd false-positive on every fan-in (e.g.,
+    // `Logger` collaborates with many services; missing one wouldn't
+    // mean "rename to Logger" just because Logger references back).
+    const resolved = byName.has(edge.to);
+    if (!resolved) {
+      const candidates = (backRefsByTarget.get(edge.from) ?? []).filter(
+        (n) => n.name !== edge.from && n.name !== edge.to,
+      );
+      if (candidates.length === 1) {
+        const candidate = candidates[0]!;
+        diagnostics.push({
+          code: "SIVRU-E235",
+          severity: "warning",
+          message: `collaborator-rename-suspect: ${edge.from} → "${edge.to}" does not resolve; the only symbol that back-references ${edge.from} is ${candidate.name} — possible rename`,
+          ...(source?.range !== undefined ? { location: source.range } : {}),
+        });
+        continue;
       }
-      const source = nodes.find((n) => n.name === edge.from);
-      diagnostics.push({
-        code: "SIVRU-E234",
-        severity: "warning",
-        message: `collaborator-asymmetric: ${edge.from} → ${edge.to} but ${edge.to} does not reciprocate`,
-        ...(source?.range !== undefined ? { location: source.range } : {}),
-      });
     }
+
+    diagnostics.push({
+      code: "SIVRU-E234",
+      severity: "warning",
+      message: `collaborator-asymmetric: ${edge.from} → ${edge.to} but ${edge.to} does not reciprocate`,
+      ...(source?.range !== undefined ? { location: source.range } : {}),
+    });
   }
 
   // SIVRU-E236 (opt-in). Textual A-after-B vs B-after-A.
