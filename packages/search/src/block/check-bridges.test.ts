@@ -90,3 +90,81 @@ public class Old {}
     expect(e260?.severity).toBe("error");
   });
 });
+
+describe("checkBridges — SIVRU-E260 across TS/JS/Go (DESIGN-0019 §10c)", () => {
+  function writeFixture(name: string, content: string): string {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    const p = join(tmpDir, "src", name);
+    writeFileSync(p, content);
+    return p;
+  }
+
+  it("TypeScript: JSDoc @deprecated + stable maturity → error", async () => {
+    const p = writeFixture(
+      "Old.ts",
+      `/**
+ * @deprecated use NewService
+ *
+ * @sivru
+ * schema: 1
+ * role: r
+ * responsibility: "old"
+ * maturity: stable
+ * @end
+ */
+export class Old {}
+`,
+    );
+    const blocks = await extractBlocksFromFiles([p]);
+    const diagnostics = await checkBridges(blocks, tmpDir);
+    const e260 = diagnostics.find((d) => d.code === "SIVRU-E260");
+    expect(e260).toBeDefined();
+    expect(e260?.severity).toBe("error");
+  });
+
+  it("Go: // Deprecated: comment + stable maturity → error", async () => {
+    const p = writeFixture(
+      "old.go",
+      `package main
+
+// Deprecated: use NewFoo
+//
+// @sivru
+// schema: 1
+// role: r
+// responsibility: "old"
+// maturity: stable
+// @end
+func Old() {}
+`,
+    );
+    const blocks = await extractBlocksFromFiles([p]);
+    const diagnostics = await checkBridges(blocks, tmpDir);
+    const e260 = diagnostics.find((d) => d.code === "SIVRU-E260");
+    expect(e260).toBeDefined();
+    expect(e260?.severity).toBe("error");
+  });
+
+  it("TS: direction B — block deprecated + silent doc → warning", async () => {
+    const p = writeFixture(
+      "Faded.ts",
+      `/**
+ * Some thing.
+ *
+ * @sivru
+ * schema: 1
+ * role: r
+ * responsibility: "old"
+ * maturity: deprecated
+ * @end
+ */
+export class Faded {}
+`,
+    );
+    const blocks = await extractBlocksFromFiles([p]);
+    const diagnostics = await checkBridges(blocks, tmpDir);
+    const e260 = diagnostics.find((d) => d.code === "SIVRU-E260");
+    expect(e260).toBeDefined();
+    expect(e260?.severity).toBe("warning");
+  });
+});

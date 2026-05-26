@@ -67,6 +67,33 @@ describe("createSymbolIndexCache", () => {
     expect(out).toEqual([sample]);
   });
 
+  it("DESIGN-0019 §2/D3: round-trips an entry that carries blocks[]", async () => {
+    const cache = createSymbolIndexCache({ cacheDir });
+    const withBlocks: SymbolIndexEntry = {
+      ...sample,
+      blocks: [
+        {
+          startLine: 1,
+          endLine: 5,
+          contentHash: "abc123def456abcd",
+          symbolName: "foo",
+        },
+        {
+          startLine: 10,
+          endLine: 15,
+          contentHash: null,
+          symbolName: "(module)",
+        },
+      ],
+    };
+    await cache.save({ repoPath: repoDir, stateId: "v3" }, [withBlocks]);
+    const out = await cache.load({ repoPath: repoDir, stateId: "v3" });
+    expect(out).toEqual([withBlocks]);
+    expect(out?.[0]?.blocks).toHaveLength(2);
+    expect(out?.[0]?.blocks?.[0]?.contentHash).toBe("abc123def456abcd");
+    expect(out?.[0]?.blocks?.[1]?.contentHash).toBeNull();
+  });
+
   it("evicts every entry for a repo", async () => {
     const cache = createSymbolIndexCache({ cacheDir });
     await cache.save({ repoPath: repoDir, stateId: "abc" }, [sample]);

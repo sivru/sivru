@@ -223,3 +223,95 @@ export type BlockValidatorContext = {
 export type CustomBlockValidator = (
   context: BlockValidatorContext,
 ) => BlockDiagnostic[];
+
+// ---------------------------------------------------------------------
+// DESIGN-0019 §Customization shape §3 — code-level extension points.
+//
+// Three registerable extensions complete the layer-3 surface (the
+// `AnnotationBridge` extension lives in `bridges/java.ts` since it
+// also carries the seed catalog). These interfaces are stable; the
+// registry that consumes them lives in a follow-on patch — the
+// types are exported now so authoring `.sivru/block/*.ts` extension
+// files can compile against a real contract.
+// ---------------------------------------------------------------------
+
+/**
+ * Resolver for a custom `enforced-by` reference grammar. The built-in
+ * resolver in `enforcement.ts` handles `Class.method` symbol form and
+ * `path::name` file-anchored form. Projects with a homegrown test
+ * harness (e.g., a custom `@sivruTest`-marked function) register a
+ * resolver to teach the reference grammar — `resolve(ref, repoRoot)`
+ * returns a `ResolveResult`-shaped record.
+ *
+ * Example:
+ *   ```ts
+ *   const myResolver: EnforcementResolver = {
+ *     name: "homegrown-test-harness",
+ *     accepts: (ref) => ref.startsWith("@home:"),
+ *     resolve: async (ref, repoRoot) => { ... },
+ *   };
+ *   ```
+ */
+export type EnforcementResolver = {
+  /** Stable name for diagnostics + dedup. */
+  name: string;
+  /** Quick filter: should THIS resolver attempt the reference? */
+  accepts(ref: string): boolean;
+  /** Resolve the reference. Return null when not found; the caller emits SIVRU-E230. */
+  resolve(
+    ref: string,
+    repoRoot: string,
+  ): Promise<{ skipped: boolean; reason?: string } | null>;
+};
+
+/**
+ * Custom checker for `revisit-if` predicates. The design-002X
+ * follow-on may ship a built-in Prometheus adapter; until then,
+ * projects with their own watchable-decision conventions register
+ * a checker that returns a verdict.
+ *
+ * The verdict shape mirrors the built-in resolver to keep the
+ * surface uniform: `triggered` means the `revisit-if` condition is
+ * currently true (the decision is rotting).
+ */
+export type DecisionChecker = {
+  name: string;
+  /** Quick filter: does THIS checker understand the `revisit-if` string? */
+  accepts(revisitIf: string): boolean;
+  check(
+    revisitIf: string,
+    context: { filePath: string; tenant?: string },
+  ): Promise<{ triggered: boolean; reason?: string } | null>;
+};
+
+/**
+ * Custom graph-level diagnostic. The built-in graph walker
+ * (`graph.ts`) emits SIVRU-E234..E236; projects that want
+ * additional cross-block invariants (e.g., "no service block may
+ * collaborate with a router block") register a `BlockGraphRule`.
+ *
+ * The rule receives the full graph and returns any new
+ * BlockDiagnostics. Rule names appear in diagnostic messages so
+ * downstream consumers can attribute the finding.
+ */
+export type BlockGraphRule = {
+  name: string;
+  /**
+   * Apply the rule. Receives the same `BlockGraph` shape that
+   * `computeBlockGraph` returns. Returns diagnostics to merge into
+   * the result.
+   */
+  apply(graph: {
+    readonly nodes: ReadonlyArray<{
+      readonly name: string;
+      readonly filePath: string;
+      readonly range: SourceRange;
+      readonly collaborators: readonly string[];
+    }>;
+    readonly edges: ReadonlyArray<{
+      readonly from: string;
+      readonly to: string;
+      readonly reciprocal: boolean;
+    }>;
+  }): BlockDiagnostic[];
+};

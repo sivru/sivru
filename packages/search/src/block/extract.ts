@@ -589,8 +589,10 @@ function extractCommentCarriedBlocks(
  * responsibility: emit one ExtractedBlock per @sivru fence in the file; never silently drop, even on malformed YAML
  * collaborators: [validateBlock, blockToJSON, pythonModuleLocator, typescriptModuleLocator]
  * invariants:
- *   - invalid blocks appear with block:null and diagnostics:[...] populated — never silently dropped (project memory rule)
- *   - YAML internal indentation is preserved by stripping the @sivru line's exact prefix from each body line
+ *   - rule: "invalid blocks appear with block:null and diagnostics:[...] populated — never silently dropped (project memory rule)"
+ *     enforced-by: null
+ *   - rule: "YAML internal indentation is preserved by stripping the @sivru line's exact prefix from each body line"
+ *     enforced-by: null
  * decisions:
  *   - chose: prefix-anchored line scan rather than greedy whitespace strip
  *     because: greedy strip collapses YAML's meaningful indentation; nested mappings (decisions[].chose etc.) become invalid

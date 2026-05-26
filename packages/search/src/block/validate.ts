@@ -32,9 +32,12 @@ import type {
  * responsibility: produce the full BlockDiagnostic[] for one parsed block; never throws so the CLI can surface every issue
  * collaborators: [extractBlocks, loadBlockConfig]
  * invariants:
- *   - schema:1 is strict-rejected for any other value at v0.6 (SIVRU-E214)
- *   - maturityValues is override-replaces-default; the user has to re-list defaults to extend them (DESIGN-0016 E4)
- *   - the 100-line runaway ceiling (SIVRU-E212) is hardcoded; only the 25-line warning (SIVRU-E211) is configurable via maxLines
+ *   - rule: "schema:1 is strict-rejected for any other value at v0.6 (SIVRU-E214)"
+ *     enforced-by: null
+ *   - rule: "maturityValues is override-replaces-default; the user has to re-list defaults to extend them (DESIGN-0016 E4)"
+ *     enforced-by: null
+ *   - rule: "the 100-line runaway ceiling (SIVRU-E212) is hardcoded; only the 25-line warning (SIVRU-E211) is configurable via maxLines"
+ *     enforced-by: null
  * decisions:
  *   - chose: warning for SIVRU-E210 decision-no-revisit rather than error
  *     because: a decision without a revisit-if is a smell but not a build break; v0.7 drift detector will use the signal

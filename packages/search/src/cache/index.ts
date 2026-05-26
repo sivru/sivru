@@ -189,8 +189,10 @@ async function bestEffortUnlink(p: string): Promise<void> {
  * responsibility: load and atomically save the per-repo index so the cold-rebuild cost amortises across runs
  * collaborators: [buildIndex, computeStateId, walk]
  * invariants:
- *   - atomic write: tmp file is fsynced and then renamed; readers skip *.tmp.*
- *   - format-version bump on any incompatible change so older caches are rejected, not silently misread
+ *   - rule: "atomic write: tmp file is fsynced and then renamed; readers skip *.tmp.*"
+ *     enforced-by: null
+ *   - rule: "format-version bump on any incompatible change so older caches are rejected, not silently misread"
+ *     enforced-by: null
  * decisions:
  *   - chose: stateId-keyed file-per-build instead of overwrite-in-place
  *     because: corrupt cache from a crash never breaks a working build; the user just pays the cold-rebuild cost once

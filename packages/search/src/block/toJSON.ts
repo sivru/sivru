@@ -17,8 +17,10 @@ import type { SivruBlock, SivruBlockJSON } from "./types.js";
  * responsibility: project a parsed SivruBlock onto its canonical JSON wire shape for downstream consumers
  * collaborators: [extractBlocks, assembleArtifact]
  * invariants:
- *   - hyphenated YAML field names (valid-while / revisit-if) become camelCase (validWhile / revisitIf) in JSON
- *   - missing optional fields become null or [] — no undefined keys in the output
+ *   - rule: "hyphenated YAML field names (valid-while / revisit-if) become camelCase (validWhile / revisitIf) in JSON"
+ *     enforced-by: null
+ *   - rule: "missing optional fields become null or [] — no undefined keys in the output"
+ *     enforced-by: null
  * decisions:
  *   - chose: camelCase JSON shape rather than mirror-the-YAML hyphenation
  *     because: JSON consumers (the explain artifact, MCP, downstream JS code) expect JS-idiomatic keys

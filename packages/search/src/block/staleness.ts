@@ -38,6 +38,16 @@ export type StalenessOptions = {
    * the pre-built cache instead. Saves one parse per changed file.
    * The "before" side still needs `git show + extract` because the
    * cache only covers HEAD.
+   *
+   * FRESHNESS CONTRACT: the cache must reflect the on-disk state at
+   * call time. `staleBlocks` does NOT re-validate cache entries
+   * against file mtimes — a cache built minutes ago against a since-
+   * modified file will produce wrong diagnostics. Callers that build
+   * the cache once and reuse it across multiple `staleBlocks` calls
+   * should rebuild whenever any source file mtime advances. The CLI's
+   * `runStaleness` does not currently thread a cache — opt-in only,
+   * meant for in-process consumers (e.g., a future explain-pipeline
+   * integration) that already track index freshness.
    */
   cache?: BlockCache;
 };

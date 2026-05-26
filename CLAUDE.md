@@ -101,6 +101,9 @@ See [`ROADMAP.md`](ROADMAP.md) for direction.
 - Codebase explainer (DESIGN-0018).
 - Coach loop v2 — looped-on-error (DESIGN-0006).
 - Coach loop v3 — low-context-edit (DESIGN-0007).
+- Block reliability follow-on (DESIGN-002X TBD) — watchable
+  `revisit-if` predicate. Generated-code block-by-reference (§11 of
+  DESIGN-0019) — research status until field data arrives.
 
 (Shipped since this list was last cut: tree-sitter chunker — v0.2;
 per-model chunk-windowing — v0.3; the sivru skill — v0.4;
@@ -111,7 +114,15 @@ coach loop v1 / skill drift — v0.7
 [DESIGN-0005](docs/design/0005-coach-loop-skill-drift.md), shipped
 out of original sequence: it was retargeted v0.6 → v0.9 during
 planning but claimed v0.7 at ship time since the other v0.7/v0.8
-work hadn't landed yet.)
+work hadn't landed yet; block reliability slots 1–4
+([DESIGN-0019](docs/design/0019-block-reliability.md)) —
+invariant→test linkage (E230/E231/E232), diff-scoped CI flags,
+yaml-colon-in-prose / yaml-quote-context with autofix (E237/E238),
+staleness (E233), cross-block graph (E234/E235/E236),
+scaffolding + annotation bridges (E239/E260),
+Java records/enums/package-info/sealed/inner, TS records/enums,
+per-language `maxLines`, Python/Go per-symbol audits. Rust
+deferred.)
 
 ## Don't do without asking
 

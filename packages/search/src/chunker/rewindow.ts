@@ -57,8 +57,10 @@ export function byteHeuristicTokenCount(text: string): number {
  * responsibility: split any chunk that overflows the embedder's token budget so no stored embedding is ever computed from a truncated chunk
  * collaborators: [buildIndex, chunkFile, byteHeuristicTokenCount]
  * invariants:
- *   - one shared chunk set: BM25 and embedding index the same ids so RRF alignment holds
- *   - full line coverage is preserved across splits
+ *   - rule: "one shared chunk set: BM25 and embedding index the same ids so RRF alignment holds"
+ *     enforced-by: null
+ *   - rule: "full line coverage is preserved across splits"
+ *     enforced-by: null
  * decisions:
  *   - chose: post-pass over the chunker output instead of teaching the chunker about tokens
  *     because: chunker stays embedder-agnostic; token-awareness lives in exactly one place

@@ -38,7 +38,8 @@ const DEFAULT_B = 0.75;
  * responsibility: build the in-memory BM25 index that powers the lexical leg of hybrid search
  * collaborators: [tokenize, reciprocalRankFusion, buildIndex]
  * invariants:
- *   - k1 and b are the standard Robertson-Sparck-Jones values; deviating from them changes ranking globally
+ *   - rule: "k1 and b are the standard Robertson-Sparck-Jones values; deviating from them changes ranking globally"
+ *     enforced-by: null
  * decisions:
  *   - chose: in-memory inverted index rather than an external store
  *     because: sivru is a single-process tool; latency beats persistence at this scale

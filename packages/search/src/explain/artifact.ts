@@ -122,8 +122,10 @@ function defaultReadSync(absPath: string): string | undefined {
  * responsibility: emit the canonical ExplainArtifact for one target — public_api, callers, callees, churn, ownership, tests, authored
  * collaborators: [buildSymbolIndex, extractBlocks, parsePathAndSymbol]
  * invariants:
- *   - every section is descriptive only — no recommendations, no quality verdicts
- *   - authored entries reflect @sivru blocks from the target file only; cross-file aggregation is out of scope at v0.6
+ *   - rule: "every section is descriptive only — no recommendations, no quality verdicts"
+ *     enforced-by: null
+ *   - rule: "authored entries reflect @sivru blocks from the target file only; cross-file aggregation is out of scope at v0.6"
+ *     enforced-by: null
  * decisions:
  *   - chose: one shared assembler for file-level and region-level explain
  *     because: caps, precision floors, and diff mode all compose more cleanly when they wrap one assembler

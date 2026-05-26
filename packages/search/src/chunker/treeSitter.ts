@@ -164,8 +164,10 @@ function lineContent(lines: readonly string[], startLine: number, endLine: numbe
  * responsibility: emit one chunk per top-level definition + gap-fill so the file is always fully indexed
  * collaborators: [chunkFile, lineFallbackChunks, indexComments, attachLeadingComment]
  * invariants:
- *   - coverage invariant: every source line lands in at least one chunk
- *   - leading own-line doc comments are attached to the symbol's chunk; trailing comments are not
+ *   - rule: "coverage invariant: every source line lands in at least one chunk"
+ *     enforced-by: null
+ *   - rule: "leading own-line doc comments are attached to the symbol's chunk; trailing comments are not"
+ *     enforced-by: null
  * decisions:
  *   - chose: whitelist named node types per grammar
  *     because: a small explicit set is debuggable; an automatic "anything that looks like a function" rule produces too many edge cases

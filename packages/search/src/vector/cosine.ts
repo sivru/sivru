@@ -49,8 +49,10 @@ export function packMatrix(vectors: readonly Float32Array[]): CosineMatrix {
  * responsibility: rank documents by cosine similarity for the semantic leg of hybrid search
  * collaborators: [reciprocalRankFusion, buildIndex, packMatrix]
  * invariants:
- *   - assumes the caller has already L2-normalized both the matrix rows and the query
- *   - dot product == cosine only when both sides are unit vectors
+ *   - rule: "assumes the caller has already L2-normalized both the matrix rows and the query"
+ *     enforced-by: null
+ *   - rule: "dot product == cosine only when both sides are unit vectors"
+ *     enforced-by: null
  * decisions:
  *   - chose: packed-row dot product instead of an ANN library
  *     because: target repos are small enough that brute-force top-k is faster than building an index

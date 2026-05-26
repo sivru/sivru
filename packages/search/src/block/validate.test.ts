@@ -160,3 +160,68 @@ describe("validateBlock — diagnostics", () => {
     expect(hasErrors(out)).toBe(true);
   });
 });
+
+describe("validateBlock — DESIGN-0019 §8 per-language maxLines", () => {
+  it("Java default (40) accepts a 35-line block but warns at 41", () => {
+    const javaLoc: SourceRange = {
+      filePath: "Foo.java",
+      startLine: 1,
+      endLine: 35,
+    };
+    expect(validateBlock(block(), { location: javaLoc })).toEqual([]);
+
+    const javaLoc41: SourceRange = { ...javaLoc, endLine: 41 };
+    const out = validateBlock(block(), { location: javaLoc41 });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeDefined();
+  });
+
+  it("TypeScript default (25) warns at 30 lines (Java threshold doesn't apply)", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 30,
+    };
+    const out = validateBlock(block(), { location: tsLoc });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeDefined();
+  });
+
+  it("object-form maxLines override raises the TS limit independently of Java", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 40,
+    };
+    const out = validateBlock(block(), {
+      location: tsLoc,
+      config: {
+        ...DEFAULT_BLOCK_CONFIG,
+        maxLines: { default: 25, typescript: 45 },
+      },
+    });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeUndefined();
+  });
+
+  it("single-number maxLines (v0.6 shorthand) still works", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 30,
+    };
+    const out = validateBlock(block(), {
+      location: tsLoc,
+      config: { ...DEFAULT_BLOCK_CONFIG, maxLines: 35 },
+    });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeUndefined();
+  });
+
+  it("E211 message includes the language tag when one is detected", () => {
+    const javaLoc: SourceRange = {
+      filePath: "Foo.java",
+      startLine: 1,
+      endLine: 50,
+    };
+    const out = validateBlock(block(), { location: javaLoc });
+    const e211 = out.find((d) => d.code === "SIVRU-E211");
+    expect(e211?.message).toContain("(java)");
+  });
+});

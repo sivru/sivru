@@ -9,8 +9,11 @@
 
 export type {
   BlockDiagnostic,
+  BlockGraphRule,
   BlockValidatorContext,
   CustomBlockValidator,
+  DecisionChecker,
+  EnforcementResolver,
   ExtractedBlock,
   ExtractedBlockKind,
   SivruBlock,
