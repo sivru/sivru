@@ -14,6 +14,7 @@
 
 import { extractBlocksFromFiles } from "./extract.js";
 import { loadBlockConfig } from "./config.js";
+import { isBlockWalkSkippable } from "./walker-skip.js";
 import { walk } from "../walker/walk.js";
 import type { BlockDiagnostic, SourceRange } from "./types.js";
 
@@ -41,20 +42,6 @@ export type BlockGraph = {
   diagnostics: BlockDiagnostic[];
 };
 
-const SKIP_PATH_SEGMENTS = [
-  "/dist/",
-  "/node_modules/",
-  "/__fixtures__/",
-  "/.git/",
-];
-
-function isSkippablePath(absPath: string): boolean {
-  const normalized = absPath.replace(/\\/g, "/");
-  for (const seg of SKIP_PATH_SEGMENTS) {
-    if (normalized.includes(seg)) return true;
-  }
-  return false;
-}
 
 /**
  * Build the block-collaborator graph and surface cross-block diagnostics.
@@ -97,7 +84,7 @@ export async function computeBlockGraph(
   } else {
     const collected: string[] = [];
     for await (const entry of walk(rootPath)) {
-      if (isSkippablePath(entry.absPath)) continue;
+      if (isBlockWalkSkippable(entry.absPath)) continue;
       collected.push(entry.absPath);
     }
     files = collected;

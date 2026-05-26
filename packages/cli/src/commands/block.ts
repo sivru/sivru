@@ -37,6 +37,7 @@ import {
   extractBlocksFromFiles,
   hasErrors,
   initBlock,
+  isBlockWalkSkippable,
   loadBlockConfig,
   staleBlocks,
   validateExtracted,
@@ -307,21 +308,6 @@ const USAGE = [
   "                               --changed-since=<ref>",
 ].join("\n");
 
-const SKIP_PATH_SEGMENTS = [
-  "/dist/",
-  "/node_modules/",
-  "/__fixtures__/",
-  "/.git/",
-];
-
-function isSkippablePath(absPath: string): boolean {
-  const normalized = absPath.replace(/\\/g, "/");
-  for (const seg of SKIP_PATH_SEGMENTS) {
-    if (normalized.includes(seg)) return true;
-  }
-  return false;
-}
-
 /**
  * Best-effort repo-root detection by walking upward from `start` for a
  * `.git` directory. Returns `start` when no `.git` is found.
@@ -373,7 +359,7 @@ async function discoverFiles(rootPath: string): Promise<string[]> {
   }
   const files: string[] = [];
   for await (const entry of walk(rootPath)) {
-    if (isSkippablePath(entry.absPath)) continue;
+    if (isBlockWalkSkippable(entry.absPath)) continue;
     files.push(entry.absPath);
   }
   return files;

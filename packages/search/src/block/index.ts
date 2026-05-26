@@ -75,6 +75,8 @@ export { buildBlockCache } from "./block-cache.js";
 export type { BlockCache } from "./block-cache.js";
 export type { BlockCacheEntry } from "../explain/types.js";
 
+export { isBlockWalkSkippable } from "./walker-skip.js";
+
 export { initBlock } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";
 

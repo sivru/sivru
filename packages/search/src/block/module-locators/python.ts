@@ -8,21 +8,13 @@
 
 import type { SyntaxNode } from "../../chunker/grammars.js";
 import type { BlockDiagnostic } from "../types.js";
+import type { LocatorResult } from "./types.js";
 
-export type ModuleCarrier = {
-  text: string;
-  /** 1-indexed inclusive file line of the carrier's first line. */
-  startLine: number;
-  /** 1-indexed inclusive file line of the carrier's last line. */
-  endLine: number;
-};
-
-export type LocatorResult = {
-  /** Located carrier; undefined when no module docstring exists at all. */
-  carrier?: ModuleCarrier;
-  /** Set when the locator could not parse the file structure (SIVRU-E218). */
-  diagnostic?: BlockDiagnostic;
-};
+// Re-export the shared types so callers that previously imported them
+// from this module keep working.
+export type { LocatorResult, ModuleCarrier } from "./types.js";
+// `BlockDiagnostic` re-export retained for the same reason.
+export type { BlockDiagnostic };
 
 function sliceLines(
   lines: readonly string[],

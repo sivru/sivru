@@ -12,7 +12,7 @@
 // `exports` subpath entries are deferred to v0.6.x.
 
 import type { SyntaxNode } from "../../chunker/grammars.js";
-import type { LocatorResult } from "./python.js";
+import type { LocatorResult } from "./types.js";
 
 function sliceLines(
   lines: readonly string[],

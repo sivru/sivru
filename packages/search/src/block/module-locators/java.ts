@@ -13,7 +13,7 @@
 import { basename } from "node:path";
 
 import type { SyntaxNode } from "../../chunker/grammars.js";
-import type { LocatorResult } from "./python.js";
+import type { LocatorResult } from "./types.js";
 
 function sliceLines(
   lines: readonly string[],
