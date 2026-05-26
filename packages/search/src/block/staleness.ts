@@ -17,13 +17,13 @@
 // without depending on the larger symbol-index extension yet.
 
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 
 import { extractBlocks } from "./extract.js";
+import { hashBlockContent, MODULE_SYMBOL_NAME } from "./hash.js";
 import type { BlockCache } from "./block-cache.js";
 import type { BlockDiagnostic, ExtractedBlock, SourceRange } from "./types.js";
 
@@ -47,10 +47,6 @@ export type StalenessReport = {
   changedFiles: number;
   diagnostics: BlockDiagnostic[];
 };
-
-function hashContent(text: string): string {
-  return createHash("sha256").update(text).digest("hex").slice(0, 16);
-}
 
 async function gitChangedFiles(repoRoot: string, since: string): Promise<string[]> {
   try {
@@ -200,9 +196,9 @@ export async function staleBlocks(opts: StalenessOptions): Promise<StalenessRepo
         range: SourceRange;
         contentHash: string | null;
       } => ({
-        symbolName: eb.symbolName ?? "(module)",
+        symbolName: eb.symbolName ?? MODULE_SYMBOL_NAME,
         range: eb.range,
-        contentHash: eb.block === null ? null : hashContent(JSON.stringify(eb.block)),
+        contentHash: eb.block === null ? null : hashBlockContent(eb.block),
       }));
     }
 
@@ -217,14 +213,14 @@ export async function staleBlocks(opts: StalenessOptions): Promise<StalenessRepo
     const beforeBlocks = await extractBlocks(abs, { content: before });
     const beforeBySymbol = new Map<string, ExtractedBlock>();
     for (const b of beforeBlocks) {
-      beforeBySymbol.set(b.symbolName ?? "(module)", b);
+      beforeBySymbol.set(b.symbolName ?? MODULE_SYMBOL_NAME, b);
     }
 
     for (const cur of currentBlocks) {
       if (cur.contentHash === null) continue;
       const beforeMatch = beforeBySymbol.get(cur.symbolName);
       if (beforeMatch === undefined || beforeMatch.block === null) continue;
-      const beforeHash = hashContent(JSON.stringify(beforeMatch.block));
+      const beforeHash = hashBlockContent(beforeMatch.block);
       if (cur.contentHash !== beforeHash) continue;
 
       const outside = await gitHunksOutsideRange(repoRoot, opts.since, rel, cur.range);

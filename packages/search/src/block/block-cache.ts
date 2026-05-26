@@ -14,24 +14,9 @@
 //      hook yet (`buildSymbolIndex` does not call this — opt-in only).
 //      A separate cache lets adopters wire it where they want.
 
-import { createHash } from "node:crypto";
-
 import { extractBlocksFromFiles } from "./extract.js";
+import { hashBlockContent, MODULE_SYMBOL_NAME } from "./hash.js";
 import type { BlockCacheEntry } from "../explain/types.js";
-
-/**
- * Stable content hash for a block. JSON.stringify on the parsed
- * SivruBlock is deterministic for our shapes (no Maps, no Sets, no
- * cyclic refs) and survives whitespace-only edits — which is the
- * specific behavior staleness detection cares about (`body identical
- * vs surroundings changed`).
- */
-function hashBlock(block: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(block))
-    .digest("hex")
-    .slice(0, 16);
-}
 
 export type BlockCache = ReadonlyMap<string, BlockCacheEntry[]>;
 
@@ -52,8 +37,8 @@ export async function buildBlockCache(
     arr.push({
       startLine: eb.range.startLine,
       endLine: eb.range.endLine,
-      contentHash: eb.block === null ? null : hashBlock(eb.block),
-      symbolName: eb.symbolName ?? "(module)",
+      contentHash: eb.block === null ? null : hashBlockContent(eb.block),
+      symbolName: eb.symbolName ?? MODULE_SYMBOL_NAME,
     });
   }
   return out;

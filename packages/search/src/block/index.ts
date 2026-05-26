@@ -77,6 +77,8 @@ export type { BlockCacheEntry } from "../explain/types.js";
 
 export { isBlockWalkSkippable } from "./walker-skip.js";
 
+export { hashBlockContent, MODULE_SYMBOL_NAME } from "./hash.js";
+
 export { initBlock } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";
 

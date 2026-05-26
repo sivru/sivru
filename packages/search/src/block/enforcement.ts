@@ -506,5 +506,3 @@ export async function checkEnforcement(
 
 // Internal type export for tests.
 export type { ResolveResult };
-// Helper-only re-exports for tests.
-export const _internal = { findTestCallByName, findDeclaration, detectSkip };

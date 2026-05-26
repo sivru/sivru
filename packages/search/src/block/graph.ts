@@ -14,6 +14,7 @@
 
 import { extractBlocksFromFiles } from "./extract.js";
 import { loadBlockConfig } from "./config.js";
+import { MODULE_SYMBOL_NAME } from "./hash.js";
 import { isBlockWalkSkippable } from "./walker-skip.js";
 import { walk } from "../walker/walk.js";
 import type { BlockDiagnostic, SourceRange } from "./types.js";
@@ -94,7 +95,7 @@ export async function computeBlockGraph(
   const nodes: GraphNode[] = [];
   for (const eb of extracted) {
     if (eb.block === null) continue;
-    const name = eb.symbolName ?? "(module)";
+    const name = eb.symbolName ?? MODULE_SYMBOL_NAME;
     nodes.push({
       name,
       filePath: eb.filePath,
