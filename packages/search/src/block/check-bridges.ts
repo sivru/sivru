@@ -13,10 +13,26 @@ import { readFile } from "node:fs/promises";
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
 import { loadBlockConfig } from "./config.js";
+import { declTypesFor } from "./decl-types.js";
 import { resolveJavaBridges, type AnnotationBridge } from "./bridges/java.js";
 import { resolvePythonBridges } from "./bridges/python.js";
 import { checkDeprecatedMaturitySync } from "./deprecated-sync.js";
 import type { BlockDiagnostic, ExtractedBlock } from "./types.js";
+
+/**
+ * Languages whose source files we open + parse for deprecation/bridge
+ * metadata. Java + Python supply annotation catalogs (E239); TS/JS/Go
+ * supply doc-text patterns for E260 deprecated-maturity-mismatch.
+ */
+const METADATA_LANGUAGES = new Set([
+  "java",
+  "python",
+  "javascript",
+  "typescript",
+  "tsx",
+  "jsx",
+  "go",
+]);
 
 type SymbolMetadata = {
   annotations: Set<string>;
@@ -66,11 +82,13 @@ async function buildFileMetadata(
       out.set(symbolName, { annotations: new Set(annotations), docText });
     };
 
+    // Declaration kinds that host a block per language — shared with
+    // extract / enforcement / init via decl-types.ts.
+    const declTypes = declTypesFor(language);
+
     const visit = (n: SyntaxNode): void => {
-      if (language === "java") {
-        // Any declaration kind has a leading `modifiers` child for
-        // annotations and a name field for the symbol.
-        const nameNode = n.childForFieldName?.("name");
+      if (language === "java" && declTypes.has(n.type)) {
+        const nameNode = n.childForFieldName("name");
         if (nameNode !== null) {
           const annotations = new Set<string>();
           for (const child of n.children) {
@@ -80,16 +98,14 @@ async function buildFileMetadata(
               }
             }
           }
-          if (annotations.size > 0 || /declaration$/.test(n.type)) {
-            recordSymbol(nameNode!.text, annotations, n.startPosition.row);
-          }
+          recordSymbol(nameNode.text, annotations, n.startPosition.row);
         }
       } else if (language === "python" && n.type === "decorated_definition") {
         const def = n.namedChildren.find(
           (c) => c.type === "function_definition" || c.type === "class_definition",
         );
-        const defName = def?.childForFieldName("name");
-        if (defName !== null && def !== undefined) {
+        const defName = def === undefined ? null : def.childForFieldName("name");
+        if (defName !== null) {
           const annotations = new Set<string>();
           for (const dec of n.namedChildren) {
             if (dec.type !== "decorator") continue;
@@ -97,16 +113,29 @@ async function buildFileMetadata(
             annotations.add(callForm.replace(/\(.*$/, ""));
             annotations.add(callForm);
           }
-          recordSymbol(defName!.text, annotations, n.startPosition.row);
+          recordSymbol(defName.text, annotations, n.startPosition.row);
         }
-      } else if (language === "python") {
+      } else if (language === "python" && declTypes.has(n.type)) {
         // Bare def/class with no decorators — still record so doc-text
         // is available for E260 detection.
-        if (n.type === "function_definition" || n.type === "class_definition") {
-          const nameNode = n.childForFieldName?.("name");
-          if (nameNode !== null) {
-            recordSymbol(nameNode!.text, new Set(), n.startPosition.row);
-          }
+        const nameNode = n.childForFieldName("name");
+        if (nameNode !== null) {
+          recordSymbol(nameNode.text, new Set(), n.startPosition.row);
+        }
+      } else if (
+        // TS / JS / TSX / JSX / Go: no annotation catalog (those are
+        // Java+Python), but we still need to record symbols so doc-text
+        // extraction feeds E260 deprecated-maturity-mismatch detection.
+        declTypes.has(n.type) &&
+        (language === "typescript" ||
+          language === "javascript" ||
+          language === "tsx" ||
+          language === "jsx" ||
+          language === "go")
+      ) {
+        const nameNode = n.childForFieldName("name");
+        if (nameNode !== null && nameNode.text.length > 0) {
+          recordSymbol(nameNode.text, new Set(), n.startPosition.row);
         }
       }
       for (const c of n.namedChildren) visit(c);
@@ -185,7 +214,7 @@ export async function checkBridges(
     // Even when there are no bridges for the language, we still need
     // file metadata for SIVRU-E260 detection (`@deprecated` ↔ block
     // maturity). Skip the file only when neither check applies.
-    if (bridges.length === 0 && language !== "java" && language !== "python" && language !== "javascript" && language !== "typescript" && language !== "tsx" && language !== "jsx" && language !== "go") {
+    if (bridges.length === 0 && !METADATA_LANGUAGES.has(language)) {
       continue;
     }
 

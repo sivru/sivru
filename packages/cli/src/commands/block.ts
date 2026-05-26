@@ -214,6 +214,24 @@ export function parseBlockArgs(argv: readonly string[]): ParseOk | ParseErr {
       ? [resolvePath(process.cwd())]
       : positionals.map((p) => resolvePath(p));
 
+  // --changed-since runs `git diff` against ONE repo root. With multi-
+  // path, we'd silently filter paths from repo-B against repo-A's diff
+  // output. Reject the combination explicitly rather than produce
+  // wrong results.
+  if (
+    changedSince !== null &&
+    rootPaths.length > 1 &&
+    (subcommand === "validate" ||
+      subcommand === "check-enforcement" ||
+      subcommand === "check-bridges")
+  ) {
+    return {
+      kind: "err",
+      message:
+        "--changed-since works with at most one root path; run it once per repo",
+    };
+  }
+
   if (subcommand === "validate") {
     return {
       kind: "ok",
