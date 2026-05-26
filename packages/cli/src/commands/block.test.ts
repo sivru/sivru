@@ -88,12 +88,12 @@ describe("parseBlockArgs", () => {
     }
   });
 
-  it("parses validate --autofix --force", () => {
-    const out = parseBlockArgs(["validate", "--autofix", "--force"]);
+  it("parses validate --autofix --allow-dirty", () => {
+    const out = parseBlockArgs(["validate", "--autofix", "--allow-dirty"]);
     expect(out.kind).toBe("ok");
     if (out.kind === "ok" && out.args.subcommand === "validate") {
       expect(out.args.autofix).toBe(true);
-      expect(out.args.force).toBe(true);
+      expect(out.args.allowDirty).toBe(true);
     }
   });
 

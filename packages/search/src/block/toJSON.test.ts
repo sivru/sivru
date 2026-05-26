@@ -47,23 +47,35 @@ describe("blockToJSON — canonical shape", () => {
     expect(out.maturity).toBeNull();
     expect(out.collaborators).toEqual([]);
     expect(out.invariants).toEqual([]);
+    expect(out.invariantsV2).toEqual([]);
     expect(out.decisions).toEqual([]);
   });
 
-  it("DESIGN-0019 §1: bare-string invariants project to object form with enforcedBy=null", () => {
+  it("DESIGN-0019 §1: `invariants` stays as string[] for backwards compat", () => {
     const out = blockToJSON({
       schema: 1,
       role: "r",
       responsibility: "p",
       invariants: ["bare string invariant"],
     });
-    expect(out.invariants[0]).toEqual({
+    // String-array shape preserved for v0.6-vintage consumers.
+    expect(out.invariants).toEqual(["bare string invariant"]);
+  });
+
+  it("DESIGN-0019 §1: `invariantsV2` carries the object form with enforcedBy", () => {
+    const out = blockToJSON({
+      schema: 1,
+      role: "r",
+      responsibility: "p",
+      invariants: ["bare string invariant"],
+    });
+    expect(out.invariantsV2[0]).toEqual({
       rule: "bare string invariant",
       enforcedBy: null,
     });
   });
 
-  it("DESIGN-0019 §1: object-form invariants camelCase enforced-by → enforcedBy", () => {
+  it("DESIGN-0019 §1: object-form invariants camelCase enforced-by → enforcedBy in V2", () => {
     const out = blockToJSON({
       schema: 1,
       role: "r",
@@ -77,6 +89,10 @@ describe("blockToJSON — canonical shape", () => {
       ],
     });
     expect(out.invariants).toEqual([
+      "non-leader nodes return early",
+      "tenant context cleared",
+    ]);
+    expect(out.invariantsV2).toEqual([
       { rule: "non-leader nodes return early", enforcedBy: null },
       {
         rule: "tenant context cleared",
@@ -85,7 +101,7 @@ describe("blockToJSON — canonical shape", () => {
     ]);
   });
 
-  it("DESIGN-0019 §1: mixed forms preserve order", () => {
+  it("DESIGN-0019 §1: mixed forms preserve order across both shapes", () => {
     const out = blockToJSON({
       schema: 1,
       role: "r",
@@ -96,10 +112,11 @@ describe("blockToJSON — canonical shape", () => {
         "bare2",
       ],
     });
-    expect(out.invariants.map((i) => i.rule)).toEqual(["bare1", "object1", "bare2"]);
-    expect(out.invariants[0]?.enforcedBy).toBeNull();
-    expect(out.invariants[1]?.enforcedBy).toBe("X.y");
-    expect(out.invariants[2]?.enforcedBy).toBeNull();
+    expect(out.invariants).toEqual(["bare1", "object1", "bare2"]);
+    expect(out.invariantsV2.map((i) => i.rule)).toEqual(["bare1", "object1", "bare2"]);
+    expect(out.invariantsV2[0]?.enforcedBy).toBeNull();
+    expect(out.invariantsV2[1]?.enforcedBy).toBe("X.y");
+    expect(out.invariantsV2[2]?.enforcedBy).toBeNull();
   });
 });
 

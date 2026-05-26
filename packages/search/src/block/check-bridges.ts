@@ -18,15 +18,20 @@ import { resolvePythonBridges } from "./bridges/python.js";
 import { checkDeprecatedMaturitySync } from "./deprecated-sync.js";
 import type { BlockDiagnostic, ExtractedBlock } from "./types.js";
 
+type SymbolMetadata = {
+  annotations: Set<string>;
+  docText: string;
+};
+
 /**
- * Find the leading annotations / decorators attached to a symbol named
- * `symbolName` in the file. Returns the set of annotation markers
- * (without the leading `@`) and the surrounding JavaDoc/JSDoc text.
+ * Parse a single file once and produce a `symbol → metadata` map for
+ * every symbol the file declares. Earlier implementation re-opened
+ * + re-parsed the file for every blocked symbol it contained; this
+ * version pays one parse cost per file regardless of block count.
  */
-async function symbolMetadata(
+async function buildFileMetadata(
   filePath: string,
-  symbolName: string,
-): Promise<{ annotations: Set<string>; docText: string } | null> {
+): Promise<Map<string, SymbolMetadata> | null> {
   const language = detectLanguage(filePath);
   if (language === null || !isChunkableLanguage(language)) return null;
   let content: string;
@@ -44,14 +49,30 @@ async function symbolMetadata(
   const tree = parser.parse(content);
   try {
     if (tree === null) return null;
-    const annotations = new Set<string>();
-    let docText = "";
+    const out = new Map<string, SymbolMetadata>();
+    const lines = content.split("\n");
 
-    const visit = (n: SyntaxNode): boolean => {
-      const nameNode = n.childForFieldName?.("name");
-      if (nameNode !== null && nameNode?.text === symbolName) {
-        // Java: leading modifiers contain annotations.
-        if (language === "java") {
+    const recordSymbol = (
+      symbolName: string,
+      annotations: ReadonlySet<string>,
+      declLineIdx: number,
+    ): void => {
+      let docText = "";
+      let i = declLineIdx - 1;
+      while (i >= 0 && /^\s*(?:\/\/|\*|#|\/\*|@)/.test(lines[i]!)) {
+        docText = lines[i]! + "\n" + docText;
+        i -= 1;
+      }
+      out.set(symbolName, { annotations: new Set(annotations), docText });
+    };
+
+    const visit = (n: SyntaxNode): void => {
+      if (language === "java") {
+        // Any declaration kind has a leading `modifiers` child for
+        // annotations and a name field for the symbol.
+        const nameNode = n.childForFieldName?.("name");
+        if (nameNode !== null) {
+          const annotations = new Set<string>();
           for (const child of n.children) {
             if (child.type === "modifiers") {
               for (const m of child.text.matchAll(/@(\w+)/g)) {
@@ -59,49 +80,39 @@ async function symbolMetadata(
               }
             }
           }
+          if (annotations.size > 0 || /declaration$/.test(n.type)) {
+            recordSymbol(nameNode!.text, annotations, n.startPosition.row);
+          }
         }
-        // Python: decorated_definition is the PARENT — already handled
-        // above. Skip.
-        return true;
-      }
-      // Python decorators sit on the parent decorated_definition.
-      if (language === "python" && n.type === "decorated_definition") {
+      } else if (language === "python" && n.type === "decorated_definition") {
         const def = n.namedChildren.find(
           (c) => c.type === "function_definition" || c.type === "class_definition",
         );
         const defName = def?.childForFieldName("name");
-        if (defName?.text === symbolName) {
+        if (defName !== null && def !== undefined) {
+          const annotations = new Set<string>();
           for (const dec of n.namedChildren) {
             if (dec.type !== "decorator") continue;
-            const text = dec.text.replace(/^@/, "").replace(/\(.*$/, "");
-            annotations.add(text);
-            // Also keep the call form (e.g. `dataclass(frozen=True)`).
-            annotations.add(dec.text.replace(/^@/, ""));
+            const callForm = dec.text.replace(/^@/, "");
+            annotations.add(callForm.replace(/\(.*$/, ""));
+            annotations.add(callForm);
           }
-          return true;
+          recordSymbol(defName!.text, annotations, n.startPosition.row);
+        }
+      } else if (language === "python") {
+        // Bare def/class with no decorators — still record so doc-text
+        // is available for E260 detection.
+        if (n.type === "function_definition" || n.type === "class_definition") {
+          const nameNode = n.childForFieldName?.("name");
+          if (nameNode !== null) {
+            recordSymbol(nameNode!.text, new Set(), n.startPosition.row);
+          }
         }
       }
-      for (const c of n.namedChildren) {
-        if (visit(c)) return true;
-      }
-      return false;
+      for (const c of n.namedChildren) visit(c);
     };
     visit(tree.rootNode);
-
-    // Doc text: best-effort — find the comment immediately above the
-    // declaration line. Used by deprecated-sync.ts.
-    const lines = content.split("\n");
-    const declLineIdx = lines.findIndex(
-      (l) => new RegExp(`\\b${symbolName}\\b`).test(l),
-    );
-    if (declLineIdx > 0) {
-      let i = declLineIdx - 1;
-      while (i >= 0 && /^\s*(?:\/\/|\*|#|\/\*|@)/.test(lines[i]!)) {
-        docText = lines[i]! + "\n" + docText;
-        i -= 1;
-      }
-    }
-    return { annotations, docText };
+    return out;
   } finally {
     if (tree !== null && typeof (tree as { delete?: () => void }).delete === "function") {
       (tree as { delete: () => void }).delete();
@@ -136,6 +147,8 @@ function bridgesForLanguage(
  *     enforced-by: null
  *   - rule: catalog merge gives user/project overrides priority over seeds; disabled markers are dropped entirely
  *     enforced-by: null
+ *   - rule: each source file is parsed once regardless of how many blocked symbols it contains
+ *     enforced-by: null
  * decisions:
  *   - chose: substring match rather than exact equality
  *     because: authors paraphrase canonical invariants in the wild; exact match would surface noise on every block
@@ -151,46 +164,62 @@ export async function checkBridges(
   const cfg = loadBlockConfig(repoRoot);
   const diagnostics: BlockDiagnostic[] = [];
 
+  // Group blocks by file so each file is parsed once.
+  const blocksByFile = new Map<string, ExtractedBlock[]>();
   for (const eb of blocks) {
     if (eb.block === null || eb.symbolName === undefined) continue;
-    const language = detectLanguage(eb.filePath);
+    const arr = blocksByFile.get(eb.filePath);
+    if (arr === undefined) blocksByFile.set(eb.filePath, [eb]);
+    else arr.push(eb);
+  }
+
+  for (const [filePath, fileBlocks] of blocksByFile.entries()) {
+    const language = detectLanguage(filePath);
     if (language === null) continue;
     const bridges = bridgesForLanguage(
       language,
       cfg.bridges?.[language as "java" | "python"],
       cfg.bridges?.disable,
     );
-    if (bridges.length === 0) continue;
 
-    const meta = await symbolMetadata(eb.filePath, eb.symbolName);
-    if (meta === null) continue;
-
-    const rules = invariantRules(eb.block);
-    for (const b of bridges) {
-      const hasAnnotation =
-        meta.annotations.has(b.marker) ||
-        // Allow short-form match for python decorators that include args.
-        [...meta.annotations].some((a) => a.startsWith(b.marker));
-      if (!hasAnnotation) continue;
-      const hasInvariant = rules.some((r) => r.includes(b.invariant));
-      if (!hasInvariant) {
-        diagnostics.push({
-          code: "SIVRU-E239",
-          severity: "warning",
-          message: `bridge-suggestion: @${b.marker} suggests invariant "${b.invariant}" — not present in the block`,
-          location: eb.range,
-        });
-      }
+    // Even when there are no bridges for the language, we still need
+    // file metadata for SIVRU-E260 detection (`@deprecated` ↔ block
+    // maturity). Skip the file only when neither check applies.
+    if (bridges.length === 0 && language !== "java" && language !== "python" && language !== "javascript" && language !== "typescript" && language !== "tsx" && language !== "jsx" && language !== "go") {
+      continue;
     }
 
-    // SIVRU-E260: JavaDoc / docstring @deprecated ↔ block.maturity.
-    const e260 = checkDeprecatedMaturitySync({
-      docText: meta.docText,
-      maturity: eb.block.maturity,
-      range: eb.range,
-      language,
-    });
-    if (e260 !== null) diagnostics.push(e260);
+    const meta = await buildFileMetadata(filePath);
+    if (meta === null) continue;
+
+    for (const eb of fileBlocks) {
+      const symMeta = meta.get(eb.symbolName!);
+      if (symMeta === undefined) continue;
+      const rules = invariantRules(eb.block!);
+      for (const b of bridges) {
+        const hasAnnotation =
+          symMeta.annotations.has(b.marker) ||
+          [...symMeta.annotations].some((a) => a.startsWith(b.marker));
+        if (!hasAnnotation) continue;
+        const hasInvariant = rules.some((r) => r.includes(b.invariant));
+        if (!hasInvariant) {
+          diagnostics.push({
+            code: "SIVRU-E239",
+            severity: "warning",
+            message: `bridge-suggestion: @${b.marker} suggests invariant "${b.invariant}" — not present in the block`,
+            location: eb.range,
+          });
+        }
+      }
+
+      const e260 = checkDeprecatedMaturitySync({
+        docText: symMeta.docText,
+        maturity: eb.block!.maturity,
+        range: eb.range,
+        language,
+      });
+      if (e260 !== null) diagnostics.push(e260);
+    }
   }
 
   return diagnostics;

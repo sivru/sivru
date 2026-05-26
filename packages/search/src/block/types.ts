@@ -121,7 +121,19 @@ export type SivruBlockJSON = {
   responsibility: string;
   maturity: string | null;
   collaborators: string[];
-  invariants: SivruInvariantJSON[];
+  /**
+   * Backwards-compatible string-array of invariant rules. Downstream
+   * consumers that read `invariants[0]` as a string (DESIGN-0016
+   * baseline, DESIGN-0017 surfacing, MCP wire) keep working. Object-
+   * form `enforced-by` is preserved in `invariantsV2` alongside.
+   */
+  invariants: string[];
+  /**
+   * DESIGN-0019 §1 wire shape. Always projected: bare-string YAML
+   * invariants become `{ rule, enforcedBy: null }` here. New consumers
+   * that need the `enforced-by` reference read this field.
+   */
+  invariantsV2: SivruInvariantJSON[];
   decisions: SivruDecisionJSON[];
 };
 

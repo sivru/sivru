@@ -77,12 +77,30 @@ function isSkippablePath(absPath: string): boolean {
  * maturity: experimental
  * @end
  */
-export async function computeBlockGraph(rootPath: string): Promise<BlockGraph> {
+export type BlockGraphOptions = {
+  /**
+   * Optional pre-filtered file list. When supplied (e.g., from
+   * `--changed-since=<ref>`), only these paths are walked for graph
+   * extraction. When omitted, walk the whole `rootPath`.
+   */
+  files?: readonly string[];
+};
+
+export async function computeBlockGraph(
+  rootPath: string,
+  options: BlockGraphOptions = {},
+): Promise<BlockGraph> {
   const cfg = loadBlockConfig(rootPath);
-  const files: string[] = [];
-  for await (const entry of walk(rootPath)) {
-    if (isSkippablePath(entry.absPath)) continue;
-    files.push(entry.absPath);
+  let files: readonly string[];
+  if (options.files !== undefined) {
+    files = options.files;
+  } else {
+    const collected: string[] = [];
+    for await (const entry of walk(rootPath)) {
+      if (isSkippablePath(entry.absPath)) continue;
+      collected.push(entry.absPath);
+    }
+    files = collected;
   }
   const extracted = await extractBlocksFromFiles(files);
 

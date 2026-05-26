@@ -61,7 +61,15 @@ export { staleBlocks } from "./staleness.js";
 export type { StalenessOptions, StalenessReport } from "./staleness.js";
 
 export { computeBlockGraph } from "./graph.js";
-export type { BlockGraph, GraphEdge, GraphNode } from "./graph.js";
+export type {
+  BlockGraph,
+  BlockGraphOptions,
+  GraphEdge,
+  GraphNode,
+} from "./graph.js";
+
+export { buildSymbolMap } from "./enforcement.js";
+export type { EnforcementIndex } from "./enforcement.js";
 
 export { initBlock } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";

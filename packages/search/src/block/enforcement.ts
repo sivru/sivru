@@ -278,19 +278,41 @@ async function resolveFileAnchored(
 }
 
 /**
- * Symbol-form resolution. Walks every chunkable file under `repoRoot`
- * (gitignore-aware via `walk()`), parses each, and looks for a top-
- * level declaration matching `name` (qualifier is informative only —
- * we don't yet model fully-qualified class paths). Returns the first
- * hit; ties prefer files that match the qualifier on a path segment.
+ * Single-symbol fallback (one-off `resolveEnforcement` API path).
+ * Walks the repo once, builds the symbol map, and resolves one ref.
+ * Kept for the public `resolveEnforcement` entry point + the targeted
+ * test path; the bulk entry point (`checkEnforcement`) shares one
+ * cached map across all references.
  */
 async function resolveSymbol(
   ref: { kind: "symbol"; qualifier: string | null; name: string },
   repoRoot: string,
 ): Promise<ResolveResult> {
-  // Candidate files: every chunkable source file under repoRoot.
-  let firstMatch: ResolveResult | null = null;
-  let qualifierMatch: ResolveResult | null = null;
+  const index = await buildSymbolMap(repoRoot);
+  return lookupSymbol(index, ref);
+}
+
+/**
+ * Pre-built name → match[] index for batch resolution. A single repo
+ * walk + parse populates this; subsequent lookups are O(1) amortised.
+ */
+export type EnforcementIndex = ReadonlyMap<
+  string,
+  ReadonlyArray<{ filePath: string; skipped: boolean }>
+>;
+
+/**
+ * Walk the repo once, parse each chunkable file, and collect every
+ * top-level declaration name into a map. Used by `checkEnforcement`
+ * to amortise the parse cost across all `enforced-by` references in
+ * a single invocation.
+ *
+ * Sequential per-language because tree-sitter parsers are shared and
+ * concurrent `parse()` invocations can leave overlapping tree
+ * lifetimes invalid (same constraint as `extractBlocksFromFiles`).
+ */
+export async function buildSymbolMap(repoRoot: string): Promise<EnforcementIndex> {
+  const map = new Map<string, Array<{ filePath: string; skipped: boolean }>>();
   for await (const entry of walk(repoRoot)) {
     const language = detectLanguage(entry.absPath);
     if (language === null || !isChunkableLanguage(language)) continue;
@@ -309,25 +331,73 @@ async function resolveSymbol(
     const tree = parser.parse(content);
     try {
       if (tree === null) continue;
-      const found = findDeclaration(tree.rootNode, ref.name, language, content);
-      if (found !== null) {
-        const result: ResolveResult = { kind: "found", skipped: found.skipped };
-        if (firstMatch === null) firstMatch = result;
-        if (ref.qualifier !== null && entry.absPath.includes(ref.qualifier)) {
-          qualifierMatch = result;
-          break;
-        }
-      }
+      // Walk every declaration, not just the named-target — one parse
+      // per file feeds every later lookup.
+      collectAllDeclarations(tree.rootNode, language, content, entry.absPath, map);
     } finally {
       if (tree !== null && typeof (tree as { delete?: () => void }).delete === "function") {
         (tree as { delete: () => void }).delete();
       }
     }
   }
-  if (qualifierMatch !== null) return qualifierMatch;
-  if (firstMatch !== null) return firstMatch;
-  const label = ref.qualifier !== null ? `${ref.qualifier}.${ref.name}` : ref.name;
-  return { kind: "missing", reason: `no declaration \`${label}\`` };
+  return map;
+}
+
+function collectAllDeclarations(
+  root: SyntaxNode,
+  language: string,
+  source: string,
+  filePath: string,
+  out: Map<string, Array<{ filePath: string; skipped: boolean }>>,
+): void {
+  const shared = declTypesFor(language);
+  const declTypes =
+    language === "python"
+      ? new Set([...shared, "decorated_definition"])
+      : shared;
+  const visit = (n: SyntaxNode): void => {
+    if (declTypes.has(n.type)) {
+      const inner =
+        n.type === "decorated_definition"
+          ? n.namedChildren.find(
+              (c) => c.type === "function_definition" || c.type === "class_definition",
+            ) ?? n
+          : n;
+      const nameNode = inner.childForFieldName("name");
+      if (nameNode !== null && nameNode.text.length > 0) {
+        const skipped = detectSkip(
+          n.type === "decorated_definition" ? n : inner,
+          language,
+          source,
+        );
+        const arr = out.get(nameNode.text);
+        const entry = { filePath, skipped };
+        if (arr === undefined) out.set(nameNode.text, [entry]);
+        else arr.push(entry);
+      }
+    }
+    for (const c of n.namedChildren) visit(c);
+  };
+  visit(root);
+}
+
+function lookupSymbol(
+  index: EnforcementIndex,
+  ref: { kind: "symbol"; qualifier: string | null; name: string },
+): ResolveResult {
+  const matches = index.get(ref.name) ?? [];
+  if (matches.length === 0) {
+    const label = ref.qualifier !== null ? `${ref.qualifier}.${ref.name}` : ref.name;
+    return { kind: "missing", reason: `no declaration \`${label}\`` };
+  }
+  if (ref.qualifier !== null) {
+    const qualified = matches.find((m) => m.filePath.includes(ref.qualifier!));
+    if (qualified !== undefined) {
+      return { kind: "found", skipped: qualified.skipped };
+    }
+  }
+  const first = matches[0]!;
+  return { kind: "found", skipped: first.skipped };
 }
 
 /**
@@ -372,7 +442,12 @@ export async function checkEnforcement(
   blocks: readonly ExtractedBlock[],
   repoRoot: string,
 ): Promise<BlockDiagnostic[]> {
-  const diagnostics: BlockDiagnostic[] = [];
+  // First pass: collect every distinct enforced-by reference up front
+  // so we know whether we need the symbol map at all. Build it lazily
+  // (a `check-enforcement` run with only null/file-anchored refs
+  // should never walk the repo).
+  type Ref = { ref: ParsedReference; raw: string; block: ExtractedBlock };
+  const refs: Ref[] = [];
   for (const eb of blocks) {
     if (eb.block === null || eb.block.invariants === undefined) continue;
     for (const inv of eb.block.invariants) {
@@ -380,31 +455,50 @@ export async function checkEnforcement(
       const enforcedBy = inv["enforced-by"];
       if (enforcedBy === null) continue;
       const ref = parseEnforcedBy(enforcedBy);
-      if (ref === null) {
-        diagnostics.push({
-          code: "SIVRU-E230",
-          severity: "error",
-          message: `enforcement-missing: malformed \`enforced-by\` reference "${enforcedBy}" — expected \`Class.method\` or \`path::name\``,
-          location: eb.range,
-        });
-        continue;
-      }
-      const result = await resolveEnforcement(ref, repoRoot);
-      if (result.kind === "missing") {
-        diagnostics.push({
-          code: "SIVRU-E230",
-          severity: "error",
-          message: `enforcement-missing: \`${enforcedBy}\` — ${result.reason}`,
-          location: eb.range,
-        });
-      } else if (result.skipped) {
-        diagnostics.push({
-          code: "SIVRU-E231",
-          severity: "error",
-          message: `enforcement-skipped: \`${enforcedBy}\` resolves to a test marked skipped/disabled`,
-          location: eb.range,
-        });
-      }
+      refs.push({
+        ref: ref ?? { kind: "symbol", qualifier: null, name: "" },
+        raw: enforcedBy,
+        block: eb,
+      });
+    }
+  }
+
+  // Lazy symbol-map build. One repo walk + parse for the whole batch.
+  let symbolIndex: EnforcementIndex | null = null;
+  const needsSymbolMap = refs.some((r) => r.ref.kind === "symbol" && r.ref.name !== "");
+  if (needsSymbolMap) {
+    symbolIndex = await buildSymbolMap(repoRoot);
+  }
+
+  const diagnostics: BlockDiagnostic[] = [];
+  for (const { ref, raw, block: eb } of refs) {
+    if (ref.name === "") {
+      diagnostics.push({
+        code: "SIVRU-E230",
+        severity: "error",
+        message: `enforcement-missing: malformed \`enforced-by\` reference "${raw}" — expected \`Class.method\` or \`path::name\``,
+        location: eb.range,
+      });
+      continue;
+    }
+    const result: ResolveResult =
+      ref.kind === "file-anchored"
+        ? await resolveFileAnchored(ref, repoRoot)
+        : lookupSymbol(symbolIndex!, ref);
+    if (result.kind === "missing") {
+      diagnostics.push({
+        code: "SIVRU-E230",
+        severity: "error",
+        message: `enforcement-missing: \`${raw}\` — ${result.reason}`,
+        location: eb.range,
+      });
+    } else if (result.skipped) {
+      diagnostics.push({
+        code: "SIVRU-E231",
+        severity: "error",
+        message: `enforcement-skipped: \`${raw}\` resolves to a test marked skipped/disabled`,
+        location: eb.range,
+      });
     }
   }
   return diagnostics;

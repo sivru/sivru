@@ -28,19 +28,25 @@ import type { SivruBlock, SivruBlockJSON } from "./types.js";
  * @end
  */
 export function blockToJSON(block: SivruBlock): SivruBlockJSON {
+  // DESIGN-0019 §1: emit BOTH shapes so v0.6-vintage consumers keep
+  // reading the bare-string `invariants[]` while new consumers read
+  // `invariantsV2[]` for the `enforced-by` field. The cost is a small
+  // amount of JSON duplication; the win is no break to anything that
+  // already consumes the wire (DESIGN-0017 explain artifact, MCP, the
+  // `block extract --json` CLI consumers).
+  const invariantsV2 = (block.invariants ?? []).map((inv) =>
+    typeof inv === "string"
+      ? { rule: inv, enforcedBy: null }
+      : { rule: inv.rule, enforcedBy: inv["enforced-by"] },
+  );
   return {
     schema: block.schema,
     role: block.role,
     responsibility: block.responsibility,
     maturity: block.maturity ?? null,
     collaborators: block.collaborators ?? [],
-    // DESIGN-0019 §1: bare-string invariants project to the object form
-    // with `enforcedBy: null`. Downstream consumers see a uniform shape.
-    invariants: (block.invariants ?? []).map((inv) =>
-      typeof inv === "string"
-        ? { rule: inv, enforcedBy: null }
-        : { rule: inv.rule, enforcedBy: inv["enforced-by"] },
-    ),
+    invariants: invariantsV2.map((iv) => iv.rule),
+    invariantsV2,
     decisions: (block.decisions ?? []).map((d) => ({
       chose: d.chose,
       because: d.because,

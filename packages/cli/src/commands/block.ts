@@ -51,7 +51,13 @@ type ValidateArgs = {
   rootPaths: string[];
   changedSince: string | null;
   autofix: boolean;
-  force: boolean;
+  /**
+   * Allow `--autofix` to rewrite files that have uncommitted changes
+   * (otherwise we refuse, to avoid clobbering in-progress edits).
+   * Named distinctly from `init`'s `--force` to avoid the
+   * "same flag, different blast radius" UX trap.
+   */
+  allowDirty: boolean;
 };
 type ExtractArgs = {
   subcommand: "extract";
@@ -75,6 +81,7 @@ type GraphArgs = {
   rootPath: string;
   check: boolean;
   json: boolean;
+  changedSince: string | null;
 };
 type InitArgs = {
   subcommand: "init";
@@ -122,6 +129,7 @@ export function parseBlockArgs(argv: readonly string[]): ParseOk | ParseErr {
   let json = false;
   let autofix = false;
   let force = false;
+  let allowDirty = false;
   let strict = false;
   let check = false;
   let write = false;
@@ -140,7 +148,13 @@ export function parseBlockArgs(argv: readonly string[]): ParseOk | ParseErr {
       continue;
     }
     if (a === "--force") {
+      // `--force` only carries meaning on `init` (overwrite existing
+      // block). The validate-side equivalent is `--allow-dirty`.
       force = true;
+      continue;
+    }
+    if (a === "--allow-dirty") {
+      allowDirty = true;
       continue;
     }
     if (a === "--strict") {
@@ -202,7 +216,13 @@ export function parseBlockArgs(argv: readonly string[]): ParseOk | ParseErr {
   if (subcommand === "validate") {
     return {
       kind: "ok",
-      args: { subcommand: "validate", rootPaths, changedSince, autofix, force },
+      args: {
+        subcommand: "validate",
+        rootPaths,
+        changedSince,
+        autofix,
+        allowDirty,
+      },
     };
   }
   if (subcommand === "extract") {
@@ -232,7 +252,13 @@ export function parseBlockArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     return {
       kind: "ok",
-      args: { subcommand: "graph", rootPath: rootPaths[0]!, check, json },
+      args: {
+        subcommand: "graph",
+        rootPath: rootPaths[0]!,
+        check,
+        json,
+        changedSince,
+      },
     };
   }
   if (subcommand === "init") {
@@ -261,7 +287,7 @@ const USAGE = [
   "                                                      changed since <ref>.",
   "                               --autofix              Rewrite E237/E238",
   "                                                      lines in place.",
-  "                               --force                With --autofix, allow",
+  "                               --allow-dirty          With --autofix, allow",
   "                                                      files with uncommitted",
   "                                                      changes.",
   "  extract [path...] [--json]  Emit every block + diagnostics.",
@@ -460,11 +486,12 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
 
     if (args.subcommand === "validate" && args.autofix) {
       const filesBeforeFix = await discoverFilesMulti(rootPaths, args.changedSince);
-      // Refuse to autofix any file with uncommitted changes unless --force.
+      // Refuse to autofix any file with uncommitted changes unless
+      // --allow-dirty is passed. Distinct from init's --force.
       const candidates: string[] = [];
       const skipped: string[] = [];
       for (const f of filesBeforeFix) {
-        if (args.force || isCleanInGit(f, repoRoot)) {
+        if (args.allowDirty || isCleanInGit(f, repoRoot)) {
           candidates.push(f);
         } else {
           skipped.push(f);
@@ -479,7 +506,7 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
         }
       }
       for (const f of skipped) {
-        process.stderr.write(`autofix skipped (uncommitted changes — pass --force): ${f}\n`);
+        process.stderr.write(`autofix skipped (uncommitted changes — pass --allow-dirty): ${f}\n`);
       }
       process.stdout.write(`sivru block validate --autofix: ${totalRewrites} rewrite(s) across ${results.length} file(s)\n`);
       // Fall through to a normal validate pass on the rewritten tree.
@@ -605,7 +632,12 @@ async function runStaleness(args: StalenessArgs): Promise<number> {
 }
 
 async function runGraph(args: GraphArgs): Promise<number> {
-  const graph = await computeBlockGraph(args.rootPath);
+  const opts: { files?: readonly string[] } = {};
+  if (args.changedSince !== null) {
+    const files = await discoverFilesMulti([args.rootPath], args.changedSince);
+    opts.files = files;
+  }
+  const graph = await computeBlockGraph(args.rootPath, opts);
   if (args.json) {
     process.stdout.write(JSON.stringify(graph, null, 2) + "\n");
     return 0;
