@@ -136,6 +136,39 @@ describe("parseBlockArgs", () => {
   it("rejects unknown flags", () => {
     expect(parseBlockArgs(["validate", "--weird"]).kind).toBe("err");
   });
+
+  it("rejects multi-path + --changed-since on validate (different repos would diff wrong)", () => {
+    const out = parseBlockArgs([
+      "validate",
+      "/a",
+      "/b",
+      "--changed-since=main",
+    ]);
+    expect(out.kind).toBe("err");
+    if (out.kind === "err") {
+      expect(out.message).toContain("--changed-since");
+    }
+  });
+
+  it("rejects multi-path + --changed-since on check-enforcement", () => {
+    const out = parseBlockArgs([
+      "check-enforcement",
+      "/a",
+      "/b",
+      "--changed-since=main",
+    ]);
+    expect(out.kind).toBe("err");
+  });
+
+  it("allows multi-path without --changed-since", () => {
+    const out = parseBlockArgs(["validate", "/a", "/b", "/c"]);
+    expect(out.kind).toBe("ok");
+  });
+
+  it("allows single-path with --changed-since", () => {
+    const out = parseBlockArgs(["validate", "/a", "--changed-since=main"]);
+    expect(out.kind).toBe("ok");
+  });
 });
 
 describe("runBlock — validate", () => {

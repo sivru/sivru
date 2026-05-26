@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildBlockCache } from "./block-cache.js";
+import { hashBlockContent } from "./hash.js";
 
 let tmpDir: string;
 
@@ -86,5 +87,54 @@ export function fn() {}
     const ah = cache.get(a)![0]!.contentHash;
     const bh = cache.get(b)![0]!.contentHash;
     expect(ah).toBe(bh);
+  });
+});
+
+describe("hashBlockContent — stability under key shuffling", () => {
+  // Regression: previously the helper used `JSON.stringify(block)`,
+  // which respects insertion order. A parser refactor that changes
+  // the order fields are assigned would invalidate every cached hash.
+  // The fix sorts keys recursively before stringifying.
+  it("same fields in different insertion order produce identical hashes", () => {
+    const blockA = {
+      schema: 1,
+      role: "r",
+      responsibility: "p",
+      maturity: "stable",
+    };
+    const blockB = {
+      maturity: "stable",
+      responsibility: "p",
+      role: "r",
+      schema: 1,
+    };
+    expect(hashBlockContent(blockA)).toBe(hashBlockContent(blockB));
+  });
+
+  it("changing a field value DOES change the hash", () => {
+    const blockA = { schema: 1, role: "r", responsibility: "v1" };
+    const blockB = { schema: 1, role: "r", responsibility: "v2" };
+    expect(hashBlockContent(blockA)).not.toBe(hashBlockContent(blockB));
+  });
+
+  it("recursive shuffling: nested decisions[].* keys also normalised", () => {
+    const a = {
+      decisions: [
+        { chose: "A", because: "B", "valid-while": "C", "revisit-if": "D" },
+      ],
+    };
+    const b = {
+      decisions: [
+        { "revisit-if": "D", "valid-while": "C", because: "B", chose: "A" },
+      ],
+    };
+    expect(hashBlockContent(a)).toBe(hashBlockContent(b));
+  });
+
+  it("array order IS significant (different ordering → different hash)", () => {
+    // Invariant ordering carries authorial intent; we don't sort arrays.
+    const a = { invariants: ["x", "y"] };
+    const b = { invariants: ["y", "x"] };
+    expect(hashBlockContent(a)).not.toBe(hashBlockContent(b));
   });
 });
