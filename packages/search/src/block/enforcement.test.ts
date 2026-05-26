@@ -119,6 +119,86 @@ describe("resolveEnforcement symbol form", () => {
     );
     expect(result.kind).toBe("missing");
   });
+
+  it("detects JUnit @Disabled on a Java test method (skipped)", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "FooTest.java"),
+      `import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+class FooTest {
+  @Test
+  @Disabled
+  void clearsTenantContext() {}
+}
+`,
+    );
+    const result = await resolveEnforcement(
+      { kind: "symbol", qualifier: null, name: "clearsTenantContext" },
+      tmpDir,
+    );
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") expect(result.skipped).toBe(true);
+  });
+
+  it("detects pytest.mark.skip decorator on a Python test (skipped)", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "test_foo.py"),
+      `import pytest
+
+@pytest.mark.skip(reason="WIP")
+def test_clears_tenant_context():
+    assert True
+`,
+    );
+    const result = await resolveEnforcement(
+      { kind: "symbol", qualifier: null, name: "test_clears_tenant_context" },
+      tmpDir,
+    );
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") expect(result.skipped).toBe(true);
+  });
+
+  it("detects t.Skip() in a Go test (skipped)", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "foo_test.go"),
+      `package foo
+import "testing"
+func TestClearsTenantContext(t *testing.T) {
+  t.Skip("WIP")
+  // body
+}
+`,
+    );
+    const result = await resolveEnforcement(
+      { kind: "symbol", qualifier: null, name: "TestClearsTenantContext" },
+      tmpDir,
+    );
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") expect(result.skipped).toBe(true);
+  });
+
+  it("does NOT mark a Go test as skipped when t.Skip appears in a comment only", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "foo_test.go"),
+      `package foo
+import "testing"
+func TestClearsTenantContext(t *testing.T) {
+  // Note: we used to t.Skip() here but no longer.
+  if true {}
+}
+`,
+    );
+    const result = await resolveEnforcement(
+      { kind: "symbol", qualifier: null, name: "TestClearsTenantContext" },
+      tmpDir,
+    );
+    expect(result.kind).toBe("found");
+    if (result.kind === "found") expect(result.skipped).toBe(false);
+  });
 });
 
 describe("checkEnforcement", () => {

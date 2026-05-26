@@ -95,4 +95,93 @@ public enum HookEvent { CREATE, UPDATE, DELETE }
     const symbolBlock = blocks.find((b) => b.kind === "symbol");
     expect(symbolBlock?.symbolName).toBe("HookEvent");
   });
+
+  it("attaches a block to a NESTED enum inside an outer class", async () => {
+    const file = join(tmpDir, "Outer.java");
+    writeFileSync(
+      file,
+      `public class Outer {
+  /**
+   * @sivru
+   * schema: 1
+   * role: nested-enum
+   * responsibility: "inner enum carries its own contract"
+   * @end
+   */
+  enum Status { OPEN, CLOSED }
+}
+`,
+    );
+    const blocks = await extractBlocks(file);
+    const symbolBlock = blocks.find(
+      (b) => b.kind === "symbol" && b.symbolName === "Status",
+    );
+    expect(symbolBlock).toBeDefined();
+    // The nested enum's block must NOT collapse into the outer class.
+    const outerBlock = blocks.find(
+      (b) => b.kind === "symbol" && b.symbolName === "Outer",
+    );
+    expect(outerBlock).toBeUndefined();
+  });
+
+  it("attaches a block to a sealed interface", async () => {
+    const file = join(tmpDir, "Shape.java");
+    writeFileSync(
+      file,
+      `/**
+ * @sivru
+ * schema: 1
+ * role: sealed-interface
+ * responsibility: "constrained type hierarchy"
+ * @end
+ */
+public sealed interface Shape permits Circle, Square {}
+`,
+    );
+    const blocks = await extractBlocks(file);
+    const symbolBlock = blocks.find((b) => b.kind === "symbol");
+    expect(symbolBlock?.symbolName).toBe("Shape");
+  });
+
+  it("attaches a block to an inner class", async () => {
+    const file = join(tmpDir, "Container.java");
+    writeFileSync(
+      file,
+      `public class Container {
+  /**
+   * @sivru
+   * schema: 1
+   * role: inner-class
+   * responsibility: "private helper inside Container"
+   * @end
+   */
+  static class Helper { int x; }
+}
+`,
+    );
+    const blocks = await extractBlocks(file);
+    const symbolBlock = blocks.find(
+      (b) => b.kind === "symbol" && b.symbolName === "Helper",
+    );
+    expect(symbolBlock).toBeDefined();
+  });
+
+  it("attaches a block to an annotation type declaration", async () => {
+    const file = join(tmpDir, "MyAnnotation.java");
+    writeFileSync(
+      file,
+      `/**
+ * @sivru
+ * schema: 1
+ * role: annotation
+ * responsibility: "marker annotation"
+ * @end
+ */
+public @interface MyAnnotation {}
+`,
+    );
+    const blocks = await extractBlocks(file);
+    const symbolBlock = blocks.find((b) => b.kind === "symbol");
+    expect(symbolBlock?.symbolName).toBe("MyAnnotation");
+  });
 });

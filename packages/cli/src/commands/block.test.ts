@@ -235,6 +235,126 @@ describe("runBlock — extract --json output complete (regression)", () => {
   });
 });
 
+describe("runBlock — DESIGN-0019 subcommands", () => {
+  function captureIo<T>(fn: () => Promise<T>): Promise<{ result: T; stdout: string; stderr: string }> {
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    const sout = vi.spyOn(process.stdout, "write").mockImplementation((c) => {
+      stdoutBuf += String(c);
+      return true;
+    });
+    const serr = vi.spyOn(process.stderr, "write").mockImplementation((c) => {
+      stderrBuf += String(c);
+      return true;
+    });
+    return fn()
+      .then((result) => ({ result, stdout: stdoutBuf, stderr: stderrBuf }))
+      .finally(() => {
+        sout.mockRestore();
+        serr.mockRestore();
+      });
+  }
+
+  it("check-enforcement exits 1 when an enforced-by reference doesn't resolve", async () => {
+    const dir = mkRepo({
+      "src/subject.ts": [
+        "/**",
+        " * @sivru",
+        " * schema: 1",
+        " * role: r",
+        " * responsibility: r",
+        " * invariants:",
+        " *   - rule: \"y\"",
+        " *     enforced-by: doesNotExistAnywhere",
+        " * @end",
+        " */",
+        "export function bad(): void {}",
+      ].join("\n"),
+    });
+    const { result, stdout, stderr } = await captureIo(() =>
+      runBlock(["check-enforcement", dir]),
+    );
+    expect(result).toBe(1);
+    expect(stdout + stderr).toContain("SIVRU-E230");
+  });
+
+  it("validate --autofix rewrites E237 silent-drift on a colon-in-prose invariant", async () => {
+    const dir = mkRepo({
+      "foo.ts": [
+        "/**",
+        " * @sivru",
+        " * schema: 1",
+        " * role: r",
+        " * responsibility: r",
+        " * invariants:",
+        " *   - tx: REQUIRES_NEW per-row failure does not abort the run",
+        " * @end",
+        " */",
+        "export function foo(): void {}",
+      ].join("\n"),
+    });
+    // --allow-dirty because the file is brand-new (not committed).
+    const { result, stdout } = await captureIo(() =>
+      runBlock(["validate", "--autofix", "--allow-dirty", dir]),
+    );
+    expect(stdout).toContain("rewrite(s)");
+    // After autofix the second pass exits 0 (no remaining errors).
+    void result;
+    const after = await captureIo(() => runBlock(["validate", dir]));
+    expect(after.result).toBe(0);
+  });
+
+  it("graph --check exits 1 on asymmetric collaborators", async () => {
+    const dir = mkRepo({
+      "src/A.ts": [
+        "/**",
+        " * @sivru",
+        " * schema: 1",
+        " * role: r",
+        " * responsibility: rA",
+        " * collaborators:",
+        " *   - B",
+        " * @end",
+        " */",
+        "export class A {}",
+      ].join("\n"),
+      "src/B.ts": [
+        "/**",
+        " * @sivru",
+        " * schema: 1",
+        " * role: r",
+        " * responsibility: rB",
+        " * @end",
+        " */",
+        "export class B {}",
+      ].join("\n"),
+    });
+    const { stdout, stderr } = await captureIo(() =>
+      runBlock(["graph", "--check", dir]),
+    );
+    expect(stdout + stderr).toContain("SIVRU-E234");
+  });
+
+  it("init prints a scaffolded block to stdout when --write is absent", async () => {
+    const dir = mkRepo({
+      // A doc comment so the responsibility extraction triggers the
+      // "auto-generated, replace" marker.
+      "src/Service.ts": [
+        "/** Resolve and dispatch routes. */",
+        "export class FooService { foo() {} }",
+      ].join("\n"),
+    });
+    const { result, stdout } = await captureIo(() =>
+      runBlock(["init", join(dir, "src/Service.ts")]),
+    );
+    expect(result).toBe(0);
+    expect(stdout).toContain("@sivru");
+    expect(stdout).toContain("@end");
+    expect(stdout).toContain("role: service");
+    expect(stdout).toContain("auto-generated, replace");
+  });
+});
+
 describe("runBlock — extract --json", () => {
   it("emits invalid blocks with block:null and diagnostics populated (never silently dropped)", async () => {
     const dir = mkRepo({
