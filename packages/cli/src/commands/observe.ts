@@ -76,13 +76,18 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
   return { port, host, noUi };
 }
 
-/** Resolve packages/observe-ui/dist relative to this script. Returns null when missing. */
+// Locate the static UI assets. Two paths:
+//   1. Bundled — packages/cli/dist/ui/ (shipped inside the published @sivru/cli
+//      tarball; populated by scripts/copy-ui.mjs at build time).
+//   2. Monorepo fallback — packages/observe-ui/dist (for dev workflows where
+//      observe-ui was built without re-running the CLI build).
 function resolveUiDist(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
-  // Walk up from packages/cli/dist/commands/observe.js → repo root → packages/observe-ui/dist
+  const bundled = resolve(here, "..", "ui");
+  if (existsSync(resolve(bundled, "index.html"))) return bundled;
   const repoRoot = resolve(here, "..", "..", "..", "..");
-  const dist = resolve(repoRoot, "packages", "observe-ui", "dist");
-  return existsSync(resolve(dist, "index.html")) ? dist : null;
+  const monorepo = resolve(repoRoot, "packages", "observe-ui", "dist");
+  return existsSync(resolve(monorepo, "index.html")) ? monorepo : null;
 }
 
 async function runObserveServer(argv: readonly string[]): Promise<number> {

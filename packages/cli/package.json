@@ -18,12 +18,12 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @sivru/observe-ui build && tsc -p tsconfig.json && node scripts/copy-ui.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "smoke": "node dist/smoke/runner.js",
     "lint": "echo 'TODO: configure eslint in W1'",
-    "prepublishOnly": "pnpm --filter @sivru/search build && pnpm --filter @sivru/observe build && tsc -p tsconfig.json"
+    "prepublishOnly": "pnpm --filter @sivru/search build && pnpm --filter @sivru/observe build && pnpm --filter @sivru/observe-ui build && tsc -p tsconfig.json && node scripts/copy-ui.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

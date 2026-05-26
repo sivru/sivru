@@ -153,17 +153,25 @@ export function checkSivruDist(): CheckResult {
 }
 
 export function checkObserveUiDist(): CheckResult {
-  const repoRoot = resolveRepoRoot();
-  const indexHtml = resolve(repoRoot, "packages", "observe-ui", "dist", "index.html");
-  if (!existsSync(indexHtml)) {
-    return {
-      name: "observe-ui dist",
-      severity: "warn",
-      detail: "observe-ui dist not built — `sivru observe` UI won't render",
-      fix: "pnpm --filter @sivru/observe-ui build",
-    };
+  // Match resolveUiDist() in commands/observe.ts: prefer the bundled copy
+  // inside @sivru/cli's own dist/ui (shipped on npm), fall back to the
+  // sibling packages/observe-ui/dist for dev workflows.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const bundled = resolve(here, "..", "ui", "index.html");
+  if (existsSync(bundled)) {
+    return { name: "observe-ui dist", severity: "ok", detail: "built (bundled)" };
   }
-  return { name: "observe-ui dist", severity: "ok", detail: "built" };
+  const repoRoot = resolveRepoRoot();
+  const monorepo = resolve(repoRoot, "packages", "observe-ui", "dist", "index.html");
+  if (existsSync(monorepo)) {
+    return { name: "observe-ui dist", severity: "ok", detail: "built (monorepo)" };
+  }
+  return {
+    name: "observe-ui dist",
+    severity: "warn",
+    detail: "observe-ui dist not built — `sivru observe` UI won't render",
+    fix: "pnpm --filter @sivru/cli build",
+  };
 }
 
 export function checkSivruCacheDir(): CheckResult {
