@@ -123,8 +123,10 @@ function isMissing(err: unknown): boolean {
  * responsibility: emit one WalkEntry per file that survives the filter set (gitignore, size, binary, symlink loop)
  * collaborators: [createIndexCache, chunkFile, buildIndex]
  * invariants:
- *   - iteration order is stable across platforms so cache state_id hashes do not drift
- *   - .git/ is always skipped, regardless of options
+ *   - rule: "iteration order is stable across platforms so cache state_id hashes do not drift"
+ *     enforced-by: null
+ *   - rule: ".git/ is always skipped, regardless of options"
+ *     enforced-by: null
  * decisions:
  *   - chose: gitignore-aware default-on with explicit opt-out
  *     because: most users want their build artifacts excluded; surprise inclusion creates noisy indexes

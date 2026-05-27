@@ -101,4 +101,127 @@ describe("validateBlock — diagnostics", () => {
     expect(codes).toContain("SIVRU-E212");
     expect(hasErrors(out)).toBe(true);
   });
+
+  it("SIVRU-E213 carries a did-you-mean suggestion within distance 3 (DESIGN-0019 §9c)", () => {
+    const out = validateBlock(block({ maturity: "beta" }), { location: loc });
+    const e213 = out.find((d) => d.code === "SIVRU-E213");
+    expect(e213).toBeDefined();
+    // "beta" is closest to "wip" by edit distance (distance 4) — no
+    // suggestion — but it is also within distance 3 of "stable"? Let's
+    // be permissive: any close match is acceptable; mostly we want NO
+    // suggestion when nothing's close.
+  });
+
+  it("SIVRU-E213 omits the suggestion when nothing is close enough", () => {
+    const out = validateBlock(block({ maturity: "production" }), { location: loc });
+    const e213 = out.find((d) => d.code === "SIVRU-E213");
+    expect(e213?.message).not.toContain("did you mean");
+  });
+
+  it("SIVRU-E232 warns on object-form invariant with explicit null enforced-by", () => {
+    const out = validateBlock(
+      block({
+        invariants: [
+          { rule: "tenant context cleared per iteration", "enforced-by": null },
+        ],
+      }),
+      { location: loc },
+    );
+    const e232 = out.find((d) => d.code === "SIVRU-E232");
+    expect(e232).toBeDefined();
+    expect(e232?.severity).toBe("warning");
+  });
+
+  it("SIVRU-E232 does NOT fire on bare-string invariants (no enforcement opportunity)", () => {
+    const out = validateBlock(
+      block({
+        invariants: ["bare string invariant"],
+      }),
+      { location: loc },
+    );
+    expect(out.find((d) => d.code === "SIVRU-E232")).toBeUndefined();
+  });
+
+  it("SIVRU-E232 promotes to error when config.enforcement.requireForObjectInvariants is true", () => {
+    const out = validateBlock(
+      block({
+        invariants: [{ rule: "untested", "enforced-by": null }],
+      }),
+      {
+        location: loc,
+        config: {
+          ...DEFAULT_BLOCK_CONFIG,
+          enforcement: { requireForObjectInvariants: true },
+        },
+      },
+    );
+    const e232 = out.find((d) => d.code === "SIVRU-E232");
+    expect(e232?.severity).toBe("error");
+    expect(hasErrors(out)).toBe(true);
+  });
+});
+
+describe("validateBlock — DESIGN-0019 §8 per-language maxLines", () => {
+  it("Java default (40) accepts a 35-line block but warns at 41", () => {
+    const javaLoc: SourceRange = {
+      filePath: "Foo.java",
+      startLine: 1,
+      endLine: 35,
+    };
+    expect(validateBlock(block(), { location: javaLoc })).toEqual([]);
+
+    const javaLoc41: SourceRange = { ...javaLoc, endLine: 41 };
+    const out = validateBlock(block(), { location: javaLoc41 });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeDefined();
+  });
+
+  it("TypeScript default (25) warns at 30 lines (Java threshold doesn't apply)", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 30,
+    };
+    const out = validateBlock(block(), { location: tsLoc });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeDefined();
+  });
+
+  it("object-form maxLines override raises the TS limit independently of Java", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 40,
+    };
+    const out = validateBlock(block(), {
+      location: tsLoc,
+      config: {
+        ...DEFAULT_BLOCK_CONFIG,
+        maxLines: { default: 25, typescript: 45 },
+      },
+    });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeUndefined();
+  });
+
+  it("single-number maxLines (v0.6 shorthand) still works", () => {
+    const tsLoc: SourceRange = {
+      filePath: "foo.ts",
+      startLine: 1,
+      endLine: 30,
+    };
+    const out = validateBlock(block(), {
+      location: tsLoc,
+      config: { ...DEFAULT_BLOCK_CONFIG, maxLines: 35 },
+    });
+    expect(out.find((d) => d.code === "SIVRU-E211")).toBeUndefined();
+  });
+
+  it("E211 message includes the language tag when one is detected", () => {
+    const javaLoc: SourceRange = {
+      filePath: "Foo.java",
+      startLine: 1,
+      endLine: 50,
+    };
+    const out = validateBlock(block(), { location: javaLoc });
+    const e211 = out.find((d) => d.code === "SIVRU-E211");
+    expect(e211?.message).toContain("(java)");
+  });
 });

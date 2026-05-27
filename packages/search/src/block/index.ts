@@ -9,15 +9,21 @@
 
 export type {
   BlockDiagnostic,
+  BlockGraphRule,
   BlockValidatorContext,
   CustomBlockValidator,
+  DecisionChecker,
+  EnforcementResolver,
   ExtractedBlock,
   ExtractedBlockKind,
   SivruBlock,
   SivruBlockConfig,
   SivruBlockJSON,
+  SivruBlockMaxLines,
   SivruDecision,
   SivruDecisionJSON,
+  SivruInvariant,
+  SivruInvariantJSON,
   SourceRange,
 } from "./types.js";
 
@@ -34,6 +40,62 @@ export { blockToJSON } from "./toJSON.js";
 
 export {
   DEFAULT_BLOCK_CONFIG,
+  DEFAULT_MAX_LINES,
   RUNAWAY_LINES,
   loadBlockConfig,
+  resolveMaxLines,
 } from "./config.js";
+
+export { wrapYamlError } from "./yaml-errors.js";
+
+export {
+  checkEnforcement,
+  parseEnforcedBy,
+  resolveEnforcement,
+} from "./enforcement.js";
+export type { ParsedReference } from "./enforcement.js";
+
+export { autofixFile, autofixFiles } from "./autofix.js";
+export type { AutofixResult } from "./autofix.js";
+
+export { closestMatch, levenshtein } from "./levenshtein.js";
+
+export { staleBlocks } from "./staleness.js";
+export type { StalenessOptions, StalenessReport } from "./staleness.js";
+
+export { computeBlockGraph } from "./graph.js";
+export type {
+  BlockGraph,
+  BlockGraphOptions,
+  GraphEdge,
+  GraphNode,
+} from "./graph.js";
+
+export { buildSymbolMap } from "./enforcement.js";
+export type { EnforcementIndex } from "./enforcement.js";
+
+export { buildBlockCache } from "./block-cache.js";
+export type { BlockCache } from "./block-cache.js";
+export type { BlockCacheEntry } from "../explain/types.js";
+
+export { isBlockWalkSkippable } from "./walker-skip.js";
+
+export { hashBlockContent, MODULE_SYMBOL_NAME } from "./hash.js";
+
+export { initBlock } from "./init.js";
+export type { InitOptions, InitResult } from "./init.js";
+
+export { checkBridges } from "./check-bridges.js";
+
+export {
+  JAVA_BRIDGES,
+  resolveJavaBridges,
+} from "./bridges/java.js";
+export type { AnnotationBridge } from "./bridges/java.js";
+
+export {
+  PYTHON_BRIDGES,
+  resolvePythonBridges,
+} from "./bridges/python.js";
+
+export { checkDeprecatedMaturitySync } from "./deprecated-sync.js";

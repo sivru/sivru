@@ -134,8 +134,10 @@ function scanDeclaredNames(lines: readonly string[]): Set<string> {
  * responsibility: assemble the explain artifact in --diff mode, including the removed_symbols section that surfaces orphaned callers
  * collaborators: [assembleArtifact, parsePathAndSymbol]
  * invariants:
- *   - removed_symbols is only populated when an export disappeared from the working-tree diff
- *   - diff_mode:true distinguishes the diff artifact from the regular artifact for downstream consumers
+ *   - rule: "removed_symbols is only populated when an export disappeared from the working-tree diff"
+ *     enforced-by: null
+ *   - rule: "diff_mode:true distinguishes the diff artifact from the regular artifact for downstream consumers"
+ *     enforced-by: null
  * decisions:
  *   - chose: compute removed-symbol callers directly here instead of recursing through assembleArtifact's region path
  *     because: a removed symbol no longer appears in the file's exports, so the region path would throw SIVRU-E2004

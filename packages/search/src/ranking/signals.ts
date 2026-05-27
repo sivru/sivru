@@ -91,8 +91,10 @@ function hasIdentifierBoundary(token: string): boolean {
  * responsibility: re-score a ranked hit list using the configured signal stack (definition boost, multi-chunk file boost, path penalty, stem matching)
  * collaborators: [reciprocalRankFusion, buildIndex, tokenize]
  * invariants:
- *   - each signal multiplies the original score; signals stay composable rather than competing for one fixed budget
- *   - the path penalty only kicks in for canonical test/legacy/example folders; folder names that do not match are not penalized
+ *   - rule: "each signal multiplies the original score; signals stay composable rather than competing for one fixed budget"
+ *     enforced-by: null
+ *   - rule: "the path penalty only kicks in for canonical test/legacy/example folders; folder names that do not match are not penalized"
+ *     enforced-by: null
  * decisions:
  *   - chose: multiplicative composition of independently-togglable signals
  *     because: signals can be tuned and ablated individually; adding a new one is a small local change

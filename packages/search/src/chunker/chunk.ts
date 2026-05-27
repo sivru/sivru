@@ -27,7 +27,8 @@ import { treeSitterChunks } from "./treeSitter.js";
  * responsibility: produce chunks for one file via the best available strategy
  * collaborators: [treeSitterChunks, lineFallbackChunks, detectLanguage]
  * invariants:
- *   - the file is always fully indexed; tree-sitter failure degrades chunk quality, never coverage
+ *   - rule: "the file is always fully indexed; tree-sitter failure degrades chunk quality, never coverage"
+ *     enforced-by: null
  * decisions:
  *   - chose: tree-sitter where a grammar exists; line-fallback everywhere else
  *     because: code-aware chunks beat fixed line windows for retrieval, but a parse failure must not silently drop a file

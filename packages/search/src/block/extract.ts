@@ -26,15 +26,19 @@ import yaml from "js-yaml";
 
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
+import { declTypesFor } from "./decl-types.js";
+import { javaModuleLocator } from "./module-locators/java.js";
 import { pythonModuleLocator } from "./module-locators/python.js";
 import { typescriptModuleLocator } from "./module-locators/typescript.js";
 import { RUNAWAY_LINES } from "./config.js";
+import { wrapYamlError } from "./yaml-errors.js";
 import type {
   BlockDiagnostic,
   ExtractedBlock,
   ExtractedBlockKind,
   SivruBlock,
   SivruDecision,
+  SivruInvariant,
   SourceRange,
 } from "./types.js";
 
@@ -164,33 +168,8 @@ function collectComments(root: SyntaxNode): SyntaxNode[] {
 
 /** Walk node tree and collect declaration-like nodes that can carry symbols. */
 function collectDeclarations(root: SyntaxNode, language: string): SyntaxNode[] {
+  const declTypes = declTypesFor(language);
   const out: SyntaxNode[] = [];
-  // Languages where the per-symbol carrier is a *leading* doc comment.
-  const declTypes = new Set<string>(
-    language === "python"
-      ? ["function_definition", "class_definition"]
-      : language === "go"
-        ? ["function_declaration", "method_declaration", "type_declaration"]
-        : language === "java"
-          ? [
-              "class_declaration",
-              "interface_declaration",
-              "enum_declaration",
-              "method_declaration",
-              "constructor_declaration",
-            ]
-          : [
-              // TS / JS / TSX / JSX
-              "function_declaration",
-              "generator_function_declaration",
-              "class_declaration",
-              "interface_declaration",
-              "method_definition",
-              "lexical_declaration",
-              "variable_declaration",
-              "type_alias_declaration",
-            ],
-  );
   const visit = (n: SyntaxNode): void => {
     if (declTypes.has(n.type)) out.push(n);
     for (const c of n.namedChildren) visit(c);
@@ -265,6 +244,31 @@ function sliceLines(
   return lines.slice(startLine - 1, endLine).join("\n");
 }
 
+/**
+ * Find the source-file line number of an invariant-array item whose
+ * YAML mapping key is `trapKey`. Returns null when no match.
+ *
+ * The body starts immediately after `@sivru` (one line below the
+ * fence start), so body line index `i` corresponds to source line
+ * `fenceStartLine + 1 + i`.
+ */
+function findTrapLineInYaml(
+  yamlText: string,
+  fenceStartLine: number,
+  trapKey: string,
+): number | null {
+  const bodyLines = yamlText.split("\n");
+  // Escape regex metacharacters in the key.
+  const escaped = trapKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pat = new RegExp(`^\\s*-\\s+${escaped}:\\s+`);
+  for (let i = 0; i < bodyLines.length; i++) {
+    if (pat.test(bodyLines[i]!)) {
+      return fenceStartLine + 1 + i;
+    }
+  }
+  return null;
+}
+
 /** YAML-parse a fence body to a SivruBlock. Diagnostics on failure. */
 function parseFenceBody(
   yamlText: string,
@@ -278,17 +282,9 @@ function parseFenceBody(
       schema: yaml.JSON_SCHEMA,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     return {
       block: null,
-      diagnostics: [
-        {
-          code: "SIVRU-E216",
-          severity: "error",
-          message: `yaml-malformed: ${msg}`,
-          location: range,
-        },
-      ],
+      diagnostics: [wrapYamlError(err, yamlText, range)],
     };
   }
   if (parsed === null || parsed === undefined) {
@@ -325,10 +321,71 @@ function parseFenceBody(
       (x): x is string => typeof x === "string",
     );
   }
+  const driftDiagnostics: BlockDiagnostic[] = [];
   if (Array.isArray(obj["invariants"])) {
-    block.invariants = (obj["invariants"] as unknown[]).filter(
-      (x): x is string => typeof x === "string",
-    );
+    const items: (string | SivruInvariant)[] = [];
+    for (const item of obj["invariants"] as unknown[]) {
+      if (typeof item === "string") {
+        items.push(item);
+      } else if (
+        typeof item === "object" &&
+        item !== null &&
+        !Array.isArray(item) &&
+        typeof (item as Record<string, unknown>)["rule"] === "string"
+      ) {
+        const rec = item as Record<string, unknown>;
+        const enforcedBy = rec["enforced-by"];
+        items.push({
+          rule: rec["rule"] as string,
+          "enforced-by":
+            typeof enforcedBy === "string"
+              ? enforcedBy
+              : enforcedBy === null
+                ? null
+                : null,
+        });
+      } else if (
+        typeof item === "object" &&
+        item !== null &&
+        !Array.isArray(item)
+      ) {
+        // DESIGN-0019 §9a silent-drift detection: a non-string item
+        // without a `rule` field is almost always the colon-in-prose
+        // trap (`- tx: REQUIRES_NEW per-row failure`) parsing as a
+        // map. Surface as SIVRU-E237 and drop the drifted item from
+        // the invariants list (the autofix will rewrite the line).
+        //
+        // Narrow `location` to the specific drifted line (not the
+        // whole block range) so the diagnostic points the author at
+        // the exact source line that needs quoting.
+        const rec = item as Record<string, unknown>;
+        const keys = Object.keys(rec);
+        const trapKey = keys[0] ?? "<key>";
+        const trapValue = typeof rec[trapKey] === "string"
+          ? (rec[trapKey] as string)
+          : JSON.stringify(rec[trapKey]);
+        const trapLine = findTrapLineInYaml(yamlText, range.startLine, trapKey);
+        const trapRange: SourceRange =
+          trapLine !== null
+            ? {
+                filePath: range.filePath,
+                startLine: trapLine,
+                endLine: trapLine,
+              }
+            : range;
+        driftDiagnostics.push({
+          code: "SIVRU-E237",
+          severity: "error",
+          message:
+            `yaml-colon-in-prose: invariant parsed as YAML mapping ` +
+            `\`${trapKey}: ${trapValue}\` instead of a prose string. ` +
+            `Wrap the value in double quotes, or run ` +
+            `\`sivru block validate --autofix\` to apply the rewrite.`,
+          location: trapRange,
+        });
+      }
+    }
+    block.invariants = items;
   }
   if (Array.isArray(obj["decisions"])) {
     block.decisions = (obj["decisions"] as unknown[])
@@ -353,7 +410,7 @@ function parseFenceBody(
   if (typeof obj["role"] !== "string" && typeof obj["responsibility"] !== "string") {
     // Block returned anyway so validate can produce the precise diagnostic.
   }
-  return { block, diagnostics: [] };
+  return { block, diagnostics: driftDiagnostics };
 }
 
 /**
@@ -532,8 +589,10 @@ function extractCommentCarriedBlocks(
  * responsibility: emit one ExtractedBlock per @sivru fence in the file; never silently drop, even on malformed YAML
  * collaborators: [validateBlock, blockToJSON, pythonModuleLocator, typescriptModuleLocator]
  * invariants:
- *   - invalid blocks appear with block:null and diagnostics:[...] populated — never silently dropped (project memory rule)
- *   - YAML internal indentation is preserved by stripping the @sivru line's exact prefix from each body line
+ *   - rule: "invalid blocks appear with block:null and diagnostics:[...] populated — never silently dropped (project memory rule)"
+ *     enforced-by: null
+ *   - rule: "YAML internal indentation is preserved by stripping the @sivru line's exact prefix from each body line"
+ *     enforced-by: null
  * decisions:
  *   - chose: prefix-anchored line scan rather than greedy whitespace strip
  *     because: greedy strip collapses YAML's meaningful indentation; nested mappings (decisions[].chose etc.) become invalid
@@ -619,6 +678,14 @@ export async function extractBlocks(
           for (const fence of fences) {
             out.push(buildExtractedBlock(filePath, "module", fence));
           }
+        }
+      }
+    } else if (language === "java") {
+      const located = javaModuleLocator(filePath, root, lines);
+      if (located !== null && located.carrier !== undefined) {
+        const fences = extractFences(located.carrier.text, located.carrier.startLine);
+        for (const fence of fences) {
+          out.push(buildExtractedBlock(filePath, "module", fence));
         }
       }
     }

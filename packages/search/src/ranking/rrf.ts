@@ -19,8 +19,10 @@ export type RrfOptions = {
  * responsibility: merge BM25 and semantic ranked lists into a single hybrid ranking
  * collaborators: [cosineTopK, createBm25Index, buildIndex]
  * invariants:
- *   - input scores are intentionally ignored — only the rank position contributes
- *   - tie-break is by lower id first so results are stable across runs
+ *   - rule: "input scores are intentionally ignored — only the rank position contributes"
+ *     enforced-by: null
+ *   - rule: "tie-break is by lower id first so results are stable across runs"
+ *     enforced-by: null
  * decisions:
  *   - chose: RRF with k=60 from Cormack et al.
  *     because: parameter-free fusion that beats most learned alternatives at small evaluation budgets

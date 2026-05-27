@@ -16,14 +16,49 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { SivruBlockConfig } from "./types.js";
+import type { SivruBlockConfig, SivruBlockMaxLines } from "./types.js";
+
+/**
+ * Default per-language line caps (DESIGN-0019 §8). Java is bumped to 40
+ * because JavaDoc carries multi-line invariants about tenant isolation /
+ * RBAC that routinely need 3–4 lines each. Other languages stay at the
+ * v0.6 default (25).
+ */
+export const DEFAULT_MAX_LINES: SivruBlockMaxLines = {
+  default: 25,
+  java: 40,
+  python: 30,
+  rust: 30,
+};
 
 export const DEFAULT_BLOCK_CONFIG: SivruBlockConfig = {
   requiredFields: ["role", "responsibility"],
   optionalFields: ["collaborators", "invariants", "decisions", "maturity"],
-  maxLines: 25,
+  maxLines: DEFAULT_MAX_LINES,
   maturityValues: ["stable", "experimental", "deprecated", "wip"],
 };
+
+/**
+ * Resolve the effective max-lines threshold for a given language. The
+ * config's `maxLines` accepts either a bare number (v0.6 shorthand for
+ * `{ default: <n> }`) or the per-language object form (DESIGN-0019 §8).
+ *
+ * @param maxLines the config value, possibly number or object form
+ * @param language the chunker language id (`typescript`, `python`,
+ *   `java`, etc.) or undefined for a non-detected file
+ */
+export function resolveMaxLines(
+  maxLines: SivruBlockConfig["maxLines"],
+  language: string | undefined,
+): number {
+  if (typeof maxLines === "number") return maxLines;
+  if (language !== undefined) {
+    const lang = language as keyof SivruBlockMaxLines;
+    const perLang = maxLines[lang];
+    if (typeof perLang === "number") return perLang;
+  }
+  return maxLines.default;
+}
 
 /** Hardcoded ceiling for SIVRU-E212 block-runaway. NOT configurable. */
 export const RUNAWAY_LINES = 100;
@@ -44,6 +79,38 @@ function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function isPositiveNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
+}
+
+function coerceMaxLines(
+  v: unknown,
+): SivruBlockConfig["maxLines"] | undefined {
+  if (isPositiveNumber(v)) return v;
+  if (!isPlainObject(v)) return undefined;
+  const dflt = v["default"];
+  if (!isPositiveNumber(dflt)) return undefined;
+  const out: SivruBlockMaxLines = { default: dflt };
+  for (const k of [
+    "java",
+    "typescript",
+    "javascript",
+    "tsx",
+    "jsx",
+    "python",
+    "go",
+    "rust",
+  ] as const) {
+    const val = v[k];
+    if (isPositiveNumber(val)) out[k] = val;
+  }
+  return out;
+}
+
 function mergeConfig(
   base: SivruBlockConfig,
   patch: Record<string, unknown> | undefined,
@@ -52,13 +119,62 @@ function mergeConfig(
   const out: SivruBlockConfig = { ...base };
   if (isStringArray(patch["requiredFields"])) out.requiredFields = patch["requiredFields"];
   if (isStringArray(patch["optionalFields"])) out.optionalFields = patch["optionalFields"];
-  if (typeof patch["maxLines"] === "number" && Number.isFinite(patch["maxLines"]) && patch["maxLines"] > 0) {
-    out.maxLines = patch["maxLines"];
-  }
+  const maxLines = coerceMaxLines(patch["maxLines"]);
+  if (maxLines !== undefined) out.maxLines = maxLines;
   if (isStringArray(patch["maturityValues"])) out.maturityValues = patch["maturityValues"];
-  if (typeof patch["drift"] === "object" && patch["drift"] !== null) {
-    out.drift = patch["drift"] as Record<string, unknown>;
+
+  // DESIGN-0019 slot 1: enforcement / diff blocks.
+  if (isPlainObject(patch["enforcement"])) {
+    const requireFlag = patch["enforcement"]["requireForObjectInvariants"];
+    out.enforcement = {};
+    if (typeof requireFlag === "boolean") {
+      out.enforcement.requireForObjectInvariants = requireFlag;
+    }
   }
+  if (isPlainObject(patch["diff"])) {
+    const since = patch["diff"]["defaultSince"];
+    out.diff = {};
+    if (typeof since === "string" && since.length > 0) {
+      out.diff.defaultSince = since;
+    }
+  }
+
+  // DESIGN-0019 slot 2: graph config.
+  if (isPlainObject(patch["graph"])) {
+    const allowed = patch["graph"]["allowedAsymmetric"];
+    const ordering = patch["graph"]["orderingChecks"];
+    out.graph = {};
+    if (isStringArray(allowed)) out.graph.allowedAsymmetric = allowed;
+    if (typeof ordering === "boolean") out.graph.orderingChecks = ordering;
+  }
+
+  // DESIGN-0019 slot 3: bridge overrides.
+  if (isPlainObject(patch["bridges"])) {
+    const bridges: SivruBlockConfig["bridges"] = {};
+    const java = patch["bridges"]["java"];
+    if (isPlainObject(java)) {
+      const m: Record<string, string> = {};
+      for (const [k, v] of Object.entries(java)) {
+        if (typeof v === "string") m[k] = v;
+      }
+      bridges.java = m;
+    }
+    const py = patch["bridges"]["python"];
+    if (isPlainObject(py)) {
+      const m: Record<string, string> = {};
+      for (const [k, v] of Object.entries(py)) {
+        if (typeof v === "string") m[k] = v;
+      }
+      bridges.python = m;
+    }
+    const disable = patch["bridges"]["disable"];
+    if (isStringArray(disable)) bridges.disable = disable;
+    out.bridges = bridges;
+  }
+
+  if (isPlainObject(patch["drift"])) out.drift = patch["drift"];
+  if (isPlainObject(patch["decisions"])) out.decisions = patch["decisions"];
+  if (isPlainObject(patch["generated"])) out.generated = patch["generated"];
   return out;
 }
 

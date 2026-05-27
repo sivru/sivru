@@ -57,6 +57,24 @@ export type ImportEdge = {
   identifiers: string[];
 };
 
+/**
+ * Per-file `@sivru` block cache entry. Populated at index-build time so
+ * later staleness / graph checks don't have to re-parse the file
+ * (DESIGN-0019 §2 / D3). `contentHash` is a sha256 prefix of the
+ * canonical-JSON-stringified parsed block — stable across formatting-
+ * only changes (which preserve the parsed shape) but sensitive to any
+ * change that alters the YAML body.
+ */
+export type BlockCacheEntry = {
+  /** 1-indexed source range of the @sivru/@end fence in the file. */
+  startLine: number;
+  endLine: number;
+  /** Short sha256 of the canonical block JSON, or null on parse failure. */
+  contentHash: string | null;
+  /** Symbol name the block attaches to (`(module)` for module-level). */
+  symbolName: string;
+};
+
 export type SymbolIndexEntry = {
   /** Repo-relative POSIX-style path. */
   filePath: string;
@@ -68,6 +86,15 @@ export type SymbolIndexEntry = {
   commitCount: number;
   /** mtime in millis since epoch at index time. */
   mtimeMs: number;
+  /**
+   * DESIGN-0019 slot 2 (D3): per-file `@sivru` block cache. Optional —
+   * `buildSymbolIndex` does NOT extract blocks by default (keeps the
+   * cost off the explain hot path), so existing entries created before
+   * the slot-2 patch and entries from callers that don't opt in have
+   * this field absent. Consumers should treat `undefined` and `[]`
+   * identically.
+   */
+  blocks?: BlockCacheEntry[];
 };
 
 export type SymbolIndex = {

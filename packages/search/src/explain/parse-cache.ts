@@ -27,8 +27,10 @@ export interface ParseCache {
  * responsibility: avoid re-parsing the same file twice within one explain --diff invocation
  * collaborators: [assembleArtifact, buildSymbolIndex]
  * invariants:
- *   - keyed by (absPath, mtimeMs); a concurrent edit invalidates cleanly because the mtime changes
- *   - process-scoped; nothing is persisted to disk
+ *   - rule: "keyed by (absPath, mtimeMs); a concurrent edit invalidates cleanly because the mtime changes"
+ *     enforced-by: null
+ *   - rule: "process-scoped; nothing is persisted to disk"
+ *     enforced-by: null
  * decisions:
  *   - chose: bounded in-memory LRU rather than an on-disk cache
  *     because: the cache is only useful within one invocation; persistence buys nothing and adds invalidation surface

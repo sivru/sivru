@@ -343,8 +343,10 @@ async function chunkFiles(
  * responsibility: wire walker + chunker + tokenizer + BM25 + (optional) embeddings + (optional) cache into one SivruIndex
  * collaborators: [walk, chunkFile, tokenize, createBm25Index, cosineTopK, createIndexCache, reciprocalRankFusion]
  * invariants:
- *   - cold and warm paths return the same SivruIndex shape
- *   - cache hits never serve a different embedderId than was requested; the cache key includes embedderId
+ *   - rule: "cold and warm paths return the same SivruIndex shape"
+ *     enforced-by: null
+ *   - rule: "cache hits never serve a different embedderId than was requested; the cache key includes embedderId"
+ *     enforced-by: null
  * decisions:
  *   - chose: one orchestrator function with optional embedding rather than two parallel APIs
  *     because: callers should not branch on lexical-vs-hybrid; mode lives in the options object
