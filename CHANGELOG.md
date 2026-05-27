@@ -7,6 +7,138 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-27
+
+**Block reliability — slots 1 through 4.** Turns `@sivru` blocks from
+prose into something the tool can actually verify. Invariants now
+carry an `enforced-by` reference; broken blocks surface as
+diagnostics instead of silent drift; the chunker accepts Java
+records, enums, sealed types, and `package-info.java` as block
+hosts. One release, every slot from
+[DESIGN-0019](docs/design/0019-block-reliability.md) except Rust
+(deferred — adds a tree-sitter grammar dependency that needs its
+own discussion).
+
+### Added
+
+- **`@sivru` invariant object form.** Invariants accept either the
+  legacy bare-string shape or `{ rule, enforced-by }`. The new
+  form names a test that proves the invariant — symbol form
+  (`Class.method`) or file-anchored form (`path::test name`).
+  Schema stays at `1`; bare-string form is grandfathered.
+- **`sivru block check-enforcement [path]`** — walks every
+  `enforced-by` reference and emits SIVRU-E230 (missing test),
+  SIVRU-E231 (test exists but is skipped), or SIVRU-E232
+  (`enforced-by: null` declared but not yet written, default
+  warning). Skip detection covers vitest/jest (`it.skip`, `xit`,
+  `test.skip`, `describe.skip`), JUnit (`@Disabled`/`@Ignore`),
+  pytest (`@pytest.mark.skip`), and Go (`t.Skip()` /
+  `t.SkipNow()` scoped to the test body, not textual).
+- **`sivru block validate path1 path2 path3`** — accepts multiple
+  positional paths, walks all of them, exits with the worst
+  diagnostic across the set.
+- **`--changed-since=<ref>`** on `validate`, `check-enforcement`,
+  `check-bridges`, and `graph` — filters the walked file set to
+  `git diff --name-only <ref>...HEAD`. Multi-path + `--changed-since`
+  is rejected at parse time (the git diff is per-repo;
+  cross-repo silently filters wrong).
+- **`sivru block validate --autofix`** — rewrites SIVRU-E237
+  (yaml-colon-in-prose) and SIVRU-E238 (yaml-quote-context) lines
+  in place. Refuses files with uncommitted changes unless
+  `--allow-dirty` is passed; refuses values containing embedded
+  `"` that would need escape rewriting. Idempotent.
+- **SIVRU-E237 yaml-colon-in-prose** — surfaces the silent-drift
+  case where `- tx: REQUIRES_NEW per-row…` parses as a YAML
+  mapping instead of a prose string. Diagnostic location points
+  at the trapped line, not the whole block.
+- **SIVRU-E238 yaml-quote-context** — wraps js-yaml errors when
+  the failing line carries unbalanced apostrophes around an
+  identifier-like token (`'this.commit()'`).
+- **SIVRU-E213 maturity-invalid** — now carries a Levenshtein
+  "did you mean" suggestion (`maturity: beta` →
+  `did you mean experimental?`). Distance cap 3 prevents noise.
+- **`sivru block staleness --since=<ref>`** — SIVRU-E233
+  block-likely-stale. Reports blocks whose body is byte-identical
+  but whose surrounding code changed since `<ref>`. `--strict`
+  exits non-zero; `--json` for tooling. Cache opt-in via the new
+  `BlockCache` shape (HEAD-side parse cost amortised when callers
+  pre-build it).
+- **`sivru block graph --check`** — cross-block consistency:
+  SIVRU-E234 (asymmetric collaborator), SIVRU-E235 (rename-suspect,
+  requires unique back-reference evidence — no fan-in
+  false-positives), SIVRU-E236 (ordering contradiction, opt-in via
+  `.sivru/block.json` `graph.orderingChecks`). `graph --json`
+  emits the raw graph for downstream tooling.
+- **`sivru block init <file>`** — scaffolds a starter `@sivru`
+  block from imports + doc-comment first sentence + role
+  heuristics. `--write` inserts above the declaration (or as a
+  docstring for Python). `--symbol=<name>` targets a specific
+  declaration; `--force` overwrites existing blocks.
+  Responsibility carries an `auto-generated, replace` marker so
+  reviewers catch the auto-pull. Generated via `js-yaml.dump` —
+  no quote-injection risk from doc comments containing `"`.
+- **`sivru block check-bridges`** — SIVRU-E239 bridge-suggestion
+  (warning) and SIVRU-E260 deprecated-maturity-mismatch (error /
+  warning per direction). Java seed catalog (8 markers:
+  `@ApplicationScoped`, `@Singleton`, `@RequestScoped`,
+  `@Transactional`, `@Filter`, `@Audited`, `@SecurityChecked`,
+  `@Retryable`). Python seed catalog (4 decorators). E260 fires
+  for Java, Python, TS/JS/TSX/JSX, and Go.
+- **Java slot-4 carriers** — `record` declarations, `enum`
+  (including nested-in-class), sealed interfaces/classes,
+  `@interface` annotation types, and `package-info.java`
+  (module-level locator) all host their own blocks. TS gains
+  `enum_declaration` and `abstract_class_declaration`. Go gains
+  top-level `var_declaration` and `const_declaration`.
+- **Per-language `maxLines`** — `.sivru/block.json` accepts the
+  object form (`{ default: 25, java: 40, python: 30, ... }`).
+  Single-number form remains valid as v0.6 shorthand. Java's
+  default is bumped to 40 to fit invariant-heavy JavaDoc style.
+- **Code-level extension API** — three new interface types:
+  `EnforcementResolver`, `DecisionChecker`, `BlockGraphRule`.
+  Layer-3 `.sivru/block/*.ts` extension authors can now compile
+  against a stable contract; registry consumers ship in a
+  follow-on.
+
+### Changed
+
+- **`SivruBlockJSON` adds `invariantsV2`** alongside the existing
+  `invariants: string[]`. The string-array form preserves the
+  v0.6 wire contract for downstream consumers (DESIGN-0017
+  explain artifact, MCP, anything reading `block extract --json`).
+  New consumers that want `enforced-by` read `invariantsV2`.
+- **`SivruBlockConfig`** gains `enforcement`, `diff`, `graph`,
+  `bridges`. `decisions` and `generated` are reserved (no v0.8
+  consumer; DESIGN-002X and §11 follow-on).
+- **`SymbolIndexEntry.blocks?: BlockCacheEntry[]`** — per-file
+  block range + content hash cache. Optional so existing
+  consumers and test fixtures stay compatible. Populated by the
+  new `buildBlockCache(filePaths)` helper.
+- **Self-dogfood:** every existing `@sivru` block in
+  `packages/search/` with an invariant was migrated from
+  bare-string to object form with `enforced-by: null` (33
+  invariants across 17 files). `block check-enforcement
+  packages/search/` reports 0 errors, satisfying the
+  slot-1 acceptance gate.
+
+### Fixed
+
+- **Stable content hash for the block cache.** Earlier sketches
+  used `JSON.stringify(block)` directly — insertion-order
+  semantics meant a tiny parser refactor would silently
+  invalidate every cached hash. The new `hashBlockContent`
+  recursively sorts keys before stringifying, preserving array
+  order (which carries authorial intent).
+- **Go skip detection scoped to the function body.** Was a
+  textual `/\bt\.Skip\(/` scan that false-positived on comments
+  and sub-tests; now walks the body for an actual
+  `call_expression` whose callee is `t.Skip` or `t.SkipNow`.
+- **`graph.ts` E235 rename-suspect requires unique evidence.**
+  Earlier draft fired on every fan-in pattern; now demands
+  exactly one back-reference candidate.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
 ## [0.7.0] — 2026-05-25
 
 **Coach loop v1 — skill drift.** Three deterministic, descriptive checks
