@@ -181,30 +181,42 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
 
   const [scale, setScale] = useState(1);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<{ name: string } | null>(null);
+  const dragRef = useRef<{ name: string; moved: boolean } | null>(null);
+  // Set when a drag actually moved the node, so the trailing synthetic click
+  // doesn't toggle selection on a pure reposition.
+  const suppressClickRef = useRef(false);
 
   const toViewBox = (clientX: number, clientY: number): Point => {
     const svg = svgRef.current;
     if (svg === null) return { x: 0, y: 0 };
     const rect = svg.getBoundingClientRect();
-    // Map client coords → viewBox coords, accounting for scale.
-    const vx = ((clientX - rect.left) / rect.width) * VIEW_W;
-    const vy = ((clientY - rect.top) / rect.height) * VIEW_H;
-    return { x: vx / scale, y: vy / scale };
+    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    // preserveAspectRatio="xMidYMid meet": the viewBox is uniformly scaled to
+    // fit and centered (letterboxed). Invert that transform, then undo the
+    // inner <g scale={scale}>. A naive rect-ratio map is only right when the
+    // container is exactly VIEW_W:VIEW_H, which it almost never is.
+    const s = Math.min(rect.width / VIEW_W, rect.height / VIEW_H);
+    const ox = (rect.width - VIEW_W * s) / 2;
+    const oy = (rect.height - VIEW_H * s) / 2;
+    const vbx = (clientX - rect.left - ox) / s;
+    const vby = (clientY - rect.top - oy) / s;
+    return { x: vbx / scale, y: vby / scale };
   };
 
   const onPointerMove = (e: React.PointerEvent): void => {
-    if (dragRef.current === null) return;
+    const d = dragRef.current;
+    if (d === null) return;
+    d.moved = true;
     const p = toViewBox(e.clientX, e.clientY);
-    const name = dragRef.current.name;
     setOverrides((prev) => {
       const next = new Map(prev);
-      next.set(name, { x: clamp(p.x, 28, VIEW_W - 28), y: clamp(p.y, 28, VIEW_H - 28) });
+      next.set(d.name, { x: clamp(p.x, 28, VIEW_W - 28), y: clamp(p.y, 28, VIEW_H - 28) });
       return next;
     });
   };
 
   const endDrag = (): void => {
+    if (dragRef.current?.moved === true) suppressClickRef.current = true;
     dragRef.current = null;
   };
 
@@ -286,9 +298,15 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
               className="cursor-pointer"
               onPointerDown={(e) => {
                 (e.target as Element).setPointerCapture?.(e.pointerId);
-                dragRef.current = { name: n.name };
+                dragRef.current = { name: n.name, moved: false };
               }}
-              onClick={() => onSelect(isSel ? null : n.name)}
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  return; // this "click" was the tail of a drag
+                }
+                onSelect(isSel ? null : n.name);
+              }}
             >
               <circle
                 r={9}

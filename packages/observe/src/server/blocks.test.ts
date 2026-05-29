@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { createObserveApp } from "./app.js";
-import { _internal, resolveFileWithinRoot } from "./blocks.js";
+import { _internal, isWatchNoise, resolveFileWithinRoot } from "./blocks.js";
 
 // A reciprocal pair (serviceA <-> helperB) plus an asymmetric edge
 // (serviceC -> helperB, no back-reference) so the graph emits a
@@ -67,6 +67,12 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
     await writeFile(join(root, "a.ts"), FILE_A);
     await writeFile(join(root, "b.ts"), FILE_B);
     await writeFile(join(root, "c.ts"), FILE_C);
+    // A nested file to exercise the detail route's encoded-slash handling.
+    await mkdir(join(root, "src", "deep"), { recursive: true });
+    await writeFile(
+      join(root, "src", "deep", "d.ts"),
+      FILE_A.replace(/serviceA/g, "serviceD").replace("[helperB]", "[]"),
+    );
   });
 
   afterAll(async () => {
@@ -89,8 +95,9 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
     expect(Array.isArray(body.edges)).toBe(true);
     expect(Array.isArray(body.diagnostics)).toBe(true);
 
+    // serviceD lives in src/deep/ with no collaborators — an orphan node.
     const names = body.nodes.map((n) => n.name).sort();
-    expect(names).toEqual(["helperB", "serviceA", "serviceC"]);
+    expect(names).toEqual(["helperB", "serviceA", "serviceC", "serviceD"]);
 
     // Reciprocal pair A<->B, asymmetric C->B.
     const recip = body.edges.find((e) => e.from === "serviceA" && e.to === "helperB");
@@ -116,6 +123,20 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
     const body = (await res.json()) as { name: string; block: { role: string } | null };
     expect(body.name).toBe("serviceA");
     expect(body.block?.role).toBe("service");
+  });
+
+  it("resolves a NESTED filePath (encoded slash) without double-decoding", async () => {
+    // Regression: Hono already decodes path params, so the handler must NOT
+    // decodeURIComponent again. encodeURIComponent turns "src/deep/d.ts" into a
+    // single %2F-laden segment; Hono hands back the real path.
+    const res = await app.fetch(
+      new Request(
+        `http://127.0.0.1/api/blocks/${encodeURIComponent("src/deep/d.ts")}/serviceD?rootPath=${encodeURIComponent(root)}`,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { name: string };
+    expect(body.name).toBe("serviceD");
   });
 
   it("404s for an unknown symbol", async () => {
@@ -231,6 +252,18 @@ describe("/api/blocks/stream SSE", () => {
 
     expect(seen).toContain("block.updated");
   }, 12_000);
+});
+
+describe("isWatchNoise", () => {
+  it("filters high-churn non-block paths", () => {
+    expect(isWatchNoise("node_modules/x/index.js")).toBe(true);
+    expect(isWatchNoise(".git/HEAD")).toBe(true);
+    expect(isWatchNoise("dist/index.js")).toBe(true);
+    expect(isWatchNoise("packages/a/dist/foo.js")).toBe(true);
+    expect(isWatchNoise("pnpm-lock.yaml")).toBe(true);
+    expect(isWatchNoise("src/UserService.java")).toBe(false);
+    expect(isWatchNoise("src/a.ts")).toBe(false);
+  });
 });
 
 describe("resolveFileWithinRoot", () => {

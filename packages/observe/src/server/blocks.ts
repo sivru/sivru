@@ -272,6 +272,20 @@ export async function buildBlockDetail(
 /** Debounce window for fs.watch → SSE coalescing (DESIGN-0021 §"Live updates"). */
 const SSE_DEBOUNCE_MS = 50;
 
+/** Watcher events we never want to surface as block.updated — pure churn. */
+export function isWatchNoise(rel: string): boolean {
+  return (
+    rel.includes("node_modules") ||
+    rel.includes(".git/") ||
+    rel.includes(".git\\") ||
+    rel.includes("/dist/") ||
+    rel.startsWith("dist/") ||
+    rel.endsWith(".lock") ||
+    rel.endsWith("lock.yaml") ||
+    rel.endsWith("lock.json")
+  );
+}
+
 /**
  * Test seam — routes call through this object so a test can substitute a
  * throwing implementation to exercise the 5xx path (mirrors the
@@ -327,7 +341,9 @@ export function mountBlockRoutes(app: Hono): void {
 
       const onChange = (_event: string, filename: string | null): void => {
         if (filename === null) return;
-        // Only care about source-ish files; .sivru/ config + lockfiles churn.
+        // Skip high-churn paths that never carry a block (node_modules, VCS
+        // internals, build output, lockfiles) so the stream isn't noisy.
+        if (isWatchNoise(filename)) return;
         const existing = pending.get(filename);
         if (existing !== undefined) clearTimeout(existing);
         pending.set(
@@ -378,16 +394,19 @@ export function mountBlockRoutes(app: Hono): void {
 
       // Hold the handler open until the client disconnects.
       await new Promise<void>((resolveHold) => {
+        let closeWatch: ReturnType<typeof setInterval> | null = null;
         const finish = (): void => {
+          if (closeWatch !== null) {
+            clearInterval(closeWatch);
+            closeWatch = null;
+          }
           cleanup();
           resolveHold();
         };
         stream.onAbort(finish);
-        const closeWatch = setInterval(() => {
-          if (stream.closed || stream.aborted) {
-            clearInterval(closeWatch);
-            finish();
-          }
+        // Defensive poll in case the stream closes without an abort event.
+        closeWatch = setInterval(() => {
+          if (stream.closed || stream.aborted) finish();
         }, 1000);
       });
     });
@@ -401,8 +420,11 @@ export function mountBlockRoutes(app: Hono): void {
     if (!root.ok) {
       return c.json({ error: root.error, code: root.code }, root.status);
     }
-    const rawFile = decodeURIComponent(c.req.param("filePath"));
-    const symbol = decodeURIComponent(c.req.param("symbol"));
+    // Hono already percent-decodes path params (an encoded "/" arrives as a
+    // literal "/"), so we do NOT decode again — a second pass would corrupt a
+    // filename or symbol containing a literal "%" (e.g. "a%20b.ts" → "a b.ts").
+    const rawFile = c.req.param("filePath");
+    const symbol = c.req.param("symbol");
     const abs = resolveFileWithinRoot(root.rootPath, rawFile);
     if (abs === null) {
       return c.json({ error: "filePath escapes rootPath", code: "SIVRU-E247" }, 400);

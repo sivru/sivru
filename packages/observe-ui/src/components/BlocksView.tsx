@@ -58,6 +58,15 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
   const [sseLive, setSseLive] = useState<boolean | null>(null);
   const filterRef = useRef<HTMLInputElement | null>(null);
   const inflight = useRef<symbol>(Symbol("idle"));
+  // Guards against setState after unmount (the inflight Symbol only guards
+  // against superseding loads, not teardown while a fetch is in flight).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const load = useCallback((p: string) => {
     const key = Symbol("load");
@@ -65,11 +74,11 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
     setState({ status: "loading" });
     fetchBlocks(p)
       .then((data) => {
-        if (inflight.current !== key) return;
+        if (!mounted.current || inflight.current !== key) return;
         setState({ status: "ready", data });
       })
       .catch((err: unknown) => {
-        if (inflight.current !== key) return;
+        if (!mounted.current || inflight.current !== key) return;
         setState({ status: "error", message: err instanceof Error ? err.message : String(err) });
       });
   }, []);
@@ -140,8 +149,13 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
         const order = degreeSorted(data);
         if (order.length === 0) return;
         const cur = selected === null ? -1 : order.indexOf(selected);
-        const delta = e.key === "j" ? 1 : -1;
-        const next = cur === -1 ? 0 : Math.min(order.length - 1, Math.max(0, cur + delta));
+        let next: number;
+        if (cur === -1) {
+          // No (or stale) selection: J starts at the top, K at the bottom.
+          next = e.key === "j" ? 0 : order.length - 1;
+        } else {
+          next = Math.min(order.length - 1, Math.max(0, cur + (e.key === "j" ? 1 : -1)));
+        }
         setSelected(order[next] ?? null);
       }
     };
