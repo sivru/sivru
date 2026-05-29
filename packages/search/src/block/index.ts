@@ -85,6 +85,8 @@ export { hashBlockContent, MODULE_SYMBOL_NAME } from "./hash.js";
 export { initBlock } from "./init.js";
 export type { InitOptions, InitResult } from "./init.js";
 
+export { serializeBlock } from "./serialize.js";
+
 export { checkBridges } from "./check-bridges.js";
 
 export {
