@@ -7,6 +7,7 @@
 //                                  the diagnostic-suppression read path is a
 //                                  single cheap file scan (no filtering).
 
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { appendJsonlLine, readJsonlLines } from "../jsonl.js";
@@ -96,4 +97,50 @@ export async function readAcknowledgments(rootPath: string): Promise<FeedbackRec
     normalizeRecord,
   );
   return records;
+}
+
+/**
+ * Backward-compat (DESIGN-0021 §"Backward compatibility"): if an old
+ * `.sivru/block.json` carries a leftover `acknowledged[]` array, copy each
+ * entry into `.sivru/acknowledgments.jsonl` (where acknowledgments now live).
+ * One-time, best-effort, additive — never edits block.json. Returns the number
+ * migrated (0 when there's nothing to do).
+ */
+export async function migrateLegacyAcknowledgments(rootPath: string, timestamp: string): Promise<number> {
+  let raw: string;
+  try {
+    raw = await readFile(join(rootPath, ".sivru", "block.json"), "utf8");
+  } catch {
+    return 0;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return 0;
+  }
+  const legacy = (parsed as { acknowledged?: unknown })?.acknowledged;
+  if (!Array.isArray(legacy) || legacy.length === 0) return 0;
+
+  let migrated = 0;
+  for (const entry of legacy) {
+    const o = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
+    const record: FeedbackRecord = {
+      schema: 1,
+      timestamp,
+      kind: "acknowledge",
+      diagnostic: {
+        code: String(o["code"] ?? ""),
+        filePath: String(o["filePath"] ?? ""),
+        symbolName: String(o["symbolName"] ?? ""),
+        contentHash: String(o["contentHash"] ?? ""),
+      },
+      label: "intentional",
+      note: "migrated from block.json acknowledged[]",
+      actor: "cli",
+    };
+    await appendAcknowledgment(rootPath, record);
+    migrated++;
+  }
+  return migrated;
 }

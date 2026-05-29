@@ -20,8 +20,10 @@ import {
   aggregateReplay,
   createObserveServer,
   listSessions,
+  migrateLegacyAcknowledgments,
   readSession,
   replaySession,
+  sweepAuditRetention,
 } from "@sivru/observe";
 import type { ReplayedEvent, ReplayResult, AggregateReport } from "@sivru/observe";
 
@@ -121,6 +123,20 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
 
   // DESIGN-0021 slot 2: make the trust boundary loud on boot.
   if (parsed.writable) {
+    // Boot housekeeping on the cwd repo (the common single-repo case): sweep
+    // stale audit files + migrate any legacy block.json acknowledged[].
+    const cwd = process.cwd();
+    void sweepAuditRetention(cwd).catch(() => {});
+    void migrateLegacyAcknowledgments(cwd, new Date().toISOString())
+      .then((n) => {
+        if (n > 0) {
+          process.stderr.write(
+            `sivru observe — migrated ${n} legacy acknowledgment(s) from .sivru/block.json ` +
+              "to .sivru/acknowledgments.jsonl; you can remove the now-empty `acknowledged` field.\n",
+          );
+        }
+      })
+      .catch(() => {});
     process.stderr.write(
       "sivru observe — WRITABLE: the UI + MCP can modify .sivru/ and source files. " +
         "Writes are logged to .sivru/audit/ (retention: 7 days).\n",
@@ -490,6 +506,15 @@ async function runObserveInit(argv: readonly string[]): Promise<number> {
     const result = await writeSubagentFile(cwd, dryRun);
     lines.push(...result);
   }
+
+  // DESIGN-0021 slot 2: document the .sivru/ git-tracking policy so teams decide
+  // per-repo. Recommended: commit acknowledgments (team-shared decisions),
+  // ignore feedback (private label data) unless you want shared tuning.
+  lines.push("");
+  lines.push("  block authoring (sivru observe --writable):");
+  lines.push("    .sivru/acknowledgments.jsonl — recommend COMMIT (team-shared diagnostic decisions)");
+  lines.push("    .sivru/feedback.jsonl        — recommend IGNORE by default (private tuning labels)");
+  lines.push("    .sivru/audit/                — recommend IGNORE (local write log, 7-day retention)");
 
   lines.push("");
   if (dryRun) {

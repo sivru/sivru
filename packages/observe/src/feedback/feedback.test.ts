@@ -8,6 +8,7 @@ import {
   appendAcknowledgment,
   appendFeedback,
   feedbackPath,
+  migrateLegacyAcknowledgments,
   readAcknowledgments,
   readFeedback,
   type FeedbackRecord,
@@ -72,6 +73,26 @@ describe("feedback JSONL store", () => {
     // feedback.jsonl stays empty — separate files.
     expect(await readFeedback(root)).toEqual([]);
     expect(acknowledgmentsPath(root).endsWith("acknowledgments.jsonl")).toBe(true);
+  });
+
+  it("migrates legacy block.json acknowledged[] into acknowledgments.jsonl", async () => {
+    await mkdir(join(root, ".sivru"), { recursive: true });
+    await writeFile(
+      join(root, ".sivru", "block.json"),
+      JSON.stringify({
+        acknowledged: [
+          { code: "SIVRU-E234", filePath: "src/a.ts", symbolName: "A" },
+          { code: "SIVRU-E234", filePath: "src/b.ts", symbolName: "B" },
+        ],
+      }),
+    );
+    const n = await migrateLegacyAcknowledgments(root, "2026-05-29T00:00:00Z");
+    expect(n).toBe(2);
+    const acks = await readAcknowledgments(root);
+    expect(acks).toHaveLength(2);
+    expect(acks[0]?.kind).toBe("acknowledge");
+    // No legacy field → no-op.
+    expect(await migrateLegacyAcknowledgments(`${root}/nope`, "2026-05-29T00:00:00Z")).toBe(0);
   });
 
   it("concurrent appends do not lose or garble records", async () => {

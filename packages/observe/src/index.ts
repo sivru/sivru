@@ -41,6 +41,7 @@ export type { HandlerContext, FeedbackInput } from "./handlers/block/index.js";
 export type { HandlerResult, HandlerErrorCode } from "./handlers/block/result.js";
 export type { FeedbackRecord, FeedbackKind, FeedbackActor, DiagnosticRef } from "./feedback/index.js";
 export { sweepAuditRetention } from "./audit/index.js";
+export { migrateLegacyAcknowledgments } from "./feedback/index.js";
 
 export { replaySession, aggregateReplay } from "./replay/index.js";
 export type {

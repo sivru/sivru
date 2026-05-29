@@ -7,6 +7,49 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+**Authored-context UI — slot 2 (the write surface).** `sivru observe
+--writable` turns the read-only Blocks tab into a full lifecycle surface:
+fix a YAML trap, acknowledge an intentional finding, mark a false
+positive, or edit a block through a form — from the UI or, symmetrically,
+from an agent via four new MCP tools. The whole BuildWright triage loop
+(12 findings → 4 real) now runs without dropping to the CLI. Slot 2 of
+[DESIGN-0021](docs/design/0021-authored-context-ui.md).
+
+### Added
+
+- **`sivru observe --writable`** (default off; loopback-bind only — it
+  errors if combined with a non-loopback `--host`). Boots with a loud
+  WRITABLE banner; `/api/health` reports `writable`. Read-only otherwise,
+  with every write affordance hidden behind a banner.
+- **Mutation routes** — `POST /api/blocks/autofix | /edit | /acknowledge`
+  and `POST /api/feedback` (405 when not writable), plus `GET
+  /api/feedback` (always readable). Guarded by `hono/csrf` + a
+  localhost-Origin check; every `filePath` is normalized and rejects
+  traversal; edits use a detect-and-409 mtime check (last-write-wins, no
+  file locks) and an atomic temp+rename write.
+- **Block editor** — a form (not a raw textarea) over a block's YAML, with
+  collapsible groups, a dirty-state pill, Save/Discard + `Cmd/Ctrl+S`, and
+  a 409 "file changed — reload" flow. Rewrites only the bytes inside the
+  `@sivru … @end` fence, preserving comment framing (`/** */`, `//`, `#`).
+- **Four agent MCP tools** — `mcp__sivru__block_autofix`,
+  `block_acknowledge`, `feedback_append` (writable-gated via `sivru mcp
+  --writable`), and `feedback_read` (ungated). They call the exact same
+  shared handlers the HTTP routes use, and return a structured error
+  envelope (`SIVRU-WRITABLE-DISABLED` / `-FILE-CHANGED` / `-PATH-OUTSIDE-
+  ROOT` / …) with a `retryable` flag.
+- **`.sivru/feedback.jsonl` + `.sivru/acknowledgments.jsonl`** (append-only,
+  git-trackable, malformed-line-tolerant) and a per-day
+  `.sivru/audit/YYYY-MM-DD.jsonl` write log (7-day retention sweep). A
+  one-time migration lifts any legacy `block.json` `acknowledged[]` into
+  the new file. `sivru observe init` documents the recommended git policy.
+- **`/api/metrics`** (Prometheus text) and **`pnpm bench feedback`**
+  (per-diagnostic precision against the repo's labeled set —
+  repo-local tuning data, not a generalizable benchmark).
+- **`serializeBlock`** in `@sivru/search` (the inverse of extraction;
+  shared by the scaffolder and the editor).
+
+---
+
 **Authored-context UI — slot 1 (read-only Blocks tab).** Promotes
 `@sivru` blocks from a CLI-only surface to a first-class lifecycle view
 in observe-ui. The block graph, its diagnostics, and the authored
