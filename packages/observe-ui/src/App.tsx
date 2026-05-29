@@ -542,7 +542,10 @@ export function App(): JSX.Element {
           onOpenBlocks={() => setView("blocks")}
         />
       ) : view === "blocks" ? (
-        <BlocksView path={resolveCheckupPath(selectedProject, sessionsState)} />
+        <BlocksView
+          path={resolveCheckupPath(selectedProject, sessionsState)}
+          writable={health?.writable === true}
+        />
       ) : view === "costs" ? (
         <main className="min-h-0 flex-1">
           <CostsView

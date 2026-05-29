@@ -11,6 +11,15 @@ import { useMemo, useState } from "react";
 import type { BlockDiagnostic } from "../api";
 import { severityDotClass, severityRank } from "../severity";
 
+/** Diagnostic codes that have an autofixer today (DESIGN-0019 E237/E238). */
+export function hasAutofixer(code: string): boolean {
+  const m = /E(\d+)/.exec(code);
+  const n = m !== null ? Number.parseInt(m[1]!, 10) : 0;
+  return n === 237 || n === 238;
+}
+
+export type TriageAction = "fix" | "acknowledge" | "mark-fp";
+
 export type BlockTriageInboxProps = {
   diagnostics: BlockDiagnostic[];
   /** Currently-selected node name (for highlighting the matching rows). */
@@ -20,6 +29,10 @@ export type BlockTriageInboxProps = {
   onSelectNode: (name: string | null) => void;
   /** Filter text from the toolbar (matches code / file / message). */
   filter: string;
+  /** Slot 2: when true, render Fix / Acknowledge / Mark-FP write buttons. */
+  writable?: boolean;
+  /** Slot 2: invoked when a write button is clicked. */
+  onAction?: (action: TriageAction, d: BlockDiagnostic) => void;
 };
 
 export type DiagnosticGroup = { code: string; severity: string; diagnostics: BlockDiagnostic[] };
@@ -95,6 +108,8 @@ export function BlockTriageInbox({
   nodeNameAt,
   onSelectNode,
   filter,
+  writable = false,
+  onAction,
 }: BlockTriageInboxProps): JSX.Element {
   const q = filter.trim().toLowerCase();
   const filtered = useMemo(
@@ -134,6 +149,8 @@ export function BlockTriageInbox({
               selectedNode={selectedNode}
               nodeNameAt={nodeNameAt}
               onSelectNode={onSelectNode}
+              writable={writable}
+              {...(onAction !== undefined ? { onAction } : {})}
             />
           ))}
         </div>
@@ -147,11 +164,15 @@ function DiagnosticRow({
   selectedNode,
   nodeNameAt,
   onSelectNode,
+  writable,
+  onAction,
 }: {
   d: BlockDiagnostic;
   selectedNode: string | null;
   nodeNameAt: (filePath: string, line: number) => string | null;
   onSelectNode: (name: string | null) => void;
+  writable: boolean;
+  onAction?: (action: TriageAction, d: BlockDiagnostic) => void;
 }): JSX.Element {
   const [copied, setCopied] = useState(false);
   const loc = d.location;
@@ -217,7 +238,46 @@ function DiagnosticRow({
         >
           {copied ? "Copied" : "Copy CLI"}
         </button>
+        {writable && onAction !== undefined && (
+          <>
+            {hasAutofixer(d.code) && (
+              <ActionButton label="Fix" onClick={() => onAction("fix", d)} accent />
+            )}
+            <ActionButton label="Acknowledge" onClick={() => onAction("acknowledge", d)} />
+            {d.severity === "warning" && (
+              <ActionButton label="Mark FP" onClick={() => onAction("mark-fp", d)} />
+            )}
+          </>
+        )}
       </span>
     </div>
+  );
+}
+
+function ActionButton({
+  label,
+  onClick,
+  accent = false,
+}: {
+  label: string;
+  onClick: () => void;
+  accent?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={
+        "rounded-sivru border px-1.5 py-0.5 text-[11px] " +
+        (accent
+          ? "border-sivru-amber/40 bg-sivru-amber/10 text-sivru-amber hover:bg-sivru-amber/20"
+          : "border-sivru-border text-sivru-mute hover:text-sivru-text")
+      }
+    >
+      {label}
+    </button>
   );
 }

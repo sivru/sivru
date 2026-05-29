@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { cliForDiagnostic, groupDiagnostics } from "./BlockTriageInbox";
+import { cliForDiagnostic, groupDiagnostics, hasAutofixer } from "./BlockTriageInbox";
 import type { BlockDiagnostic } from "../api";
 
 function d(code: string, severity: "error" | "warning", file = "src/a.ts"): BlockDiagnostic {
@@ -50,5 +50,14 @@ describe("cliForDiagnostic", () => {
 
   it("omits the file arg when there is no location", () => {
     expect(cliForDiagnostic("SIVRU-E234", "")).toBe("sivru block graph --check");
+  });
+});
+
+describe("hasAutofixer", () => {
+  it("is true only for the YAML-trap codes E237/E238", () => {
+    expect(hasAutofixer("SIVRU-E237")).toBe(true);
+    expect(hasAutofixer("SIVRU-E238")).toBe(true);
+    expect(hasAutofixer("SIVRU-E234")).toBe(false);
+    expect(hasAutofixer("SIVRU-E220")).toBe(false);
   });
 });

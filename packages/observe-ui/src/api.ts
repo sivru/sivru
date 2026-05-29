@@ -17,7 +17,7 @@ import type {
 
 export type { BlockDiagnostic, GraphEdge, SivruBlockJSON, SourceRange };
 
-export type HealthResponse = { ok: true; version: string };
+export type HealthResponse = { ok: true; version: string; writable?: boolean };
 export type SessionsResponse = { sessions: Session[] };
 export type EventsResponse = { sessionId: string; events: SivruEvent[] };
 
@@ -233,6 +233,8 @@ export type BlockNodeDetail = {
   collaborators: string[];
   block: SivruBlockJSON | null;
   diagnostics: BlockDiagnostic[];
+  /** Source file mtime (detail route only) — the editor's 409 save baseline. */
+  mtimeMs?: number;
 };
 
 export type BlocksResponse = {
@@ -257,6 +259,65 @@ export function fetchBlockDetail(
   return getJson<BlockNodeDetail>(
     `/api/blocks/${encodeURIComponent(filePath)}/${encodeURIComponent(symbol)}?rootPath=${encodeURIComponent(rootPath)}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Slot-2 write helpers. The browser sets the Origin header automatically, which
+// the server's localhost-Origin guard + hono/csrf check. Each returns the
+// shared envelope (mirrors @sivru/observe's HandlerResult).
+// ---------------------------------------------------------------------------
+
+export type BlockMutationResult =
+  | { ok: true; data: unknown }
+  | { ok: false; code: string; message: string; retryable: boolean; data?: unknown };
+
+export type FeedbackKind = "acknowledge" | "false-positive" | "suggest";
+export type DiagnosticRefInput = { code: string; filePath: string; symbolName: string };
+
+async function postJson(url: string, body: unknown): Promise<BlockMutationResult> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  try {
+    return (await res.json()) as BlockMutationResult;
+  } catch {
+    return { ok: false, code: "SIVRU-PARSE", message: `bad response (${res.status})`, retryable: false };
+  }
+}
+
+export function postAutofix(rootPath: string, filePath: string, diagnosticCode?: string): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/autofix", { rootPath, filePath, diagnosticCode });
+}
+
+export function postBlockEdit(
+  rootPath: string,
+  filePath: string,
+  symbol: string,
+  // Server-shaped SivruBlock (hyphenated YAML keys); the editor builds it.
+  block: unknown,
+  expectedMtimeMs?: number,
+): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/edit", { rootPath, filePath, symbol, block, expectedMtimeMs });
+}
+
+export function postAcknowledge(
+  rootPath: string,
+  diagnostic: DiagnosticRefInput,
+  note?: string,
+): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/acknowledge", { rootPath, diagnostic, note });
+}
+
+export function postFeedback(
+  rootPath: string,
+  kind: FeedbackKind,
+  diagnostic: DiagnosticRefInput,
+  label: string,
+  note?: string,
+): Promise<BlockMutationResult> {
+  return postJson("/api/feedback", { rootPath, kind, diagnostic, label, note });
 }
 
 export type BlockUpdatedEvent = { filePath: string; ts: string };

@@ -8,15 +8,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchBlocks, subscribeToBlocks } from "../api";
-import type { BlockNodeDetail, BlocksResponse } from "../api";
+import {
+  fetchBlockDetail,
+  fetchBlocks,
+  postAcknowledge,
+  postAutofix,
+  postFeedback,
+  subscribeToBlocks,
+} from "../api";
+import type { BlockDiagnostic, BlockNodeDetail, BlocksResponse } from "../api";
 import { BlockGraph } from "./BlockGraph";
-import { BlockTriageInbox } from "./BlockTriageInbox";
+import { BlockEditor } from "./BlockEditor";
+import { BlockTriageInbox, type TriageAction } from "./BlockTriageInbox";
 import { severityDotClass } from "../severity";
 
 export type BlocksViewProps = {
   /** Repo root, resolved by App (selectedProject → most-recent session root). */
   path: string | null;
+  /** From /api/health — gates the write affordances (slot 2). */
+  writable?: boolean;
 };
 
 type LoadState =
@@ -50,11 +60,14 @@ function degreeSorted(data: BlocksResponse): string[] {
     .sort((a, b) => (deg.get(b) ?? 0) - (deg.get(a) ?? 0) || a.localeCompare(b));
 }
 
-export function BlocksView({ path }: BlocksViewProps): JSX.Element {
+export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "idle" });
   const [subview, setSubview] = useState<SubView>("issues");
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  // Slot 2: the node currently open in the form editor (with its detail mtime).
+  const [editing, setEditing] = useState<{ node: BlockNodeDetail; mtimeMs?: number } | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
   // SSE health: null = no stream yet; true = live; false = dropped.
   const [sseLive, setSseLive] = useState<boolean | null>(null);
   const filterRef = useRef<HTMLInputElement | null>(null);
@@ -128,6 +141,52 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
       return n?.name ?? null;
     },
     [data],
+  );
+
+  // Slot-2 write actions from the triage inbox. Each posts to a mutation route
+  // then refetches the graph so the diagnostic list reflects the change.
+  const refetch = useCallback(() => {
+    if (path !== null && path.length > 0) load(path);
+  }, [path, load]);
+
+  const flash = (msg: string): void => {
+    setActionMsg(msg);
+    setTimeout(() => setActionMsg(null), 2500);
+  };
+
+  const onTriageAction = useCallback(
+    async (action: TriageAction, d: BlockDiagnostic): Promise<void> => {
+      if (path === null) return;
+      const file = d.location?.filePath ?? "";
+      const symbolName = d.location !== undefined ? (nodeNameAt(file, d.location.startLine) ?? "") : "";
+      const ref = { code: d.code, filePath: file, symbolName };
+      let r;
+      if (action === "fix") r = await postAutofix(path, file, d.code);
+      else if (action === "acknowledge") r = await postAcknowledge(path, ref);
+      else r = await postFeedback(path, "false-positive", ref, "false-positive");
+      if (r.ok) {
+        flash(action === "fix" ? "Autofix applied" : action === "acknowledge" ? "Acknowledged" : "Marked false-positive");
+        refetch();
+      } else {
+        flash(`${r.code}: ${r.message}`);
+      }
+    },
+    [path, nodeNameAt, refetch],
+  );
+
+  // Open the form editor for a node — fetch the detail route to get the 409
+  // mtime baseline + fresh content.
+  const openEditor = useCallback(
+    async (node: BlockNodeDetail): Promise<void> => {
+      if (path === null) return;
+      try {
+        const detail = await fetchBlockDetail(path, node.filePath, node.name);
+        setEditing({ node: detail, ...(detail.mtimeMs !== undefined ? { mtimeMs: detail.mtimeMs } : {}) });
+      } catch {
+        setEditing({ node, ...(node.mtimeMs !== undefined ? { mtimeMs: node.mtimeMs } : {}) });
+      }
+    },
+    [path],
   );
 
   // Keyboard: I/G sub-view, J/K node cycle, Esc deselect, / focus filter.
@@ -261,6 +320,17 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
           Lost live updates · retrying…
         </div>
       )}
+      {/* Read-only banner — hides every write affordance below */}
+      {!writable && state.status === "ready" && (
+        <div className="border-b border-sivru-border bg-sivru-panel px-4 py-1 text-[11px] text-sivru-mute">
+          Read-only mode. Restart with <code className="text-sivru-amber">--writable</code> to enable edits.
+        </div>
+      )}
+      {actionMsg !== null && (
+        <div className="border-b border-sivru-amber/30 bg-sivru-amber/10 px-4 py-1 text-[11px] text-sivru-amber">
+          {actionMsg}
+        </div>
+      )}
 
       {/* Body: graph/issues pane + inspector */}
       <div className="flex min-h-0 flex-1">
@@ -280,11 +350,32 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
                 nodeNameAt={nodeNameAt}
                 onSelectNode={setSelected}
                 filter={filter}
+                writable={writable}
+                onAction={(a, d) => void onTriageAction(a, d)}
               />
             ))}
         </section>
         <aside className="w-[360px] shrink-0 overflow-y-auto border-l border-sivru-border bg-sivru-panel">
-          <Inspector node={selectedNode} data={data} />
+          {editing !== null ? (
+            <BlockEditor
+              rootPath={path ?? ""}
+              node={editing.node}
+              mtimeMs={editing.mtimeMs}
+              onSaved={() => {
+                setEditing(null);
+                refetch();
+              }}
+              onClose={() => setEditing(null)}
+            />
+          ) : (
+            <Inspector
+              node={selectedNode}
+              data={data}
+              {...(writable && selectedNode?.block != null
+                ? { onEdit: () => void openEditor(selectedNode) }
+                : {})}
+            />
+          )}
         </aside>
       </div>
     </main>
@@ -296,9 +387,11 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
 function Inspector({
   node,
   data,
+  onEdit,
 }: {
   node: BlockNodeDetail | null;
   data: BlocksResponse | null;
+  onEdit?: () => void;
 }): JSX.Element {
   if (node === null) {
     // Scope counters + three most-recent diagnostics + one-line explainer.
@@ -329,15 +422,26 @@ function Inspector({
   const editorUrl = `vscode://file/${node.filePath}:${node.range.startLine}`;
   return (
     <div className="flex flex-col gap-3 p-4 text-sm">
-      <div>
-        <div className="font-mono text-base text-sivru-text">{node.name}</div>
-        <a
-          href={editorUrl}
-          className="font-mono text-[11px] text-sivru-mute hover:text-sivru-text"
-          title="Open in editor"
-        >
-          {node.filePath}:{node.range.startLine}
-        </a>
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-mono text-base text-sivru-text">{node.name}</div>
+          <a
+            href={editorUrl}
+            className="font-mono text-[11px] text-sivru-mute hover:text-sivru-text"
+            title="Open in editor"
+          >
+            {node.filePath}:{node.range.startLine}
+          </a>
+        </div>
+        {onEdit !== undefined && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 rounded-sivru border border-sivru-amber/40 bg-sivru-amber/10 px-2 py-0.5 text-[11px] text-sivru-amber hover:bg-sivru-amber/20"
+          >
+            Edit
+          </button>
+        )}
       </div>
 
       {b !== null ? (
