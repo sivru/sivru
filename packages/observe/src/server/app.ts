@@ -31,7 +31,7 @@ import { estimateSavings } from "../cost/savings.js";
 import { aggregateReplay, replaySession } from "../replay/index.js";
 import { runCheckup, CheckupConfigError } from "../coach/index.js";
 import { mountBlockRoutes } from "./blocks.js";
-import { isAbsolutePathStrict, pathContainment } from "./path-safety.js";
+import { isAbsolutePathStrict, isLocalhostOrigin, pathContainment } from "./path-safety.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
@@ -62,17 +62,6 @@ export type ObserveAppOptions = {
 
 const DEFAULT_EVENT_LIMIT = 1000;
 
-/**
- * Allow only `http://localhost:*` and `http://127.0.0.1:*` origins.
- * The W6 ui agent runs Vite on localhost; production deployments don't apply.
- * Returns the origin if allowed, otherwise null so hono/cors does NOT echo it
- * into Access-Control-Allow-Origin.
- */
-function isLocalhostOrigin(origin: string): boolean {
-  // Accept e.g. http://localhost:5173, http://127.0.0.1:5173 (any port, none too).
-  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-}
-
 /** Build the Hono app. Pure: no port binding. Tests call `app.fetch(...)` directly. */
 export function createObserveApp(options?: ObserveAppOptions): Hono {
   const source: SessionSource =
@@ -84,7 +73,9 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     "/api/*",
     cors({
       origin: (origin) => (isLocalhostOrigin(origin) ? origin : null),
-      allowMethods: ["GET", "OPTIONS"],
+      // POST is needed for the slot-2 mutation routes (autofix/edit/acknowledge/
+      // feedback). They're additionally guarded by hono/csrf + the --writable gate.
+      allowMethods: ["GET", "POST", "OPTIONS"],
       allowHeaders: ["Content-Type"],
     }),
   );
@@ -466,11 +457,27 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     }
   });
 
-  // ----- /api/blocks (DESIGN-0021 slot 1) -----
-  // Read-only block graph + triage diagnostics + an fs.watch-backed SSE
-  // channel. Mutation routes (autofix/edit/acknowledge/feedback) land in
-  // slot 2 behind a --writable gate.
-  mountBlockRoutes(app);
+  // ----- /api/blocks + /api/feedback (DESIGN-0021) -----
+  // Slot 1: read-only graph + triage + SSE. Slot 2: mutation routes behind the
+  // --writable gate + hono/csrf. A minimal in-memory counter set feeds
+  // /api/metrics (Prometheus text; no remote push).
+  const counters = new Map<string, number>();
+  const bump = (key: string): void => {
+    counters.set(key, (counters.get(key) ?? 0) + 1);
+  };
+
+  app.get("/api/metrics", (c) => {
+    const lines = [
+      "# sivru observe metrics (DESIGN-0021)",
+      `sivru_observe_writable_mode ${options?.writable === true ? 1 : 0}`,
+    ];
+    for (const [key, value] of counters) {
+      lines.push(`sivru_observe_${key} ${value}`);
+    }
+    return c.text(lines.join("\n") + "\n", 200, { "content-type": "text/plain; version=0.0.4" });
+  });
+
+  mountBlockRoutes(app, { writable: options?.writable === true, bump });
 
   // Static UI mount — served only when `uiDistDir` is supplied. Hono's
   // `notFound` runs after all explicit routes miss, so `/api/...` is reached

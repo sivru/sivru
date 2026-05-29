@@ -13,7 +13,8 @@
 // calls). The SSE channel uses `node:fs.watch`, a local file-watch primitive.
 // No outbound traffic originates here.
 
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+import { csrf } from "hono/csrf";
 import { streamSSE } from "hono/streaming";
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
@@ -37,9 +38,20 @@ import type {
 
 import {
   isAbsolutePathStrict,
+  isLocalhostOrigin,
   pathContainment,
   resolveFileWithinRoot,
 } from "./path-safety.js";
+import {
+  acknowledgeDiagnostic,
+  appendFeedbackRecord,
+  applyAutofix,
+  editBlock,
+  readFeedbackRecords,
+  type HandlerContext,
+} from "../handlers/block/index.js";
+import { httpStatusFor, type HandlerResult } from "../handlers/block/result.js";
+import type { FeedbackKind } from "../feedback/index.js";
 
 export { resolveFileWithinRoot } from "./path-safety.js";
 
@@ -283,7 +295,43 @@ export const _internal = {
   buildBlockDetail,
 };
 
-export function mountBlockRoutes(app: Hono): void {
+export interface MountBlockRoutesOptions {
+  /** The --writable gate. Mutation routes still register, but return 405. */
+  writable: boolean;
+  /** Increment a named metrics counter. */
+  bump: (key: string) => void;
+}
+
+export function mountBlockRoutes(app: Hono, opts: MountBlockRoutesOptions): void {
+  const { writable, bump } = opts;
+
+  // CSRF (DESIGN-0021 §Security): two layers on the state-changing route groups.
+  //  1. hono/csrf — framework-maintained guard against form-submittable CSRF
+  //     (the content-types a cross-origin <form> can send without preflight).
+  //  2. An explicit localhost-Origin guard — JSON POSTs are already CORS-
+  //     protected (our CORS only echoes localhost origins), but hono/csrf does
+  //     not challenge application/json. This guard enforces the design's
+  //     "origin-less POST → 403" contract for every unsafe method.
+  // GET/HEAD/OPTIONS pass through untouched in both.
+  const csrfGuard = csrf({ origin: (origin) => isLocalhostOrigin(origin) });
+  const originGuard = async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
+    const m = c.req.method;
+    if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") {
+      const origin = c.req.header("origin");
+      if (origin === undefined || !isLocalhostOrigin(origin)) {
+        return c.json(
+          { ok: false, code: "SIVRU-CSRF-ORIGIN", message: "origin check failed", retryable: false },
+          403,
+        );
+      }
+    }
+    await next();
+  };
+  app.use("/api/blocks/*", csrfGuard);
+  app.use("/api/blocks/*", originGuard);
+  app.use("/api/feedback", csrfGuard);
+  app.use("/api/feedback", originGuard);
+
   // GET /api/blocks?rootPath=<abs>
   app.get("/api/blocks", async (c) => {
     const root = await resolveRootPath(c.req.query("rootPath") ?? "");
@@ -292,6 +340,7 @@ export function mountBlockRoutes(app: Hono): void {
     }
     try {
       const body = await _internal.buildBlocksResponse(root.rootPath);
+      bump("graph_builds_total");
       return c.json(body);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -433,5 +482,109 @@ export function mountBlockRoutes(app: Hono): void {
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ error: `failed to read block: ${message}`, code: "SIVRU-E246" }, 500);
     }
+  });
+
+  // ---- Mutation routes (slot 2; --writable gated, hono/csrf guarded) -------
+  // Each parses { rootPath, ... }, validates rootPath containment, builds a
+  // HandlerContext (actor "ui"), and maps the shared HandlerResult → HTTP.
+
+  /** Map a handler envelope to an HTTP response (ok→200, else httpStatusFor). */
+  const send = (c: Context, r: HandlerResult<unknown>): Response => {
+    if (r.ok) return c.json({ ok: true, data: r.data });
+    return c.json(
+      { ok: false, code: r.code, message: r.message, retryable: r.retryable, data: r.data },
+      httpStatusFor(r.code),
+    );
+  };
+
+  /** Validate rootPath from a parsed body; returns ctx or an error response. */
+  const ctxFromBody = async (
+    c: Context,
+    body: Record<string, unknown>,
+  ): Promise<HandlerContext | Response> => {
+    const root = await resolveRootPath(typeof body["rootPath"] === "string" ? body["rootPath"] : "");
+    if (!root.ok) return c.json({ ok: false, code: root.code, message: root.error, retryable: false }, root.status);
+    return { rootPath: root.rootPath, actor: "ui", writable };
+  };
+
+  const parseBody = async (c: Context): Promise<Record<string, unknown>> => {
+    try {
+      return (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  };
+
+  // POST /api/blocks/autofix  { rootPath, filePath, diagnosticCode? }
+  app.post("/api/blocks/autofix", async (c) => {
+    const body = await parseBody(c);
+    const ctx = await ctxFromBody(c, body);
+    if (ctx instanceof Response) return ctx;
+    const r = await applyAutofix(ctx, String(body["filePath"] ?? ""),
+      typeof body["diagnosticCode"] === "string" ? body["diagnosticCode"] : undefined);
+    if (r.ok) bump("block_autofixes_applied_total");
+    return send(c, r);
+  });
+
+  // POST /api/blocks/edit  { rootPath, filePath, symbol, block, expectedMtimeMs? }
+  app.post("/api/blocks/edit", async (c) => {
+    const body = await parseBody(c);
+    const ctx = await ctxFromBody(c, body);
+    if (ctx instanceof Response) return ctx;
+    const r = await editBlock(
+      ctx,
+      String(body["filePath"] ?? ""),
+      String(body["symbol"] ?? ""),
+      body["block"] as never,
+      typeof body["expectedMtimeMs"] === "number" ? body["expectedMtimeMs"] : undefined,
+    );
+    if (r.ok) bump("block_edits_total");
+    return send(c, r);
+  });
+
+  // POST /api/blocks/acknowledge  { rootPath, diagnostic: {code,filePath,symbolName}, note? }
+  app.post("/api/blocks/acknowledge", async (c) => {
+    const body = await parseBody(c);
+    const ctx = await ctxFromBody(c, body);
+    if (ctx instanceof Response) return ctx;
+    const d = (body["diagnostic"] ?? {}) as Record<string, unknown>;
+    const r = await acknowledgeDiagnostic(
+      ctx,
+      { code: String(d["code"] ?? ""), filePath: String(d["filePath"] ?? ""), symbolName: String(d["symbolName"] ?? "") },
+      typeof body["note"] === "string" ? body["note"] : undefined,
+    );
+    if (r.ok) bump("acknowledgments_total");
+    return send(c, r);
+  });
+
+  // POST /api/feedback  { rootPath, kind, diagnostic, label, note? }
+  app.post("/api/feedback", async (c) => {
+    const body = await parseBody(c);
+    const ctx = await ctxFromBody(c, body);
+    if (ctx instanceof Response) return ctx;
+    const d = (body["diagnostic"] ?? {}) as Record<string, unknown>;
+    const r = await appendFeedbackRecord(
+      ctx,
+      String(body["kind"] ?? "suggest") as FeedbackKind,
+      { code: String(d["code"] ?? ""), filePath: String(d["filePath"] ?? ""), symbolName: String(d["symbolName"] ?? "") },
+      String(body["label"] ?? ""),
+      typeof body["note"] === "string" ? body["note"] : undefined,
+    );
+    if (r.ok) bump("feedback_records_total");
+    return send(c, r);
+  });
+
+  // GET /api/feedback?rootPath=&kind=&code=  — NOT --writable-gated.
+  app.get("/api/feedback", async (c) => {
+    const root = await resolveRootPath(c.req.query("rootPath") ?? "");
+    if (!root.ok) return c.json({ error: root.error, code: root.code }, root.status);
+    const ctx: HandlerContext = { rootPath: root.rootPath, actor: "ui", writable };
+    const kind = c.req.query("kind");
+    const code = c.req.query("code");
+    const r = await readFeedbackRecords(ctx, {
+      ...(kind !== undefined ? { kind: kind as FeedbackKind } : {}),
+      ...(code !== undefined ? { code } : {}),
+    });
+    return send(c, r);
   });
 }

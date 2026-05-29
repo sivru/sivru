@@ -5,7 +5,7 @@
 // real git repo on the CI box.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -266,6 +266,131 @@ describe("/api/blocks/stream SSE", () => {
 
     expect(seen).toContain("block.updated");
   }, 20_000);
+});
+
+describe("/api/blocks + /api/feedback mutation routes (slot 2)", () => {
+  let root: string;
+  const ro = createObserveApp(); // read-only
+  const rw = createObserveApp({ writable: true });
+  const ORIGIN = { Origin: "http://127.0.0.1:7676" };
+
+  const FILE = `/**
+ * @sivru
+ * schema: 1
+ * role: r
+ * responsibility: original
+ * maturity: experimental
+ * @end
+ */
+export function thing() {}
+`;
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(homedir(), ".sivru-blocks-mut-"));
+    await writeFile(join(root, "thing.ts"), FILE);
+  });
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const post = (app: ReturnType<typeof createObserveApp>, path: string, body: unknown, headers: Record<string, string> = ORIGIN) =>
+    app.fetch(
+      new Request(`http://127.0.0.1${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      }),
+    );
+
+  it("405 + WRITABLE-DISABLED on a non-writable boot (with valid Origin)", async () => {
+    const res = await post(ro, "/api/blocks/autofix", { rootPath: root, filePath: "thing.ts" });
+    expect(res.status).toBe(405);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("SIVRU-WRITABLE-DISABLED");
+  });
+
+  it("403 when the Origin header is missing (CSRF)", async () => {
+    const res = await post(rw, "/api/blocks/autofix", { rootPath: root, filePath: "thing.ts" }, {});
+    expect(res.status).toBe(403);
+  });
+
+  it("autofix happy path returns ok", async () => {
+    const res = await post(rw, "/api/blocks/autofix", { rootPath: root, filePath: "thing.ts" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { rewrites: number } };
+    expect(body.ok).toBe(true);
+    expect(body.data.rewrites).toBe(0);
+  });
+
+  it("400 + PATH-OUTSIDE-ROOT on filePath traversal", async () => {
+    const res = await post(rw, "/api/blocks/autofix", { rootPath: root, filePath: "../../etc/passwd" });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("SIVRU-PATH-OUTSIDE-ROOT");
+  });
+
+  it("edit happy path rewrites the block", async () => {
+    const res = await post(rw, "/api/blocks/edit", {
+      rootPath: root,
+      filePath: "thing.ts",
+      symbol: "thing",
+      block: { schema: 1, role: "edited-role", responsibility: "now updated", maturity: "stable" },
+    });
+    expect(res.status).toBe(200);
+    const after = await readFile(join(root, "thing.ts"), "utf8");
+    expect(after).toContain("role: edited-role");
+  });
+
+  it("edit 409 on a stale expectedMtimeMs", async () => {
+    const res = await post(rw, "/api/blocks/edit", {
+      rootPath: root,
+      filePath: "thing.ts",
+      symbol: "thing",
+      block: { schema: 1, role: "r", responsibility: "x" },
+      expectedMtimeMs: 1,
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string; retryable: boolean };
+    expect(body.code).toBe("SIVRU-FILE-CHANGED");
+    expect(body.retryable).toBe(true);
+  });
+
+  it("acknowledge writes acknowledgments.jsonl", async () => {
+    const res = await post(rw, "/api/blocks/acknowledge", {
+      rootPath: root,
+      diagnostic: { code: "SIVRU-E234", filePath: "thing.ts", symbolName: "thing" },
+      note: "intentional",
+    });
+    expect(res.status).toBe(200);
+    const ack = await readFile(join(root, ".sivru", "acknowledgments.jsonl"), "utf8");
+    expect(ack).toContain("acknowledge");
+  });
+
+  it("POST /api/feedback (false-positive) then GET /api/feedback reads it (ungated)", async () => {
+    await post(rw, "/api/feedback", {
+      rootPath: root,
+      kind: "false-positive",
+      diagnostic: { code: "SIVRU-E235", filePath: "thing.ts", symbolName: "thing" },
+      label: "false-positive",
+    });
+    // GET is ungated — read even from the read-only app.
+    const res = await ro.fetch(
+      new Request(`http://127.0.0.1/api/feedback?rootPath=${encodeURIComponent(root)}&kind=false-positive`),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { records: unknown[] } };
+    expect(body.ok).toBe(true);
+    expect(body.data.records.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("/api/metrics reports the writable gauge", async () => {
+    const res = await rw.fetch(new Request("http://127.0.0.1/api/metrics"));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("sivru_observe_writable_mode 1");
+    const roRes = await ro.fetch(new Request("http://127.0.0.1/api/metrics"));
+    expect(await roRes.text()).toContain("sivru_observe_writable_mode 0");
+  });
 });
 
 describe("isWatchNoise", () => {

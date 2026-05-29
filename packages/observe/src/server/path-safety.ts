@@ -15,6 +15,14 @@ import { isAbsolute, normalize, resolve, sep } from "node:path";
 
 import { probeGit } from "../coach/git-stats.js";
 
+/**
+ * Allow only `http://localhost:*` / `http://127.0.0.1:*` origins (any port).
+ * Shared by the CORS origin check and the slot-2 hono/csrf middleware.
+ */
+export function isLocalhostOrigin(origin: string): boolean {
+  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
+
 /** Platform-native absolute path check (POSIX `/…`, Windows `C:\…`). */
 export function isAbsolutePathStrict(p: string): boolean {
   if (process.platform === "win32") return /^[a-zA-Z]:[\\/]/.test(p);
