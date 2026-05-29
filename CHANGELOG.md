@@ -7,6 +7,52 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+**Authored-context UI — slot 1 (read-only Blocks tab).** Promotes
+`@sivru` blocks from a CLI-only surface to a first-class lifecycle view
+in observe-ui. The block graph, its diagnostics, and the authored
+context behind every block are now something you look at, not 200-edge
+JSON you grep. Slot 1 of
+[DESIGN-0021](docs/design/0021-authored-context-ui.md); the write
+surface (editing, acknowledge/feedback, agent MCP tools) lands in slot 2
+behind `--writable`.
+
+### Added
+
+- **Blocks tab in observe-ui.** Two sub-views over a repo's block graph:
+  **Issues** (the default — a triage inbox grouping every diagnostic by
+  code, error-before-warning, with per-row *Open in editor* and *Copy
+  CLI fix*) and **Graph** (an in-house force-directed render — no
+  d3/cytoscape dependency). Edges carry two independent, colorblind-safe
+  encodings: reciprocity (solid/thick vs dashed) and severity
+  (broken-collaborator red, rename-suspect amber, asymmetric uncolored).
+  A right-pane inspector shows the selected block's role, responsibility,
+  invariants, decisions, collaborators, and attached diagnostics.
+  Keyboard: `I`/`G` switch sub-view, `J`/`K` walk nodes, `/` filters,
+  `Esc` deselects.
+- **`GET /api/blocks`, `GET /api/blocks/:filePath/:symbol`,
+  `GET /api/blocks/stream`** — read-only block graph + single-block
+  detail + an `fs.watch`-backed SSE channel that surfaces external CLI
+  `--autofix` writes as `block.updated` events. `rootPath` safety mirrors
+  `/api/checkup` (absolute + homedir-or-git containment); `filePath`
+  arguments are normalized and reject traversal.
+- **Block-aware Replay + Checkup.** Replay gains a *Blocks touched* lane
+  (blocks sitting on files the agent edited this session); Checkup gains
+  a *Block drift* section (E233/E234/E235/E236 counts) with an *Open in
+  Blocks tab* link.
+- **`pnpm --filter @sivru/benchmarks bench:block-ui`** — perf benchmark
+  over a generated 500-block fixture for the `/api/blocks` engine path
+  (cold/warm graph build + per-file re-extract) against the
+  DESIGN-0021 targets.
+
+### Notes
+
+- observe-ui takes a (type-only) workspace dependency on `@sivru/search`
+  so block types have a single source of truth; the import is erased at
+  build (bundle stays ~72 kB gzip). `packages/observe` consumes
+  `@sivru/search`'s pure-filesystem block surface only — the privacy
+  boundary (no network egress) holds and its enforcement test stays
+  green.
+
 ## [0.8.0] — 2026-05-27
 
 **Block reliability — slots 1 through 4.** Turns `@sivru` blocks from
