@@ -27,7 +27,12 @@ export function editedFilePaths(events: readonly SivruEvent[]): string[] {
 /** True when two paths refer to the same file (abs-vs-abs or abs-vs-rel). */
 export function samePath(a: string, b: string): boolean {
   if (a === b) return true;
-  return a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+  // Treat one path as a suffix of the other only when the shorter side is a
+  // multi-segment path (contains "/"). A bare basename ("index.ts") must match
+  // exactly — otherwise two same-named files in different directories collide.
+  if (a.includes("/") && b.endsWith(`/${a}`)) return true;
+  if (b.includes("/") && a.endsWith(`/${b}`)) return true;
+  return false;
 }
 
 /** Block nodes whose source file was edited in the session. */

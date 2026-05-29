@@ -30,8 +30,8 @@ import type { SivruEvent } from "../types.js";
 import { estimateSavings } from "../cost/savings.js";
 import { aggregateReplay, replaySession } from "../replay/index.js";
 import { runCheckup, CheckupConfigError } from "../coach/index.js";
-import { probeGit } from "../coach/git-stats.js";
 import { mountBlockRoutes } from "./blocks.js";
+import { isAbsolutePathStrict, pathContainment } from "./path-safety.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
@@ -375,7 +375,7 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     // existence (or non-existence) of paths outside the allowed
     // surface — e.g. probing `/etc/shadow` returns SIVRU-E245
     // uniformly whether the file exists or not.
-    const containment = await checkupPathContained(abs);
+    const containment = await pathContainment(abs);
     if (!containment.allowed) {
       return c.json(
         { error: "SIVRU-E245 checkup-path-unsafe", code: "SIVRU-E245" },
@@ -529,39 +529,3 @@ function parseTruthy(raw: string | undefined): boolean {
   return false;
 }
 
-function isAbsolutePathStrict(p: string): boolean {
-  // node:path.isAbsolute accepts both POSIX and Windows shapes; we want
-  // platform-native absolute paths only.
-  if (process.platform === "win32") return /^[a-zA-Z]:[\\/]/.test(p);
-  return p.startsWith("/");
-}
-
-interface ContainmentResult {
-  allowed: boolean;
-  degraded?: true;
-}
-
-/**
- * DESIGN-0005 §2 path-safety: allow `abs` if it is under `homedir()` OR
- * inside (or a descendant of) a git working tree. When the git binary
- * is missing on the server, degrade to homedir-only and surface the
- * fallback via `degraded: true` so the caller can attach SIVRU-E244.
- */
-async function checkupPathContained(abs: string): Promise<ContainmentResult> {
-  const home = homedir();
-  if (isUnder(abs, home)) return { allowed: true };
-  const probe = await probeGit(abs);
-  if (probe.available) return { allowed: true };
-  if (probe.reason === "missing") {
-    return { allowed: false, degraded: true };
-  }
-  return { allowed: false };
-}
-
-function isUnder(child: string, parent: string): boolean {
-  const c = normalize(child);
-  const p = normalize(parent);
-  if (c === p) return true;
-  const pTrim = p.endsWith(sep) ? p : p + sep;
-  return c.startsWith(pTrim);
-}

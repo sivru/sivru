@@ -73,6 +73,11 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
       join(root, "src", "deep", "d.ts"),
       FILE_A.replace(/serviceA/g, "serviceD").replace("[helperB]", "[]"),
     );
+    // A file with a fence but malformed YAML → block:null, drives filesSkipped.
+    await writeFile(
+      join(root, "bad.ts"),
+      `/**\n * @sivru\n * schema: 1\n * role: [unclosed\n * @end\n */\nexport function bad() {}\n`,
+    );
   });
 
   afterAll(async () => {
@@ -89,6 +94,7 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
       nodes: Array<{ name: string; block: unknown; diagnostics: unknown[] }>;
       edges: Array<{ from: string; to: string; reciprocal: boolean }>;
       diagnostics: Array<{ code: string }>;
+      filesSkipped: number;
     };
     // Shape compatible with computeBlockGraph output (nodes/edges/diagnostics).
     expect(Array.isArray(body.nodes)).toBe(true);
@@ -96,8 +102,10 @@ describe("/api/blocks (DESIGN-0021 slot 1)", () => {
     expect(Array.isArray(body.diagnostics)).toBe(true);
 
     // serviceD lives in src/deep/ with no collaborators — an orphan node.
+    // bad.ts has block:null so it is NOT a node, but IS counted in filesSkipped.
     const names = body.nodes.map((n) => n.name).sort();
     expect(names).toEqual(["helperB", "serviceA", "serviceC", "serviceD"]);
+    expect(body.filesSkipped).toBe(1);
 
     // Reciprocal pair A<->B, asymmetric C->B.
     const recip = body.edges.find((e) => e.from === "serviceA" && e.to === "helperB");

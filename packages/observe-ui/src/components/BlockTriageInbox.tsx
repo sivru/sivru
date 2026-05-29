@@ -9,6 +9,7 @@
 import { useMemo, useState } from "react";
 
 import type { BlockDiagnostic } from "../api";
+import { severityDotClass, severityRank } from "../severity";
 
 export type BlockTriageInboxProps = {
   diagnostics: BlockDiagnostic[];
@@ -20,12 +21,6 @@ export type BlockTriageInboxProps = {
   /** Filter text from the toolbar (matches code / file / message). */
   filter: string;
 };
-
-const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 };
-
-function rankOf(severity: string): number {
-  return SEVERITY_RANK[severity] ?? 9;
-}
 
 export type DiagnosticGroup = { code: string; severity: string; diagnostics: BlockDiagnostic[] };
 
@@ -41,13 +36,13 @@ export function groupDiagnostics(diagnostics: BlockDiagnostic[]): DiagnosticGrou
   for (const [code, diags] of byCode) {
     // Worst severity in the group drives its sort rank + header glyph.
     const worst = diags.reduce(
-      (acc, d) => (rankOf(d.severity) < rankOf(acc) ? d.severity : acc),
+      (acc, d) => (severityRank(d.severity) < severityRank(acc) ? d.severity : acc),
       "info",
     );
     groups.push({ code, severity: worst, diagnostics: diags });
   }
   groups.sort((a, b) => {
-    const s = rankOf(a.severity) - rankOf(b.severity);
+    const s = severityRank(a.severity) - severityRank(b.severity);
     return s !== 0 ? s : a.code.localeCompare(b.code);
   });
   return groups;
@@ -74,11 +69,14 @@ export function cliForDiagnostic(code: string, filePath: string): string {
 }
 
 function severityGlyph(severity: string): JSX.Element {
-  if (severity === "error") {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-sivru-error" aria-hidden />;
-  }
-  if (severity === "warning") {
-    return <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-sivru-warn" aria-hidden />;
+  // Filled dot for error/warning; hollow zinc circle for info.
+  if (severity === "error" || severity === "warning") {
+    return (
+      <span
+        className={`inline-block h-2 w-2 shrink-0 rounded-full ${severityDotClass(severity)}`}
+        aria-hidden
+      />
+    );
   }
   return (
     <span className="inline-block h-2 w-2 shrink-0 rounded-full border border-sivru-mute" aria-hidden />

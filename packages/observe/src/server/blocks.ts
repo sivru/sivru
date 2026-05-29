@@ -18,8 +18,7 @@ import { streamSSE } from "hono/streaming";
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { isAbsolute, normalize, resolve, sep } from "node:path";
+import { isAbsolute, normalize, resolve } from "node:path";
 
 import {
   blockToJSON,
@@ -36,7 +35,7 @@ import type {
   SourceRange,
 } from "@sivru/search";
 
-import { probeGit } from "../coach/git-stats.js";
+import { isAbsolutePathStrict, isUnder, pathContainment } from "./path-safety.js";
 
 // ---------------------------------------------------------------------------
 // Wire shapes (observe-specific envelope; the UI mirrors these locally the
@@ -66,33 +65,21 @@ export type BlocksResponse = {
   edges: GraphEdge[];
   /** Full flat diagnostic set (graph + per-block validation + drift). */
   diagnostics: BlockDiagnostic[];
+  /** Count of files that had a fence but failed to parse (block:null). */
+  filesSkipped: number;
 };
 
 // ---------------------------------------------------------------------------
-// Path safety — same shape as the /api/checkup route (app.ts): the rootPath
-// must be an existing absolute directory contained under the user's homedir
-// OR inside a git working tree. Containment runs BEFORE stat so we don't leak
-// the existence of paths outside the allowed surface.
+// Path safety — the rootPath must be an existing absolute directory under the
+// user's homedir OR inside a git working tree. The containment primitive is
+// shared with the /api/checkup route (path-safety.ts) so the rule can't drift.
 // ---------------------------------------------------------------------------
 
 type RootResult =
   | { ok: true; rootPath: string; degraded: boolean }
   | { ok: false; status: 400; code: string; error: string };
 
-function isAbsolutePathStrict(p: string): boolean {
-  if (process.platform === "win32") return /^[a-zA-Z]:[\\/]/.test(p);
-  return p.startsWith("/");
-}
-
-function isUnder(child: string, parent: string): boolean {
-  const c = normalize(child);
-  const p = normalize(parent);
-  if (c === p) return true;
-  const pTrim = p.endsWith(sep) ? p : p + sep;
-  return c.startsWith(pTrim);
-}
-
-/** Resolve + validate a `rootPath` query param. Mirrors checkupPathContained. */
+/** Resolve + validate a `rootPath` query param. */
 export async function resolveRootPath(rawPath: string): Promise<RootResult> {
   if (rawPath.length === 0) {
     return { ok: false, status: 400, code: "SIVRU-E245", error: "missing rootPath query param" };
@@ -103,20 +90,11 @@ export async function resolveRootPath(rawPath: string): Promise<RootResult> {
   const abs = normalize(rawPath);
 
   // Containment before stat (don't leak existence of paths outside the surface).
-  const home = homedir();
-  let allowed = isUnder(abs, home);
-  let degraded = false;
-  if (!allowed) {
-    const probe = await probeGit(abs);
-    if (probe.available) {
-      allowed = true;
-    } else if (probe.reason === "missing") {
-      degraded = true; // git binary absent — homedir-only mode
-    }
-  }
-  if (!allowed) {
+  const containment = await pathContainment(abs);
+  if (!containment.allowed) {
     return { ok: false, status: 400, code: "SIVRU-E245", error: "rootPath-unsafe" };
   }
+  const degraded = containment.degraded;
 
   let st: { isDirectory(): boolean };
   try {
@@ -180,20 +158,16 @@ function diagnosticOnNode(d: BlockDiagnostic, filePath: string, range: SourceRan
 /**
  * Build the graph + enriched nodes + full diagnostic set for `rootPath`.
  *
- * Strategy: `computeBlockGraph` does the single full repo walk + extract and
- * returns nodes/edges/cross-block diagnostics (E234/E235/E236). We then
- * re-extract ONLY the block-bearing files (a small subset — one per blocked
- * symbol) to recover parsed content + per-block validation diagnostics for the
- * inspector and triage inbox. This keeps the expensive whole-repo walk to one
- * pass; the targeted re-extract is the cheap per-file path the perf gate
- * measures (<50ms / 200-block file).
+ * `computeBlockGraph({ withExtracted: true })` does ONE walk + extract and hands
+ * back the full `ExtractedBlock[]` it built (including `block: null` parse
+ * failures) alongside nodes/edges/cross-block diagnostics. We reuse that array
+ * for node content + per-block validation — no second extraction pass — and
+ * count unparseable files for the UI's "partial" state.
  */
 export async function buildBlocksResponse(rootPath: string): Promise<BlocksResponse> {
   const config = loadBlockConfig(rootPath);
-  const graph = await computeBlockGraph(rootPath);
-
-  const nodeFiles = [...new Set(graph.nodes.map((n) => n.filePath))];
-  const extracted = await extractBlocksFromFiles(nodeFiles);
+  const graph = await computeBlockGraph(rootPath, { withExtracted: true });
+  const extracted = graph.extracted ?? [];
 
   // Index extracted blocks by filePath::startLine for node matching.
   const byKey = new Map<string, ExtractedBlock>();
@@ -201,8 +175,16 @@ export async function buildBlocksResponse(rootPath: string): Promise<BlocksRespo
     byKey.set(`${eb.filePath}::${eb.range.startLine}`, eb);
   }
 
-  // Collect every diagnostic: cross-block (graph), extraction/drift (per
-  // ExtractedBlock), and full validation (validateBlock on parsed blocks).
+  // Files that had a fence but failed to parse (block:null) are never dropped
+  // silently — count distinct ones for the "Graph built with N files skipped"
+  // partial state, and surface their extraction diagnostics in the inbox.
+  const skippedFiles = new Set<string>();
+  for (const eb of extracted) {
+    if (eb.block === null) skippedFiles.add(eb.filePath);
+  }
+
+  // Collect every diagnostic: cross-block (graph), extraction/parse failures
+  // (per ExtractedBlock), and full validation (validateBlock on parsed blocks).
   const allDiagnostics: BlockDiagnostic[] = [...graph.diagnostics];
   for (const eb of extracted) {
     allDiagnostics.push(...eb.diagnostics);
@@ -232,6 +214,7 @@ export async function buildBlocksResponse(rootPath: string): Promise<BlocksRespo
     nodes,
     edges: graph.edges,
     diagnostics,
+    filesSkipped: skippedFiles.size,
   };
 }
 
@@ -329,14 +312,21 @@ export function mountBlockRoutes(app: Hono): void {
       let heartbeat: ReturnType<typeof setInterval> | null = null;
 
       const emitUpdated = (relPath: string): void => {
-        void stream
-          .writeSSE({
-            event: "block.updated",
-            data: JSON.stringify({ filePath: relPath, ts: new Date().toISOString() }),
-          })
-          .catch(() => {
+        const data = JSON.stringify({ filePath: relPath, ts: new Date().toISOString() });
+        // Emit both events: block.updated (content changed) and, since an
+        // external source-file write can also change collaborator topology and
+        // we can't tell the two apart from a raw fs event, block.graph.rebuilt.
+        // The read-only client coalesces them into a single graph refetch, so
+        // the conservative double-emit is harmless and keeps the documented
+        // block.graph.rebuilt event real (slot 2's write handlers will fire it
+        // precisely, only when topology actually changed).
+        const send = (event: string): void => {
+          void stream.writeSSE({ event, data }).catch(() => {
             // Stream gone — teardown happens via onAbort.
           });
+        };
+        send("block.updated");
+        send("block.graph.rebuilt");
       };
 
       const onChange = (_event: string, filename: string | null): void => {

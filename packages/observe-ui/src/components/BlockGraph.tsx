@@ -13,7 +13,7 @@
 //   - severity (color): sivru-error = broken-collaborator, sivru-warn =
 //     rename-suspect, sivru-mute (no color) = asymmetric.
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { BlockNodeDetail, GraphEdge } from "../api";
 
@@ -181,6 +181,25 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
 
   const [scale, setScale] = useState(1);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Callback ref: attach the wheel listener as NON-passive so preventDefault
+  // works (React's onWheel is passive, so it would warn + no-op and the page
+  // would scroll while zooming). Re-fires on mount/unmount/remount.
+  const wheelCleanup = useRef<(() => void) | null>(null);
+  const setSvgRef = useCallback((el: SVGSVGElement | null): void => {
+    if (wheelCleanup.current !== null) {
+      wheelCleanup.current();
+      wheelCleanup.current = null;
+    }
+    svgRef.current = el;
+    if (el !== null) {
+      const onWheel = (e: WheelEvent): void => {
+        e.preventDefault();
+        setScale((s) => clamp(s * (e.deltaY < 0 ? 1.1 : 0.9), 0.4, 3));
+      };
+      el.addEventListener("wheel", onWheel, { passive: false });
+      wheelCleanup.current = () => el.removeEventListener("wheel", onWheel);
+    }
+  }, []);
   const dragRef = useRef<{ name: string; moved: boolean } | null>(null);
   // Set when a drag actually moved the node, so the trailing synthetic click
   // doesn't toggle selection on a pure reposition.
@@ -239,7 +258,7 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
 
   return (
     <svg
-      ref={svgRef}
+      ref={setSvgRef}
       role="main"
       aria-label="Block collaborator graph"
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -248,10 +267,6 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerLeave={endDrag}
-      onWheel={(e) => {
-        const next = clamp(scale * (e.deltaY < 0 ? 1.1 : 0.9), 0.4, 3);
-        setScale(next);
-      }}
     >
       <g transform={`scale(${scale})`}>
         {/* Edges first (under nodes). Decorative — same info is in the inbox. */}

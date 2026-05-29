@@ -241,6 +241,8 @@ export type BlocksResponse = {
   nodes: BlockNodeDetail[];
   edges: GraphEdge[];
   diagnostics: BlockDiagnostic[];
+  /** Files that had a fence but failed to parse (drives the "partial" state). */
+  filesSkipped: number;
 };
 
 export function fetchBlocks(rootPath: string): Promise<BlocksResponse> {
@@ -260,9 +262,11 @@ export function fetchBlockDetail(
 export type BlockUpdatedEvent = { filePath: string; ts: string };
 
 /**
- * Open the blocks SSE channel for `rootPath`. `onUpdated` fires on each
- * `block.updated` event (a file under rootPath changed — e.g. a CLI
- * `--autofix` write); the caller refetches the graph. `onError` fires on
+ * Open the blocks SSE channel for `rootPath`. `onUpdated` fires when a file
+ * under rootPath changed (e.g. a CLI `--autofix` write); the caller refetches
+ * the graph. The server emits both `block.updated` and `block.graph.rebuilt`
+ * for a change — they're coalesced here within a tick into a single
+ * `onUpdated` so the client refetches once, not twice. `onError` fires on
  * connection trouble so the UI can show the SSE-disconnected state.
  */
 export function subscribeToBlocks(
@@ -272,13 +276,30 @@ export function subscribeToBlocks(
 ): EventStreamHandle {
   const url = `/api/blocks/stream?rootPath=${encodeURIComponent(rootPath)}`;
   const es = new EventSource(url);
-  es.addEventListener("block.updated", (ev: MessageEvent<string>) => {
+
+  // Coalesce a block.updated + block.graph.rebuilt burst for the same change
+  // into one onUpdated call.
+  let pending: BlockUpdatedEvent | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = (): void => {
+    timer = null;
+    if (pending !== null) {
+      const ev = pending;
+      pending = null;
+      onUpdated(ev);
+    }
+  };
+  const handle = (ev: MessageEvent<string>): void => {
     try {
-      onUpdated(JSON.parse(ev.data) as BlockUpdatedEvent);
+      pending = JSON.parse(ev.data) as BlockUpdatedEvent;
+      if (timer === null) timer = setTimeout(flush, 0);
     } catch {
       if (onError !== undefined) onError(ev);
     }
-  });
+  };
+  es.addEventListener("block.updated", handle);
+  es.addEventListener("block.graph.rebuilt", handle);
+
   if (onError !== undefined) {
     es.onerror = (ev) => {
       onError(ev);
@@ -286,6 +307,7 @@ export function subscribeToBlocks(
   }
   return {
     close: () => {
+      if (timer !== null) clearTimeout(timer);
       es.close();
     },
   };

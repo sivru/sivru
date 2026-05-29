@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { computeBlockGraph, extractBlocksFromFiles } from "@sivru/search";
+// NOTE: kept extractBlocksFromFiles import for the per-file re-extract metric.
 
 const N = 500;
 const TARGET_COLD_MS = 2000;
@@ -54,11 +55,10 @@ export function generateFixture(n: number): string {
   return root;
 }
 
-/** The exact engine path `buildBlocksResponse` runs. */
+/** The exact engine path `buildBlocksResponse` runs: one walk + extract, with
+ *  the extracted array reused (no second extraction pass). */
 async function buildPath(root: string): Promise<number> {
-  const graph = await computeBlockGraph(root);
-  const nodeFiles = [...new Set(graph.nodes.map((nd) => nd.filePath))];
-  await extractBlocksFromFiles(nodeFiles);
+  const graph = await computeBlockGraph(root, { withExtracted: true });
   return graph.nodes.length;
 }
 

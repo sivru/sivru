@@ -52,6 +52,13 @@ describe("samePath", () => {
     expect(samePath("src/a.ts", "/repo/src/a.ts")).toBe(true);
     expect(samePath("/repo/src/a.ts", "/repo/src/ba.ts")).toBe(false);
   });
+
+  it("does not collide bare basenames across directories", () => {
+    // A bare basename must match exactly — two different dirs sharing a
+    // filename are not the same file.
+    expect(samePath("a.ts", "/repo/src/a.ts")).toBe(false);
+    expect(samePath("a.ts", "a.ts")).toBe(true);
+  });
 });
 
 describe("blocksTouched", () => {

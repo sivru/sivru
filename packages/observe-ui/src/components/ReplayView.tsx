@@ -26,6 +26,7 @@ import { fetchBlocks, fetchEvents, fetchSessionReplay } from "../api";
 import type { BlockNodeDetail } from "../api";
 import type { ReplayedEvent, SessionReplay, Session } from "../types";
 import { blocksTouched, editedFilePaths } from "../blocks-touched";
+import { severityDotClass } from "../severity";
 import { formatTokenCount } from "../turns";
 import { formatTimestamp, truncate } from "../util";
 
@@ -412,7 +413,7 @@ function BlocksTouchedLane({ session }: { session: Session }): JSX.Element | nul
         {touched.map((n) => {
           const hasError = n.diagnostics.some((d) => d.severity === "error");
           const hasWarn = n.diagnostics.some((d) => d.severity === "warning");
-          const dot = hasError ? "bg-sivru-error" : hasWarn ? "bg-sivru-warn" : "bg-sivru-mute";
+          const dot = severityDotClass(hasError ? "error" : hasWarn ? "warning" : "info");
           return (
             <span
               key={`${n.filePath}::${n.range.startLine}`}

@@ -12,6 +12,7 @@ import { fetchBlocks, subscribeToBlocks } from "../api";
 import type { BlockNodeDetail, BlocksResponse } from "../api";
 import { BlockGraph } from "./BlockGraph";
 import { BlockTriageInbox } from "./BlockTriageInbox";
+import { severityDotClass } from "../severity";
 
 export type BlocksViewProps = {
   /** Repo root, resolved by App (selectedProject → most-recent session root). */
@@ -246,6 +247,14 @@ export function BlocksView({ path }: BlocksViewProps): JSX.Element {
           </button>
         </div>
       )}
+      {/* Partial strip — graph built but some files failed to parse */}
+      {state.status === "ready" && data !== null && data.filesSkipped > 0 && (
+        <div className="border-b border-sivru-warn/30 bg-sivru-warn/10 px-4 py-1 text-[11px] text-sivru-warn">
+          Graph built with {data.filesSkipped} file
+          {data.filesSkipped === 1 ? "" : "s"} skipped (parse errors). See the
+          E215/E216 rows in Issues.
+        </div>
+      )}
       {/* SSE-disconnected strip (last-known graph stays on screen) */}
       {sseLive === false && state.status === "ready" && (
         <div className="border-b border-sivru-error/30 bg-sivru-error/5 px-4 py-1 text-[11px] text-sivru-error/90">
@@ -401,10 +410,7 @@ function Inspector({
             {node.diagnostics.map((d, i) => (
               <li key={`${d.code}-${i}`} className="flex items-start gap-2 text-[12px]">
                 <span
-                  className={
-                    "mt-1 inline-block h-2 w-2 shrink-0 rounded-full " +
-                    (d.severity === "error" ? "bg-sivru-error" : "bg-sivru-warn")
-                  }
+                  className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${severityDotClass(d.severity)}`}
                   aria-hidden
                 />
                 <span>

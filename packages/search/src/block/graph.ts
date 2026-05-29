@@ -17,7 +17,7 @@ import { loadBlockConfig } from "./config.js";
 import { MODULE_SYMBOL_NAME } from "./hash.js";
 import { isBlockWalkSkippable } from "./walker-skip.js";
 import { walk } from "../walker/walk.js";
-import type { BlockDiagnostic, SourceRange } from "./types.js";
+import type { BlockDiagnostic, ExtractedBlock, SourceRange } from "./types.js";
 
 export type GraphNode = {
   /** Symbol name (or "(module)" for module-level blocks). */
@@ -41,6 +41,14 @@ export type BlockGraph = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   diagnostics: BlockDiagnostic[];
+  /**
+   * Every block the graph build extracted, including `block: null`
+   * parse failures (never dropped silently). Populated only when
+   * `BlockGraphOptions.withExtracted` is set — the walk already extracts
+   * these, so returning them costs nothing and saves callers a second
+   * extraction pass.
+   */
+  extracted?: ExtractedBlock[];
 };
 
 
@@ -72,6 +80,12 @@ export type BlockGraphOptions = {
    * extraction. When omitted, walk the whole `rootPath`.
    */
   files?: readonly string[];
+  /**
+   * When true, the returned `BlockGraph` carries the full `extracted`
+   * array (including `block: null` parse failures). Off by default so the
+   * common path (CLI graph check) keeps its lean return shape.
+   */
+  withExtracted?: boolean;
 };
 
 export async function computeBlockGraph(
@@ -217,5 +231,10 @@ export async function computeBlockGraph(
     }
   }
 
-  return { nodes, edges, diagnostics };
+  return {
+    nodes,
+    edges,
+    diagnostics,
+    ...(options.withExtracted === true ? { extracted: [...extracted] } : {}),
+  };
 }
