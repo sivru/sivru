@@ -31,6 +31,7 @@ import { estimateSavings } from "../cost/savings.js";
 import { aggregateReplay, replaySession } from "../replay/index.js";
 import { runCheckup, CheckupConfigError } from "../coach/index.js";
 import { probeGit } from "../coach/git-stats.js";
+import { mountBlockRoutes } from "./blocks.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
@@ -457,6 +458,12 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
       );
     }
   });
+
+  // ----- /api/blocks (DESIGN-0021 slot 1) -----
+  // Read-only block graph + triage diagnostics + an fs.watch-backed SSE
+  // channel. Mutation routes (autofix/edit/acknowledge/feedback) land in
+  // slot 2 behind a --writable gate.
+  mountBlockRoutes(app);
 
   // Static UI mount — served only when `uiDistDir` is supplied. Hono's
   // `notFound` runs after all explicit routes miss, so `/api/...` is reached
