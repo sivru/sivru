@@ -18,7 +18,7 @@ import { streamSSE } from "hono/streaming";
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import { stat } from "node:fs/promises";
-import { isAbsolute, normalize, resolve } from "node:path";
+import { normalize } from "node:path";
 
 import {
   blockToJSON,
@@ -35,7 +35,13 @@ import type {
   SourceRange,
 } from "@sivru/search";
 
-import { isAbsolutePathStrict, isUnder, pathContainment } from "./path-safety.js";
+import {
+  isAbsolutePathStrict,
+  pathContainment,
+  resolveFileWithinRoot,
+} from "./path-safety.js";
+
+export { resolveFileWithinRoot } from "./path-safety.js";
 
 // ---------------------------------------------------------------------------
 // Wire shapes (observe-specific envelope; the UI mirrors these locally the
@@ -56,6 +62,8 @@ export type BlockNodeDetail = {
   block: SivruBlockJSON | null;
   /** Diagnostics whose source range falls on this node. */
   diagnostics: BlockDiagnostic[];
+  /** Source file mtime (detail route only) — the editor's 409 save baseline. */
+  mtimeMs?: number;
 };
 
 export type BlocksResponse = {
@@ -106,18 +114,6 @@ export async function resolveRootPath(rawPath: string): Promise<RootResult> {
     return { ok: false, status: 400, code: "SIVRU-E241", error: "rootPath is not a directory" };
   }
   return { ok: true, rootPath: abs, degraded };
-}
-
-/**
- * Resolve a caller-supplied filePath against rootPath, rejecting any path that
- * escapes rootPath. Returns the absolute path or null on traversal. (Slot 1 is
- * read-only, but the detail route still reads an arbitrary file off disk, so it
- * gets the same normalization the slot-2 write routes will reuse.)
- */
-export function resolveFileWithinRoot(rootPath: string, filePath: string): string | null {
-  const abs = isAbsolute(filePath) ? normalize(filePath) : resolve(rootPath, filePath);
-  if (!isUnder(abs, rootPath)) return null;
-  return abs;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +233,13 @@ export async function buildBlockDetail(
   if (match.block !== null) {
     diags.push(...validateBlock(match.block, { location: match.range, config }));
   }
+  // mtime is the editor's 409 baseline; best-effort (0 if unreadable).
+  let mtimeMs = 0;
+  try {
+    mtimeMs = (await stat(filePath)).mtimeMs;
+  } catch {
+    mtimeMs = 0;
+  }
   return {
     name: match.symbolName ?? "(module)",
     filePath: match.filePath,
@@ -245,6 +248,7 @@ export async function buildBlockDetail(
     collaborators: match.block?.collaborators ?? [],
     block: match.block != null ? blockToJSON(match.block) : null,
     diagnostics: dedupeDiagnostics(diags),
+    mtimeMs,
   };
 }
 

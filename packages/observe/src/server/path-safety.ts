@@ -11,7 +11,7 @@
 // local git probe (a child-process shell-out, not network). No outbound calls.
 
 import { homedir } from "node:os";
-import { normalize, sep } from "node:path";
+import { isAbsolute, normalize, resolve, sep } from "node:path";
 
 import { probeGit } from "../coach/git-stats.js";
 
@@ -49,4 +49,15 @@ export async function pathContainment(abs: string): Promise<Containment> {
   const probe = await probeGit(abs);
   if (probe.available) return { allowed: true, degraded: false };
   return { allowed: false, degraded: probe.reason === "missing" };
+}
+
+/**
+ * Resolve a caller-supplied filePath against rootPath, rejecting any path that
+ * escapes rootPath. Returns the absolute path or null on traversal. The single
+ * normalization used by every route/handler that accepts a filePath argument.
+ */
+export function resolveFileWithinRoot(rootPath: string, filePath: string): string | null {
+  const abs = isAbsolute(filePath) ? normalize(filePath) : resolve(rootPath, filePath);
+  if (!isUnder(abs, rootPath)) return null;
+  return abs;
 }

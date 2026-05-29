@@ -236,17 +236,22 @@ describe("/api/blocks/stream SSE", () => {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let seen = "";
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 14000;
 
-    // Give the watcher a beat to attach, then poke the dir a few times.
-    const poke = async (): Promise<void> => {
-      for (let i = 0; i < 5; i++) {
-        await writeFile(join(root, `poke-${i}.ts`), `// change ${i}\n`);
-        await new Promise((r) => setTimeout(r, 120));
+    // Poke CONTINUOUSLY until we see the event (or the deadline). fs.watch can
+    // attach late under CPU load; a fixed burst of writes could all land before
+    // the watcher is listening, leaving nothing to catch. A steady stream keeps
+    // a fresh write available whenever the watcher finally attaches — robust
+    // without weakening the assertion (it still requires a real emitted event).
+    let poking = true;
+    let n = 0;
+    const pokeLoop = async (): Promise<void> => {
+      while (poking && Date.now() < deadline) {
+        await writeFile(join(root, `poke-${n++}.ts`), `// change ${n}\n`);
+        await new Promise((r) => setTimeout(r, 100));
       }
     };
-    await new Promise((r) => setTimeout(r, 150));
-    void poke();
+    void pokeLoop();
 
     try {
       while (Date.now() < deadline && !seen.includes("block.updated")) {
@@ -255,11 +260,12 @@ describe("/api/blocks/stream SSE", () => {
         seen += decoder.decode(value, { stream: true });
       }
     } finally {
+      poking = false;
       await reader.cancel().catch(() => {});
     }
 
     expect(seen).toContain("block.updated");
-  }, 12_000);
+  }, 20_000);
 });
 
 describe("isWatchNoise", () => {
