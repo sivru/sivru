@@ -5,6 +5,17 @@ import type {
   SessionSavings,
   SivruEvent,
 } from "./types";
+// DESIGN-0021: block types come straight from @sivru/search (the single type
+// source of truth). These are `import type` only — erased at build, so the UI
+// bundle never pulls in the search runtime.
+import type {
+  BlockDiagnostic,
+  GraphEdge,
+  SivruBlockJSON,
+  SourceRange,
+} from "@sivru/search";
+
+export type { BlockDiagnostic, GraphEdge, SivruBlockJSON, SourceRange };
 
 export type HealthResponse = { ok: true; version: string };
 export type SessionsResponse = { sessions: Session[] };
@@ -200,6 +211,79 @@ export function subscribeToEvents(
     };
   }
 
+  return {
+    close: () => {
+      es.close();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// /api/blocks (DESIGN-0021 slot 1). The envelope (BlocksResponse /
+// BlockNodeDetail) is observe-specific so it's mirrored here, same as
+// CheckupReport above. The nested shapes (BlockDiagnostic / GraphEdge /
+// SivruBlockJSON / SourceRange) ARE the @sivru/search types, re-exported above.
+// ---------------------------------------------------------------------------
+
+export type BlockNodeDetail = {
+  name: string;
+  filePath: string;
+  kind: "symbol" | "module";
+  range: SourceRange;
+  collaborators: string[];
+  block: SivruBlockJSON | null;
+  diagnostics: BlockDiagnostic[];
+};
+
+export type BlocksResponse = {
+  rootPath: string;
+  ranAt: string;
+  nodes: BlockNodeDetail[];
+  edges: GraphEdge[];
+  diagnostics: BlockDiagnostic[];
+};
+
+export function fetchBlocks(rootPath: string): Promise<BlocksResponse> {
+  return getJson<BlocksResponse>(`/api/blocks?rootPath=${encodeURIComponent(rootPath)}`);
+}
+
+export function fetchBlockDetail(
+  rootPath: string,
+  filePath: string,
+  symbol: string,
+): Promise<BlockNodeDetail> {
+  return getJson<BlockNodeDetail>(
+    `/api/blocks/${encodeURIComponent(filePath)}/${encodeURIComponent(symbol)}?rootPath=${encodeURIComponent(rootPath)}`,
+  );
+}
+
+export type BlockUpdatedEvent = { filePath: string; ts: string };
+
+/**
+ * Open the blocks SSE channel for `rootPath`. `onUpdated` fires on each
+ * `block.updated` event (a file under rootPath changed — e.g. a CLI
+ * `--autofix` write); the caller refetches the graph. `onError` fires on
+ * connection trouble so the UI can show the SSE-disconnected state.
+ */
+export function subscribeToBlocks(
+  rootPath: string,
+  onUpdated: (ev: BlockUpdatedEvent) => void,
+  onError?: (err: Event) => void,
+): EventStreamHandle {
+  const url = `/api/blocks/stream?rootPath=${encodeURIComponent(rootPath)}`;
+  const es = new EventSource(url);
+  es.addEventListener("block.updated", (ev: MessageEvent<string>) => {
+    try {
+      onUpdated(JSON.parse(ev.data) as BlockUpdatedEvent);
+    } catch {
+      if (onError !== undefined) onError(ev);
+    }
+  });
+  if (onError !== undefined) {
+    es.onerror = (ev) => {
+      onError(ev);
+    };
+  }
   return {
     close: () => {
       es.close();
