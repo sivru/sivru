@@ -41,17 +41,25 @@ type ServerArgs = {
   port: number;
   host: string;
   noUi: boolean;
+  writable: boolean;
 };
+
+function isLoopback(host: string): boolean {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
 
 function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string } {
   let port = DEFAULT_PORT;
   let host = "127.0.0.1";
   let noUi = false;
+  let writable = false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === undefined) continue;
     if (arg === "--no-ui") {
       noUi = true;
+    } else if (arg === "--writable") {
+      writable = true;
     } else if (arg === "--port" || arg === "-p") {
       const next = argv[++i];
       if (next === undefined) return { error: "--port requires a value" };
@@ -73,7 +81,13 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
       return { error: `unknown flag: ${arg}` };
     }
   }
-  return { port, host, noUi };
+  // DESIGN-0021 slot 2: writable mode must bind loopback only.
+  if (writable && !isLoopback(host)) {
+    return {
+      error: `writable mode does not support non-loopback binds (--host ${host}); remove --host or remove --writable`,
+    };
+  }
+  return { port, host, noUi, writable };
 }
 
 // Locate the static UI assets. Two paths:
@@ -101,8 +115,19 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
   const server = await createObserveServer({
     port: parsed.port,
     host: parsed.host,
+    writable: parsed.writable,
     ...(uiDist !== null ? { uiDistDir: uiDist } : {}),
   });
+
+  // DESIGN-0021 slot 2: make the trust boundary loud on boot.
+  if (parsed.writable) {
+    process.stderr.write(
+      "sivru observe — WRITABLE: the UI + MCP can modify .sivru/ and source files. " +
+        "Writes are logged to .sivru/audit/ (retention: 7 days).\n",
+    );
+  } else {
+    process.stderr.write("sivru observe — READ-ONLY mode (pass --writable to enable edits).\n");
+  }
 
   process.stdout.write(`sivru observe — listening on ${server.url}\n`);
   if (uiDist !== null) {

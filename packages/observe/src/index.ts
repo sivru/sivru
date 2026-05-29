@@ -28,6 +28,20 @@ export {
 } from "./cost/pricing.js";
 export type { ModelPricing } from "./cost/pricing.js";
 
+// DESIGN-0021 slot 2 — shared block-write handlers + feedback store, so the CLI
+// MCP tools can call the exact same implementation the HTTP routes use.
+export {
+  applyAutofix,
+  editBlock,
+  acknowledgeDiagnostic,
+  appendFeedbackRecord,
+  readFeedbackRecords,
+} from "./handlers/block/index.js";
+export type { HandlerContext, FeedbackInput } from "./handlers/block/index.js";
+export type { HandlerResult, HandlerErrorCode } from "./handlers/block/result.js";
+export type { FeedbackRecord, FeedbackKind, FeedbackActor, DiagnosticRef } from "./feedback/index.js";
+export { sweepAuditRetention } from "./audit/index.js";
+
 export { replaySession, aggregateReplay } from "./replay/index.js";
 export type {
   AggregateReport,

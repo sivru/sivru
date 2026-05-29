@@ -67,7 +67,16 @@ describe("mcp-entry — tools/list", () => {
     try {
       const result = await client.listTools();
       const names = result.tools.map((t) => t.name).sort();
-      expect(names).toEqual(["checkup", "explain", "find_related", "search"]);
+      expect(names).toEqual([
+        "block_acknowledge",
+        "block_autofix",
+        "checkup",
+        "explain",
+        "feedback_append",
+        "feedback_read",
+        "find_related",
+        "search",
+      ]);
 
       const search = result.tools.find((t) => t.name === "search");
       expect(search?.description).toMatch(/semantic \+ lexical code search/i);
@@ -563,5 +572,103 @@ describe("mcp-entry — index cache", () => {
 
     const buildsAfterSecond = _indexBuildCountForTest(path, false);
     expect(buildsAfterSecond).toBe(1);
+  });
+});
+
+// ---- DESIGN-0021 slot 2: agent write tools ----
+import { readFile } from "node:fs/promises";
+
+async function connectClient(writable: boolean): Promise<{ client: Client; close: () => Promise<void> }> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createMcpServer({ writable });
+  await server.connect(serverTransport);
+  const client = new Client({ name: "t", version: "0" }, { capabilities: {} });
+  await client.connect(clientTransport);
+  return { client, close: async () => { await client.close(); await server.close(); } };
+}
+
+const SLOT2_BLOCK = `/**
+ * @sivru
+ * schema: 1
+ * role: r
+ * responsibility: x
+ * maturity: stable
+ * @end
+ */
+export function thing() {}
+`;
+
+function envelope(result: { content?: Array<{ text?: string }> }): { ok: boolean; code?: string; data?: unknown } {
+  return JSON.parse(result.content?.[0]?.text ?? "{}");
+}
+
+describe("mcp-entry — slot 2 write tools", () => {
+  it("advertises the four new tools", async () => {
+    const { client, close } = await connectClient(false);
+    try {
+      const names = (await client.listTools()).tools.map((t) => t.name);
+      for (const n of ["block_autofix", "block_acknowledge", "feedback_append", "feedback_read"]) {
+        expect(names).toContain(n);
+      }
+    } finally {
+      await close();
+    }
+  });
+
+  it("block_autofix is WRITABLE-DISABLED when started without --writable", async () => {
+    await write("thing.ts", SLOT2_BLOCK);
+    const { client, close } = await connectClient(false);
+    try {
+      const res = await client.callTool({
+        name: "block_autofix",
+        arguments: { rootPath: root, filePath: "thing.ts" },
+      });
+      const env = envelope(res as { content: Array<{ text: string }> });
+      expect(env.ok).toBe(false);
+      expect(env.code).toBe("SIVRU-WRITABLE-DISABLED");
+    } finally {
+      await close();
+    }
+  });
+
+  it("block_acknowledge writes acknowledgments.jsonl when writable", async () => {
+    await write("thing.ts", SLOT2_BLOCK);
+    const { client, close } = await connectClient(true);
+    try {
+      const res = await client.callTool({
+        name: "block_acknowledge",
+        arguments: { rootPath: root, diagnostic: { code: "SIVRU-E234", filePath: "thing.ts", symbolName: "thing" }, note: "intentional" },
+      });
+      expect(envelope(res as { content: Array<{ text: string }> }).ok).toBe(true);
+      const ack = await readFile(join(root, ".sivru", "acknowledgments.jsonl"), "utf8");
+      expect(ack).toContain("acknowledge");
+    } finally {
+      await close();
+    }
+  });
+
+  it("feedback_append then feedback_read round-trips; read works even when read-only", async () => {
+    await write("thing.ts", SLOT2_BLOCK);
+    const rw = await connectClient(true);
+    try {
+      await rw.client.callTool({
+        name: "feedback_append",
+        arguments: { rootPath: root, kind: "suggest", diagnostic: { code: "SIVRU-E234", filePath: "thing.ts", symbolName: "thing" }, label: "suggested-rewrite", note: "try X" },
+      });
+    } finally {
+      await rw.close();
+    }
+    const ro = await connectClient(false); // read-only server still reads
+    try {
+      const res = await ro.client.callTool({
+        name: "feedback_read",
+        arguments: { rootPath: root, kind: "suggest" },
+      });
+      const env = envelope(res as { content: Array<{ text: string }> });
+      expect(env.ok).toBe(true);
+      expect((env.data as { records: unknown[] }).records.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await ro.close();
+    }
   });
 });
