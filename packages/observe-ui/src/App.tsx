@@ -537,7 +537,10 @@ export function App(): JSX.Element {
       {view === "bench" ? (
         <BenchView />
       ) : view === "checkup" ? (
-        <CheckupView path={resolveCheckupPath(selectedProject, sessionsState)} />
+        <CheckupView
+          path={resolveCheckupPath(selectedProject, sessionsState)}
+          onOpenBlocks={() => setView("blocks")}
+        />
       ) : view === "blocks" ? (
         <BlocksView path={resolveCheckupPath(selectedProject, sessionsState)} />
       ) : view === "costs" ? (

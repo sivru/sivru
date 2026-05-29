@@ -7,8 +7,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchCheckup } from "../api";
+import { fetchBlocks, fetchCheckup } from "../api";
 import type {
+  BlockDiagnostic,
   CheckupFinding,
   CheckupMemoryFile,
   CheckupReport,
@@ -20,6 +21,8 @@ export type CheckupViewProps = {
    *  session's projectRoot when null. Empty-state shown when both
    *  are unavailable. */
   path: string | null;
+  /** Switch to the Blocks tab (wired by App). Omitted = no link rendered. */
+  onOpenBlocks?: () => void;
 };
 
 type LoadState =
@@ -40,7 +43,84 @@ const SEVERITY_RANK: Record<CheckupSeverity, number> = {
   info: 2,
 };
 
-export function CheckupView({ path }: CheckupViewProps): JSX.Element {
+export type BlockDriftCounts = {
+  stale: number; // E233
+  asymmetric: number; // E234
+  renameSuspect: number; // E235
+  orderContradiction: number; // E236
+  total: number;
+};
+
+/** Count the cross-block drift codes (DESIGN-0021 §"Block-aware Checkup"). */
+export function countBlockDrift(diagnostics: readonly BlockDiagnostic[]): BlockDriftCounts {
+  const c: BlockDriftCounts = {
+    stale: 0,
+    asymmetric: 0,
+    renameSuspect: 0,
+    orderContradiction: 0,
+    total: 0,
+  };
+  for (const d of diagnostics) {
+    if (d.code === "SIVRU-E233") c.stale++;
+    else if (d.code === "SIVRU-E234") c.asymmetric++;
+    else if (d.code === "SIVRU-E235") c.renameSuspect++;
+    else if (d.code === "SIVRU-E236") c.orderContradiction++;
+    else continue;
+    c.total++;
+  }
+  return c;
+}
+
+function BlockDriftSection({
+  path,
+  onOpenBlocks,
+}: {
+  path: string;
+  onOpenBlocks?: () => void;
+}): JSX.Element | null {
+  const [counts, setCounts] = useState<BlockDriftCounts | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setCounts(null);
+    fetchBlocks(path)
+      .then((res) => {
+        if (!cancelled) setCounts(countBlockDrift(res.diagnostics));
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(null); // no blocks / unreachable → hide
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
+
+  if (counts === null || counts.total === 0) return null;
+
+  return (
+    <div className="rounded border border-sivru-border bg-sivru-panel p-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-medium text-sivru-text">Block drift</div>
+        {onOpenBlocks !== undefined && (
+          <button
+            type="button"
+            onClick={onOpenBlocks}
+            className="rounded-sivru border border-sivru-amber/40 bg-sivru-amber/10 px-2 py-0.5 text-[11px] text-sivru-amber hover:bg-sivru-amber/20"
+          >
+            Open in Blocks tab →
+          </button>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-sivru-mute">
+        <span>E233 stale: <span className="text-sivru-text">{counts.stale}</span></span>
+        <span>E234 asymmetric: <span className="text-sivru-text">{counts.asymmetric}</span></span>
+        <span>E235 rename-suspect: <span className="text-sivru-text">{counts.renameSuspect}</span></span>
+        <span>E236 order: <span className="text-sivru-text">{counts.orderContradiction}</span></span>
+      </div>
+    </div>
+  );
+}
+
+export function CheckupView({ path, onOpenBlocks }: CheckupViewProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "idle" });
   // Per design §7: latest fetch wins. We track an in-flight key so
   // stale responses can be discarded if the user changes path or
@@ -128,7 +208,15 @@ export function CheckupView({ path }: CheckupViewProps): JSX.Element {
         </div>
       )}
 
-      {state.status === "ready" && <ReportBody report={state.data} />}
+      {state.status === "ready" && (
+        <div className="flex flex-col gap-3">
+          <BlockDriftSection
+            path={path}
+            {...(onOpenBlocks !== undefined ? { onOpenBlocks } : {})}
+          />
+          <ReportBody report={state.data} />
+        </div>
+      )}
     </main>
   );
 }
