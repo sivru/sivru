@@ -51,6 +51,13 @@ export type ObserveAppOptions = {
    * outside this dir is rejected.
    */
   uiDistDir?: string;
+  /**
+   * DESIGN-0021 slot 2: enable the block/feedback mutation routes. Default
+   * false (read-only). When false, every mutation route returns 405 and the UI
+   * hides write affordances. Boot-coupled to a loopback bind in
+   * createObserveServer.
+   */
+  writable?: boolean;
 };
 
 const DEFAULT_EVENT_LIMIT = 1000;
@@ -83,7 +90,7 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
   );
 
   app.get("/api/health", (c) =>
-    c.json({ ok: true, version: SIVRU_OBSERVE_VERSION }),
+    c.json({ ok: true, version: SIVRU_OBSERVE_VERSION, writable: options?.writable === true }),
   );
 
   app.get("/api/sessions", async (c) => {
