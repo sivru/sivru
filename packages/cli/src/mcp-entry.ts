@@ -845,9 +845,11 @@ function mcpCtx(args: Record<string, unknown>, writable: boolean): HandlerContex
 async function blockAutofixTool(args: Record<string, unknown>, writable: boolean): Promise<ToolResult> {
   const ctx = mcpCtx(args, writable);
   if (ctx === null) return fail("block_autofix: rootPath is required");
+  const filePath = typeof args["filePath"] === "string" ? args["filePath"] : "";
+  if (filePath.length === 0) return fail("block_autofix: filePath is required");
   const r = await applyAutofix(
     ctx,
-    typeof args["filePath"] === "string" ? args["filePath"] : "",
+    filePath,
     typeof args["diagnosticCode"] === "string" ? args["diagnosticCode"] : undefined,
   );
   return mcpResult(r);

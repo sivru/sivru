@@ -10,6 +10,7 @@
 // PRIVACY NOTE (DESIGN.md §5.5): this file imports only node:path/os and the
 // local git probe (a child-process shell-out, not network). No outbound calls.
 
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, normalize, resolve, sep } from "node:path";
 
@@ -68,4 +69,21 @@ export function resolveFileWithinRoot(rootPath: string, filePath: string): strin
   const abs = isAbsolute(filePath) ? normalize(filePath) : resolve(rootPath, filePath);
   if (!isUnder(abs, rootPath)) return null;
   return abs;
+}
+
+/**
+ * Canonical (symlink-resolved) containment check for an EXISTING file. The
+ * lexical `resolveFileWithinRoot` can be fooled by a symlink that sits inside
+ * rootPath but points outside it — following it on read/write would escape the
+ * repo. This realpaths both the file and rootPath and re-checks containment,
+ * returning the CANONICAL path to operate on (so callers never read/write
+ * through the symlink), or null if it escapes / doesn't exist.
+ */
+export async function realpathWithinRoot(rootPath: string, abs: string): Promise<string | null> {
+  try {
+    const [realFile, realRoot] = await Promise.all([realpath(abs), realpath(rootPath)]);
+    return isUnder(realFile, realRoot) ? realFile : null;
+  } catch {
+    return null;
+  }
 }

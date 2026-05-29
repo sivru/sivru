@@ -50,9 +50,14 @@ function toServerBlock(form: FormState, original: SivruBlockJSON): Record<string
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => {
-      const [rule, enforced] = line.split("::").map((s) => s.trim());
-      return { rule: rule ?? line, "enforced-by": enforced && enforced.length > 0 ? enforced : null };
-    });
+      // Split on the FIRST "::" only — the enforced-by file-anchored form is
+      // itself `<path>::<test-name>`, so it must survive intact.
+      const idx = line.indexOf("::");
+      const rule = (idx >= 0 ? line.slice(0, idx) : line).trim();
+      const enforced = idx >= 0 ? line.slice(idx + 2).trim() : "";
+      return { rule, "enforced-by": enforced.length > 0 ? enforced : null };
+    })
+    .filter((inv) => inv.rule.length > 0); // drop stray empty-rule lines
   const decisions = original.decisions.map((d) => ({
     chose: d.chose,
     because: d.because,
@@ -76,10 +81,12 @@ export type BlockEditorProps = {
   /** Detail-route mtime baseline for the 409 check. */
   mtimeMs: number | undefined;
   onSaved: () => void;
+  /** Re-fetch the block detail + re-seed the form (used by the 409 banner). */
+  onReload: () => void;
   onClose: () => void;
 };
 
-export function BlockEditor({ rootPath, node, mtimeMs, onSaved, onClose }: BlockEditorProps): JSX.Element {
+export function BlockEditor({ rootPath, node, mtimeMs, onSaved, onReload, onClose }: BlockEditorProps): JSX.Element {
   const original = node.block;
   const initial = useMemo<FormState | null>(() => (original !== null ? toForm(original) : null), [original]);
   const [form, setForm] = useState<FormState | null>(initial);
@@ -177,7 +184,7 @@ export function BlockEditor({ rootPath, node, mtimeMs, onSaved, onClose }: Block
           <span>{conflict}</span>
           <button
             type="button"
-            onClick={onSaved}
+            onClick={onReload}
             className="rounded-sivru border border-sivru-error/40 px-2 py-0.5 hover:bg-sivru-error/20"
           >
             Reload latest

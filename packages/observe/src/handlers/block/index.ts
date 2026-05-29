@@ -7,7 +7,7 @@
 // PRIVACY NOTE (DESIGN.md §5.5): local-disk only — @sivru/search block ops are
 // pure filesystem; no network imports here.
 
-import { readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 
 import {
   autofixFile,
@@ -20,7 +20,7 @@ import {
 } from "@sivru/search";
 import type { AutofixResult, BlockDiagnostic, SivruBlock } from "@sivru/search";
 
-import { resolveFileWithinRoot } from "../../server/path-safety.js";
+import { realpathWithinRoot, resolveFileWithinRoot } from "../../server/path-safety.js";
 import {
   appendAcknowledgment,
   appendFeedback,
@@ -93,14 +93,19 @@ export async function applyAutofix(
   const blocked = gate<AutofixData>(ctx);
   if (blocked !== null) return blocked;
 
-  const abs = resolveFileWithinRoot(ctx.rootPath, filePath);
-  if (abs === null) {
+  const lexical = resolveFileWithinRoot(ctx.rootPath, filePath);
+  if (lexical === null) {
     return err("SIVRU-PATH-OUTSIDE-ROOT", `filePath escapes rootPath: ${filePath}`, false);
   }
   try {
-    await stat(abs);
+    await stat(lexical);
   } catch {
     return err("SIVRU-FILE-NOT-FOUND", `file not found: ${filePath}`, false);
+  }
+  // Canonicalize: reject (and never write through) a symlink that escapes root.
+  const abs = await realpathWithinRoot(ctx.rootPath, lexical);
+  if (abs === null) {
+    return err("SIVRU-PATH-OUTSIDE-ROOT", `filePath resolves (via symlink) outside rootPath: ${filePath}`, false);
   }
 
   let result: AutofixResult;
@@ -142,16 +147,21 @@ export async function editBlock(
   const blocked = gate<EditData>(ctx);
   if (blocked !== null) return blocked;
 
-  const abs = resolveFileWithinRoot(ctx.rootPath, filePath);
-  if (abs === null) {
+  const lexical = resolveFileWithinRoot(ctx.rootPath, filePath);
+  if (lexical === null) {
     return err("SIVRU-PATH-OUTSIDE-ROOT", `filePath escapes rootPath: ${filePath}`, false);
   }
-
   let mtime1: number;
   try {
-    mtime1 = (await stat(abs)).mtimeMs;
+    mtime1 = (await stat(lexical)).mtimeMs;
   } catch {
     return err("SIVRU-FILE-NOT-FOUND", `file not found: ${filePath}`, false);
+  }
+  // Canonicalize: operate on the real path so we never read/write through a
+  // symlink that escapes rootPath (this also guards the 409 readFile below).
+  const abs = await realpathWithinRoot(ctx.rootPath, lexical);
+  if (abs === null) {
+    return err("SIVRU-PATH-OUTSIDE-ROOT", `filePath resolves (via symlink) outside rootPath: ${filePath}`, false);
   }
 
   // Client baseline conflict (the long edit window): the form was opened
@@ -197,12 +207,14 @@ export async function editBlock(
     });
   }
 
-  // Atomic write: temp + rename.
+  // Atomic write: temp + rename. Clean up the temp file if the rename fails
+  // (EXDEV, perms, disk full) so we never leave a stray .sivru-tmp in the repo.
   const tmp = `${abs}.sivru-tmp`;
   try {
     await writeFile(tmp, rewrite.content, "utf8");
     await rename(tmp, abs);
   } catch (e) {
+    await rm(tmp, { force: true }).catch(() => {});
     return err("SIVRU-INTERNAL-ERROR", e instanceof Error ? e.message : String(e), true);
   }
 

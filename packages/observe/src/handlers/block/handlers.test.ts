@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -68,6 +68,28 @@ describe("block write handlers", () => {
     const r = await applyAutofix(ctx(), "nope.ts");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("SIVRU-FILE-NOT-FOUND");
+  });
+
+  it("rejects a symlink inside root that points OUTSIDE root (no write-through)", async () => {
+    // Secret file outside the repo + an in-repo symlink pointing at it.
+    const outside = await mkdtemp(join(homedir(), ".sivru-outside-"));
+    const secret = join(outside, "secret.ts");
+    await writeFile(secret, "export const SECRET = 1;\n");
+    try {
+      await symlink(secret, join(root, "link.ts"));
+      // autofix must NOT follow the symlink out of root.
+      const a = await applyAutofix(ctx(), "link.ts");
+      expect(a.ok).toBe(false);
+      if (!a.ok) expect(a.code).toBe("SIVRU-PATH-OUTSIDE-ROOT");
+      // edit must reject it too (and not disclose the target via the 409 body).
+      const e = await editBlock(ctx(), "link.ts", "x", { schema: 1, role: "r", responsibility: "x" });
+      expect(e.ok).toBe(false);
+      if (!e.ok) expect(e.code).toBe("SIVRU-PATH-OUTSIDE-ROOT");
+      // The secret file is untouched.
+      expect(await readFile(secret, "utf8")).toBe("export const SECRET = 1;\n");
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   // ---- applyAutofix happy ----

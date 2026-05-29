@@ -101,6 +101,9 @@ export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Ele
   useEffect(() => {
     setSelected(null);
     setFilter("");
+    // Close any open editor — a stale node from the previous repo must never
+    // stay bound to the new rootPath (a save would target the wrong repo).
+    setEditing(null);
     if (path !== null && path.length > 0) load(path);
     else setState({ status: "idle" });
   }, [path, load]);
@@ -365,6 +368,7 @@ export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Ele
                 setEditing(null);
                 refetch();
               }}
+              onReload={() => void openEditor(editing.node)}
               onClose={() => setEditing(null)}
             />
           ) : (
