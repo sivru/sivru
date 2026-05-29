@@ -63,6 +63,9 @@ function degreeSorted(data: BlocksResponse): string[] {
 export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "idle" });
   const [subview, setSubview] = useState<SubView>("issues");
+  // True once the user manually picks a sub-view — after that we stop honoring
+  // the .sivru/observe.json default.
+  const subviewTouched = useRef(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   // Slot 2: the node currently open in the form editor (with its detail mtime).
@@ -126,6 +129,12 @@ export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Ele
   }, [path, load]);
 
   const data = state.status === "ready" ? state.data : null;
+
+  // Honor .sivru/observe.json's ui.blocks.defaultSubview until the user picks
+  // a sub-view themselves.
+  useEffect(() => {
+    if (data !== null && !subviewTouched.current) setSubview(data.ui.defaultSubview);
+  }, [data]);
   const selectedNode = useMemo<BlockNodeDetail | null>(() => {
     if (data === null || selected === null) return null;
     return data.nodes.find((n) => n.name === selected) ?? null;
@@ -203,8 +212,13 @@ export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Ele
         return;
       }
       if (typing) return;
-      if (e.key === "i" || e.key === "I") setSubview("issues");
-      else if (e.key === "g" || e.key === "G") setSubview("graph");
+      if (e.key === "i" || e.key === "I") {
+        subviewTouched.current = true;
+        setSubview("issues");
+      } else if (e.key === "g" || e.key === "G") {
+        subviewTouched.current = true;
+        setSubview("graph");
+      }
       else if (e.key === "/") {
         e.preventDefault();
         filterRef.current?.focus();
@@ -265,7 +279,10 @@ export function BlocksView({ path, writable = false }: BlocksViewProps): JSX.Ele
                 key={v}
                 type="button"
                 aria-pressed={active}
-                onClick={() => setSubview(v)}
+                onClick={() => {
+                  subviewTouched.current = true;
+                  setSubview(v);
+                }}
                 className={
                   "rounded-sivru border px-2 py-0.5 capitalize transition-colors " +
                   (active

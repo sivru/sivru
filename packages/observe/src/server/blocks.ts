@@ -25,9 +25,13 @@ import {
   blockToJSON,
   computeBlockGraph,
   extractBlocksFromFiles,
+  hashBlockContent,
   loadBlockConfig,
   validateBlock,
 } from "@sivru/search";
+import type { GraphNode } from "@sivru/search";
+import { readAcknowledgments } from "../feedback/index.js";
+import { defaultSubview, loadObserveConfig } from "../config.js";
 import type {
   BlockDiagnostic,
   ExtractedBlock,
@@ -87,6 +91,8 @@ export type BlocksResponse = {
   diagnostics: BlockDiagnostic[];
   /** Count of files that had a fence but failed to parse (block:null). */
   filesSkipped: number;
+  /** Declarative UI defaults from .sivru/observe.json (DESIGN-0021 layer 2). */
+  ui: { defaultSubview: "issues" | "graph" };
 };
 
 // ---------------------------------------------------------------------------
@@ -149,6 +155,59 @@ function dedupeDiagnostics(diags: BlockDiagnostic[]): BlockDiagnostic[] {
   return out;
 }
 
+/**
+ * Suppress diagnostics the user acknowledged. An acknowledgment keys on
+ * {code, filePath, symbolName, contentHash}; we drop a matching finding only
+ * while the block's CURRENT content hash equals the acknowledged hash. If the
+ * block changed, the finding re-fires with a "previously acknowledged" note so
+ * the user re-triages it. (DESIGN-0021 §"Content-hash-keyed invalidation".)
+ */
+async function applyAcknowledgments(
+  rootPath: string,
+  diagnostics: BlockDiagnostic[],
+  nodes: readonly GraphNode[],
+  byKey: Map<string, ExtractedBlock>,
+): Promise<BlockDiagnostic[]> {
+  const acks = await readAcknowledgments(rootPath);
+  if (acks.length === 0) return diagnostics;
+
+  // key = code|filePath|symbolName → acknowledged contentHash (latest wins).
+  const ackHashByKey = new Map<string, string>();
+  for (const a of acks) {
+    ackHashByKey.set(
+      `${a.diagnostic.code}|${a.diagnostic.filePath}|${a.diagnostic.symbolName}`,
+      a.diagnostic.contentHash,
+    );
+  }
+
+  const out: BlockDiagnostic[] = [];
+  for (const d of diagnostics) {
+    const loc = d.location;
+    if (loc === undefined) {
+      out.push(d);
+      continue;
+    }
+    const node = nodes.find(
+      (n) => n.filePath === loc.filePath && loc.startLine >= n.range.startLine && loc.startLine <= n.range.endLine,
+    );
+    if (node === undefined) {
+      out.push(d);
+      continue;
+    }
+    const ackHash = ackHashByKey.get(`${d.code}|${loc.filePath}|${node.name}`);
+    if (ackHash === undefined) {
+      out.push(d);
+      continue;
+    }
+    const eb = byKey.get(`${node.filePath}::${node.range.startLine}`);
+    const currentHash = eb?.block != null ? hashBlockContent(eb.block) : "";
+    if (ackHash === currentHash) continue; // acknowledged + unchanged → suppress
+    // Block changed since the acknowledgment → re-fire with a note.
+    out.push({ ...d, message: `${d.message} (previously acknowledged; block has changed since)` });
+  }
+  return out;
+}
+
 /** True when `d`'s source range falls on the node at `filePath`:`startLine`. */
 function diagnosticOnNode(d: BlockDiagnostic, filePath: string, range: SourceRange): boolean {
   const loc = d.location;
@@ -200,7 +259,12 @@ export async function buildBlocksResponse(rootPath: string): Promise<BlocksRespo
       allDiagnostics.push(...validateBlock(eb.block, { location: eb.range, config }));
     }
   }
-  const diagnostics = dedupeDiagnostics(allDiagnostics);
+  const deduped = dedupeDiagnostics(allDiagnostics);
+  // Content-hash-keyed acknowledgment suppression (DESIGN-0021 §"Content-hash-
+  // keyed invalidation"): drop a finding the user acknowledged AS LONG AS the
+  // block's content hash still matches; if the block changed, the finding
+  // re-fires with a note. This is what turns Acknowledge into real inbox relief.
+  const diagnostics = await applyAcknowledgments(rootPath, deduped, graph.nodes, byKey);
 
   const nodes: BlockNodeDetail[] = graph.nodes.map((n) => {
     const eb = byKey.get(`${n.filePath}::${n.range.startLine}`);
@@ -223,6 +287,7 @@ export async function buildBlocksResponse(rootPath: string): Promise<BlocksRespo
     edges: graph.edges,
     diagnostics,
     filesSkipped: skippedFiles.size,
+    ui: { defaultSubview: defaultSubview(loadObserveConfig(rootPath)) },
   };
 }
 

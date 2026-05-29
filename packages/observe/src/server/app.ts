@@ -58,6 +58,8 @@ export type ObserveAppOptions = {
    * createObserveServer.
    */
   writable?: boolean;
+  /** DESIGN-0021 §Observability: emit the per-request log as JSONL (vs human). */
+  logJson?: boolean;
 };
 
 const DEFAULT_EVENT_LIMIT = 1000;
@@ -69,6 +71,12 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
 
   const app = new Hono();
 
+  // Minimal in-memory counters → /api/metrics (Prometheus text; no remote push).
+  const counters = new Map<string, number>();
+  const bump = (key: string): void => {
+    counters.set(key, (counters.get(key) ?? 0) + 1);
+  };
+
   app.use(
     "/api/*",
     cors({
@@ -79,6 +87,29 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
       allowHeaders: ["Content-Type"],
     }),
   );
+
+  // DESIGN-0021 §Observability: one structured log line per API request
+  // (timestamp, method, route, status, duration, actor) + a request counter.
+  // Human-readable by default; `--log-json` emits JSONL. Read routes get the
+  // same treatment, so a slow GET shows up like a slow mutation.
+  app.use("/api/*", async (c, next) => {
+    const startedAt = Date.now();
+    await next();
+    const durationMs = Date.now() - startedAt;
+    const route = new URL(c.req.url).pathname;
+    const status = c.res.status;
+    const actor = c.req.header("origin") !== undefined ? "ui" : "cli";
+    bump(`http_requests_total{route="${route}",status="${status}"}`);
+    if (options?.logJson === true) {
+      process.stderr.write(
+        JSON.stringify({ ts: new Date().toISOString(), method: c.req.method, route, status, durationMs, actor }) + "\n",
+      );
+    } else {
+      process.stderr.write(
+        `${new Date().toISOString()} ${c.req.method} ${route} ${status} ${durationMs}ms ${actor}\n`,
+      );
+    }
+  });
 
   app.get("/api/health", (c) =>
     c.json({ ok: true, version: SIVRU_OBSERVE_VERSION, writable: options?.writable === true }),
@@ -459,13 +490,7 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
 
   // ----- /api/blocks + /api/feedback (DESIGN-0021) -----
   // Slot 1: read-only graph + triage + SSE. Slot 2: mutation routes behind the
-  // --writable gate + hono/csrf. A minimal in-memory counter set feeds
-  // /api/metrics (Prometheus text; no remote push).
-  const counters = new Map<string, number>();
-  const bump = (key: string): void => {
-    counters.set(key, (counters.get(key) ?? 0) + 1);
-  };
-
+  // --writable gate + hono/csrf.
   app.get("/api/metrics", (c) => {
     const lines = [
       "# sivru observe metrics (DESIGN-0021)",

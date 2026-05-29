@@ -18,8 +18,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   aggregateReplay,
+  auditRetentionDays,
   createObserveServer,
   listSessions,
+  loadObserveConfig,
   migrateLegacyAcknowledgments,
   readSession,
   replaySession,
@@ -44,6 +46,7 @@ type ServerArgs = {
   host: string;
   noUi: boolean;
   writable: boolean;
+  logJson: boolean;
 };
 
 function isLoopback(host: string): boolean {
@@ -55,6 +58,7 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
   let host = "127.0.0.1";
   let noUi = false;
   let writable = false;
+  let logJson = false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === undefined) continue;
@@ -62,6 +66,8 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
       noUi = true;
     } else if (arg === "--writable") {
       writable = true;
+    } else if (arg === "--log-json") {
+      logJson = true;
     } else if (arg === "--port" || arg === "-p") {
       const next = argv[++i];
       if (next === undefined) return { error: "--port requires a value" };
@@ -89,7 +95,7 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
       error: `writable mode does not support non-loopback binds (--host ${host}); remove --host or remove --writable`,
     };
   }
-  return { port, host, noUi, writable };
+  return { port, host, noUi, writable, logJson };
 }
 
 // Locate the static UI assets. Two paths:
@@ -118,6 +124,7 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
     port: parsed.port,
     host: parsed.host,
     writable: parsed.writable,
+    logJson: parsed.logJson,
     ...(uiDist !== null ? { uiDistDir: uiDist } : {}),
   });
 
@@ -126,7 +133,7 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
     // Boot housekeeping on the cwd repo (the common single-repo case): sweep
     // stale audit files + migrate any legacy block.json acknowledged[].
     const cwd = process.cwd();
-    void sweepAuditRetention(cwd).catch(() => {});
+    void sweepAuditRetention(cwd, auditRetentionDays(loadObserveConfig(cwd))).catch(() => {});
     void migrateLegacyAcknowledgments(cwd, new Date().toISOString())
       .then((n) => {
         if (n > 0) {

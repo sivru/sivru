@@ -10,7 +10,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { createObserveApp } from "./app.js";
-import { _internal, isWatchNoise, resolveFileWithinRoot } from "./blocks.js";
+import { _internal, buildBlocksResponse, isWatchNoise, resolveFileWithinRoot } from "./blocks.js";
+import { acknowledgeDiagnostic, editBlock } from "../handlers/block/index.js";
 
 // A reciprocal pair (serviceA <-> helperB) plus an asymmetric edge
 // (serviceC -> helperB, no back-reference) so the graph emits a
@@ -390,6 +391,58 @@ export function thing() {}
     expect(text).toContain("sivru_observe_writable_mode 1");
     const roRes = await ro.fetch(new Request("http://127.0.0.1/api/metrics"));
     expect(await roRes.text()).toContain("sivru_observe_writable_mode 0");
+  });
+});
+
+describe("acknowledgment suppression (DESIGN-0021 content-hash invalidation)", () => {
+  let root: string;
+  const ctx = () => ({ rootPath: root, actor: "ui" as const, writable: true });
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(homedir(), ".sivru-blocks-ack-"));
+    await writeFile(join(root, "a.ts"), FILE_A); // serviceA -> helperB (reciprocal)
+    await writeFile(join(root, "b.ts"), FILE_B); // helperB -> serviceA
+    await writeFile(join(root, "c.ts"), FILE_C); // serviceC -> helperB (asymmetric → E234)
+  });
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("suppresses an acknowledged finding, then re-fires it after the block changes", async () => {
+    // Baseline: the E234 on serviceC is present.
+    const before = await buildBlocksResponse(root);
+    const e234 = before.diagnostics.find(
+      (d) => d.code === "SIVRU-E234" && d.location?.filePath.endsWith("c.ts"),
+    );
+    expect(e234).toBeDefined();
+    const cFile = e234!.location!.filePath;
+
+    // Acknowledge it (server computes the current content hash).
+    const ack = await acknowledgeDiagnostic(ctx(), {
+      code: "SIVRU-E234",
+      filePath: cFile,
+      symbolName: "serviceC",
+    });
+    expect(ack.ok).toBe(true);
+
+    // Now it's suppressed from the inbox.
+    const after = await buildBlocksResponse(root);
+    expect(after.diagnostics.some((d) => d.code === "SIVRU-E234" && d.location?.filePath === cFile)).toBe(false);
+
+    // Change the block (edit bumps content → hash differs) → finding re-fires with a note.
+    const edit = await editBlock(ctx(), cFile, "serviceC", {
+      schema: 1,
+      role: "service",
+      responsibility: "CHANGED responsibility text",
+      collaborators: ["helperB"],
+      maturity: "experimental",
+    });
+    expect(edit.ok).toBe(true);
+
+    const refired = await buildBlocksResponse(root);
+    const back = refired.diagnostics.find((d) => d.code === "SIVRU-E234" && d.location?.filePath === cFile);
+    expect(back).toBeDefined();
+    expect(back!.message).toContain("previously acknowledged");
   });
 });
 

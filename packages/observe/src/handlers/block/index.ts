@@ -229,17 +229,35 @@ export async function editBlock(
 // Feedback + acknowledgment.
 // ---------------------------------------------------------------------------
 
-/** Authoritative content-hash for a diagnostic's block (don't trust client). */
+/**
+ * Authoritative content-hash for a diagnostic's block (don't trust client).
+ * Returns "" when the block can't be resolved, and warns to stderr — an
+ * empty-hash acknowledgment can never match a real block on the suppression
+ * read path, so a silent "" would mean "Acknowledge clicked, nothing
+ * suppressed" with no signal.
+ */
 async function resolveContentHash(rootPath: string, ref: { filePath: string; symbolName: string }): Promise<string> {
   const abs = resolveFileWithinRoot(rootPath, ref.filePath);
-  if (abs === null) return "";
+  if (abs === null) {
+    process.stderr.write(`block-handler: content-hash unresolved — ${ref.filePath} escapes rootPath\n`);
+    return "";
+  }
   try {
     const extracted = await extractBlocksFromFiles([abs]);
     const match = extracted.find(
       (e) => (e.symbolName ?? MODULE_SYMBOL_NAME) === ref.symbolName && e.block !== null,
     );
-    return match?.block != null ? hashBlockContent(match.block) : "";
-  } catch {
+    if (match?.block == null) {
+      process.stderr.write(
+        `block-handler: content-hash unresolved — no parsed block ${ref.symbolName} in ${ref.filePath}\n`,
+      );
+      return "";
+    }
+    return hashBlockContent(match.block);
+  } catch (e) {
+    process.stderr.write(
+      `block-handler: content-hash failed for ${ref.symbolName} in ${ref.filePath}: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
     return "";
   }
 }

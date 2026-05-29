@@ -60,6 +60,7 @@ export async function createObserveServer(
     appOptions.jsonlOptions = options.jsonlOptions;
   if (options?.uiDistDir !== undefined) appOptions.uiDistDir = options.uiDistDir;
   if (options?.writable !== undefined) appOptions.writable = options.writable;
+  if (options?.logJson !== undefined) appOptions.logJson = options.logJson;
 
   const app = createObserveApp(appOptions);
 

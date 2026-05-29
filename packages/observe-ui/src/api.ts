@@ -245,6 +245,8 @@ export type BlocksResponse = {
   diagnostics: BlockDiagnostic[];
   /** Files that had a fence but failed to parse (drives the "partial" state). */
   filesSkipped: number;
+  /** Declarative UI defaults from .sivru/observe.json. */
+  ui: { defaultSubview: "issues" | "graph" };
 };
 
 export function fetchBlocks(rootPath: string): Promise<BlocksResponse> {
