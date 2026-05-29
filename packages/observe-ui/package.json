@@ -17,6 +17,7 @@
     "lint": "echo 'TODO: configure eslint in W7'"
   },
   "dependencies": {
+    "@sivru/search": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
