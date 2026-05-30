@@ -47,24 +47,37 @@ describe("computeForceLayout", () => {
     expect(Number.isFinite(p.x)).toBe(true);
   });
 
-  it("separates nodes so labels don't stack (no two nodes near-coincident)", () => {
-    // Many leaf nodes all linked to one hub — the case that used to crowd them
-    // along the canvas edge. Post-fix they're spread with real separation.
-    const hub = "hub";
-    const leaves = Array.from({ length: 12 }, (_, i) => `leaf${i}`);
-    const names = [hub, ...leaves];
-    const edges = leaves.map((l) => ({ from: hub, to: l }));
-    const pos = computeForceLayout(names, edges, { width: 1000, height: 700, iterations: 120 });
-    let minDist = Infinity;
+  it("no two node LABEL BOXES overlap, even in a dense multi-hub cluster", () => {
+    // The real failure: many long-named nodes on a few hubs land in a tight
+    // band; dots clear a center-distance check but the wide labels still
+    // overlap. (A prior fix asserted only center distance > 40 — false
+    // confidence; on the real 27-block graph it left ~7-11 label overlaps.)
+    // This asserts the property that matters: no pair overlaps on BOTH axes of
+    // a label-sized box.
+    const hubs = ["buildIndex", "walk", "extractBlocks"];
+    const leaves = Array.from({ length: 18 }, (_, i) => `lineFallbackChunks${i}`);
+    const names = [...hubs, ...leaves];
+    const edges = leaves.map((l, i) => ({ from: hubs[i % hubs.length]!, to: l }));
+    const pos = computeForceLayout(names, edges, { width: 1000, height: 700, iterations: 150 });
+
+    const BOX_W = 132;
+    const BOX_H = 26;
+    let overlaps = 0;
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         const a = pos.get(names[i]!)!;
         const b = pos.get(names[j]!)!;
-        minDist = Math.min(minDist, Math.hypot(a.x - b.x, a.y - b.y));
+        if (Math.abs(a.x - b.x) < BOX_W - 1 && Math.abs(a.y - b.y) < BOX_H - 1) overlaps++;
       }
     }
-    // No stacking: comfortably more than node radius + a little label room.
-    expect(minDist).toBeGreaterThan(40);
+    expect(overlaps).toBe(0);
+  });
+
+  it("truncateLabel shortens long names but keeps short ones intact", () => {
+    expect(truncateLabel("short")).toBe("short");
+    const long = truncateLabel("lineFallbackChunksHelper");
+    expect(long.length).toBeLessThanOrEqual(14);
+    expect(long.endsWith("…")).toBe(true);
   });
 });
 

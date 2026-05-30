@@ -23,6 +23,16 @@ const VIEW_W = 1000;
 const VIEW_H = 700;
 /** Inner margin the settled layout is normalized into (leaves room for labels). */
 const FIT_MARGIN = 48;
+/** Max rendered label chars; the full name stays in <title> + aria-label. */
+const LABEL_MAX = 14;
+/** Label collision box: wide on x (truncated label width), short on y (line). */
+const LABEL_BOX_W = 132;
+const LABEL_BOX_H = 26;
+
+/** Truncate a long symbol name for the on-canvas label (full name in tooltip). */
+export function truncateLabel(name: string): string {
+  return name.length > LABEL_MAX ? name.slice(0, LABEL_MAX - 1) + "…" : name;
+}
 
 /**
  * Deterministic Fruchterman-Reingold layout. Returns a name→position map.
