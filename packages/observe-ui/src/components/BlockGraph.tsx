@@ -116,40 +116,53 @@ export function computeForceLayout(
   }
 
   // Spread the settled cloud to fill the canvas (no node pinned to an edge),
-  // then enforce a minimum center-to-center distance so labels have room.
+  // then separate nodes as label-sized boxes so their (wide) labels don't overlap.
   normalizeToFit(pos, nodeNames, W, H, FIT_MARGIN);
   separateNodes(pos, nodeNames, W, H);
   return pos;
 }
 
-/** Deterministic min-separation passes so node labels don't stack. */
+/**
+ * Deterministic separation so node LABELS (not just dots) don't collide. A
+ * label sits to the right of its node and is wide, so two nodes that are close
+ * horizontally but offset vertically still overlap their text. We model each
+ * node as a label-sized box and resolve overlaps with axis-aware pushes (push
+ * along the axis of least overlap, like 2D AABB separation): the required gap
+ * is large on x (label width) and small on y (line height). A plain
+ * center-distance min-sep does NOT cover this — labels are wider than any
+ * reasonable circular spacing.
+ */
 function separateNodes(pos: Map<string, Point>, nodeNames: readonly string[], W: number, H: number): void {
   const n = nodeNames.length;
-  const minSep = Math.max(64, Math.min(W, H) / 9);
-  for (let pass = 0; pass < 16; pass++) {
+  for (let pass = 0; pass < 40; pass++) {
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const a = pos.get(nodeNames[i]!)!;
         const b = pos.get(nodeNames[j]!)!;
         const dx = a.x - b.x;
         const dy = a.y - b.y;
-        const dist = Math.hypot(dx, dy) || 0.01;
-        if (dist >= minSep) continue;
-        const push = (minSep - dist) / 2;
-        const ux = dx / dist;
-        const uy = dy / dist;
-        a.x += ux * push;
-        a.y += uy * push;
-        b.x -= ux * push;
-        b.y -= uy * push;
+        const ox = LABEL_BOX_W - Math.abs(dx); // overlap on x
+        const oy = LABEL_BOX_H - Math.abs(dy); // overlap on y
+        if (ox <= 0 || oy <= 0) continue; // boxes don't intersect
+        if (ox < oy) {
+          const push = ox / 2 + 0.5;
+          const s = dx >= 0 ? 1 : -1;
+          a.x += s * push;
+          b.x -= s * push;
+        } else {
+          const push = oy / 2 + 0.5;
+          const s = dy >= 0 ? 1 : -1;
+          a.y += s * push;
+          b.y -= s * push;
+        }
       }
     }
-  }
-  // Final clamp keeps everything in-bounds after separation.
-  for (const nm of nodeNames) {
-    const p = pos.get(nm)!;
-    p.x = Math.max(FIT_MARGIN, Math.min(W - FIT_MARGIN, p.x));
-    p.y = Math.max(FIT_MARGIN, Math.min(H - FIT_MARGIN, p.y));
+    // Keep everything in-bounds each pass so pushes don't march off-canvas.
+    for (const nm of nodeNames) {
+      const p = pos.get(nm)!;
+      p.x = Math.max(FIT_MARGIN, Math.min(W - FIT_MARGIN, p.x));
+      p.y = Math.max(FIT_MARGIN, Math.min(H - FIT_MARGIN, p.y));
+    }
   }
 }
 

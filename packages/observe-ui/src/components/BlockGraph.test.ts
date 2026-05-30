@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { classifyEdge, computeForceLayout, nodeSeverity } from "./BlockGraph";
+import { classifyEdge, computeForceLayout, nodeSeverity, truncateLabel } from "./BlockGraph";
 import type { BlockDiagnostic } from "../api";
 
 const EDGES = [
