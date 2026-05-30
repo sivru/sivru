@@ -33,11 +33,11 @@ import type {
  * collaborators: [extractBlocks, loadBlockConfig]
  * invariants:
  *   - rule: "schema:1 is strict-rejected for any other value at v0.6 (SIVRU-E214)"
- *     enforced-by: null
+ *     enforced-by: packages/search/src/block/validate.test.ts::SIVRU-E214 fires on schema != 1
  *   - rule: "maturityValues is override-replaces-default; the user has to re-list defaults to extend them (DESIGN-0016 E4)"
- *     enforced-by: null
+ *     enforced-by: packages/search/src/block/validate.test.ts::SIVRU-E213 honors overridden maturityValues (replace, not extend)
  *   - rule: "the 100-line runaway ceiling (SIVRU-E212) is hardcoded; only the 25-line warning (SIVRU-E211) is configurable via maxLines"
- *     enforced-by: null
+ *     enforced-by: packages/search/src/block/validate.test.ts::SIVRU-E212 errors on block exceeding the hardcoded runaway ceiling
  * decisions:
  *   - chose: warning for SIVRU-E210 decision-no-revisit rather than error
  *     because: a decision without a revisit-if is a smell but not a build break; v0.7 drift detector will use the signal
