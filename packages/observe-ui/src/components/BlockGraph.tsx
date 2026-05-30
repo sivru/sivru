@@ -411,6 +411,7 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
                 className={`${fill} ${isSel ? "stroke-sivru-amber" : "stroke-sivru-border"}`}
                 strokeWidth={isSel ? 3 : 1.5}
               />
+              <title>{n.name}</title>
               <text
                 x={12}
                 y={4}
@@ -425,7 +426,7 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
                   strokeLinejoin: "round",
                 }}
               >
-                {n.name}
+                {truncateLabel(n.name)}
               </text>
             </g>
           );
