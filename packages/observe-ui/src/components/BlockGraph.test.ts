@@ -46,6 +46,26 @@ describe("computeForceLayout", () => {
     const p = one.get("solo")!;
     expect(Number.isFinite(p.x)).toBe(true);
   });
+
+  it("separates nodes so labels don't stack (no two nodes near-coincident)", () => {
+    // Many leaf nodes all linked to one hub — the case that used to crowd them
+    // along the canvas edge. Post-fix they're spread with real separation.
+    const hub = "hub";
+    const leaves = Array.from({ length: 12 }, (_, i) => `leaf${i}`);
+    const names = [hub, ...leaves];
+    const edges = leaves.map((l) => ({ from: hub, to: l }));
+    const pos = computeForceLayout(names, edges, { width: 1000, height: 700, iterations: 120 });
+    let minDist = Infinity;
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const a = pos.get(names[i]!)!;
+        const b = pos.get(names[j]!)!;
+        minDist = Math.min(minDist, Math.hypot(a.x - b.x, a.y - b.y));
+      }
+    }
+    // No stacking: comfortably more than node radius + a little label room.
+    expect(minDist).toBeGreaterThan(40);
+  });
 });
 
 describe("classifyEdge", () => {

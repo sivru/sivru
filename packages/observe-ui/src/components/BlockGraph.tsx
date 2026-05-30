@@ -21,6 +21,8 @@ export type Point = { x: number; y: number };
 
 const VIEW_W = 1000;
 const VIEW_H = 700;
+/** Inner margin the settled layout is normalized into (leaves room for labels). */
+const FIT_MARGIN = 48;
 
 /**
  * Deterministic Fruchterman-Reingold layout. Returns a name→position map.
@@ -96,22 +98,90 @@ export function computeForceLayout(
       db.y += uy * att;
     }
 
-    // Apply displacement (temperature-capped) + gentle center gravity + clamp.
+    // Apply displacement (temperature-capped) + gentle center gravity.
+    // NOTE: no per-iteration edge clamp here. Clamping each step flattens
+    // low-degree/leaf nodes against the canvas edge — the cause of the
+    // label-crowding seen at ~27 nodes. We let the sim settle freely, then
+    // separate + normalize-to-fit once at the end.
     for (const nm of nodeNames) {
       const d = disp.get(nm)!;
       const p = pos.get(nm)!;
       const dist = Math.hypot(d.x, d.y) || 0.01;
-      let nx = p.x + (d.x / dist) * Math.min(dist, temp);
-      let ny = p.y + (d.y / dist) * Math.min(dist, temp);
-      nx += (cx - nx) * 0.01;
-      ny += (cy - ny) * 0.01;
-      const m = 28;
-      p.x = Math.max(m, Math.min(W - m, nx));
-      p.y = Math.max(m, Math.min(H - m, ny));
+      p.x += (d.x / dist) * Math.min(dist, temp);
+      p.y += (d.y / dist) * Math.min(dist, temp);
+      p.x += (cx - p.x) * 0.02;
+      p.y += (cy - p.y) * 0.02;
     }
     temp = Math.max(0, temp - cool);
   }
+
+  // Spread the settled cloud to fill the canvas (no node pinned to an edge),
+  // then enforce a minimum center-to-center distance so labels have room.
+  normalizeToFit(pos, nodeNames, W, H, FIT_MARGIN);
+  separateNodes(pos, nodeNames, W, H);
   return pos;
+}
+
+/** Deterministic min-separation passes so node labels don't stack. */
+function separateNodes(pos: Map<string, Point>, nodeNames: readonly string[], W: number, H: number): void {
+  const n = nodeNames.length;
+  const minSep = Math.max(64, Math.min(W, H) / 9);
+  for (let pass = 0; pass < 16; pass++) {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = pos.get(nodeNames[i]!)!;
+        const b = pos.get(nodeNames[j]!)!;
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dist = Math.hypot(dx, dy) || 0.01;
+        if (dist >= minSep) continue;
+        const push = (minSep - dist) / 2;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        a.x += ux * push;
+        a.y += uy * push;
+        b.x -= ux * push;
+        b.y -= uy * push;
+      }
+    }
+  }
+  // Final clamp keeps everything in-bounds after separation.
+  for (const nm of nodeNames) {
+    const p = pos.get(nm)!;
+    p.x = Math.max(FIT_MARGIN, Math.min(W - FIT_MARGIN, p.x));
+    p.y = Math.max(FIT_MARGIN, Math.min(H - FIT_MARGIN, p.y));
+  }
+}
+
+/** Map the settled bounding box uniformly into [margin, W-margin] × [margin, H-margin]. */
+function normalizeToFit(
+  pos: Map<string, Point>,
+  nodeNames: readonly string[],
+  W: number,
+  H: number,
+  margin: number,
+): void {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const nm of nodeNames) {
+    const p = pos.get(nm)!;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const s = Math.min((W - 2 * margin) / spanX, (H - 2 * margin) / spanY); // uniform
+  const offX = margin + ((W - 2 * margin) - spanX * s) / 2;
+  const offY = margin + ((H - 2 * margin) - spanY * s) / 2;
+  for (const nm of nodeNames) {
+    const p = pos.get(nm)!;
+    p.x = offX + (p.x - minX) * s;
+    p.y = offY + (p.y - minY) * s;
+  }
 }
 
 export type EdgeKind = "reciprocal" | "asymmetric" | "broken" | "rename-suspect";
@@ -332,7 +402,15 @@ export function BlockGraph({ nodes, edges, selected, onSelect }: BlockGraphProps
                 x={12}
                 y={4}
                 className="fill-sivru-text font-mono"
-                style={{ fontSize: 11 }}
+                // paint-order:stroke draws a bg-colored halo behind the glyphs so
+                // a label stays readable where it overlaps an edge or another label.
+                style={{
+                  fontSize: 11,
+                  paintOrder: "stroke",
+                  stroke: "#0f1115",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
+                }}
               >
                 {n.name}
               </text>
