@@ -22,8 +22,11 @@
 // once the annotated table proves out the data shape.
 
 import { useEffect, useRef, useState } from "react";
-import { fetchSessionReplay } from "../api";
+import { fetchBlocks, fetchEvents, fetchSessionReplay } from "../api";
+import type { BlockNodeDetail } from "../api";
 import type { ReplayedEvent, SessionReplay, Session } from "../types";
+import { blocksTouched, editedFilePaths } from "../blocks-touched";
+import { severityDotClass } from "../severity";
 import { formatTokenCount } from "../turns";
 import { formatTimestamp, truncate } from "../util";
 
@@ -220,6 +223,9 @@ export function ReplayView({ selectedSession }: Props): JSX.Element | null {
       {/* Scoreboard — 4-card metric strip */}
       <ReplayScoreboard replay={replay} turnCount={turnCount} />
 
+      {/* Blocks touched in this session (DESIGN-0021 slot 1) */}
+      <BlocksTouchedLane session={selectedSession} />
+
       {/* Annotated event table */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {visibleEvents.length === 0 ? (
@@ -362,6 +368,65 @@ function ReplayEventTable({
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ---- blocks touched lane (DESIGN-0021 slot 1) ----------------------------
+
+/**
+ * Surfaces the @sivru blocks that sit on files the agent edited this session.
+ * Self-fetches the session's events (for edited file paths) + the repo's block
+ * graph, cross-references them, and renders a compact lane. Silent when the
+ * repo has no blocks or the block graph isn't reachable (e.g. projectRoot
+ * outside the safe surface).
+ */
+function BlocksTouchedLane({ session }: { session: Session }): JSX.Element | null {
+  const [touched, setTouched] = useState<BlockNodeDetail[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTouched(null);
+    const root = session.projectRoot;
+    if (root.length === 0) return;
+    void Promise.all([fetchEvents(session.id, 5000), fetchBlocks(root)])
+      .then(([events, blocks]) => {
+        if (cancelled) return;
+        const edited = editedFilePaths(events.events);
+        setTouched(blocksTouched(blocks.nodes, edited));
+      })
+      .catch(() => {
+        if (!cancelled) setTouched([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session.id, session.projectRoot]);
+
+  if (touched === null || touched.length === 0) return null;
+
+  return (
+    <div className="shrink-0 border-b border-sivru-border bg-sivru-panel/40 px-4 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-sivru-mute">
+        blocks touched ({touched.length})
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {touched.map((n) => {
+          const hasError = n.diagnostics.some((d) => d.severity === "error");
+          const hasWarn = n.diagnostics.some((d) => d.severity === "warning");
+          const dot = severityDotClass(hasError ? "error" : hasWarn ? "warning" : "info");
+          return (
+            <span
+              key={`${n.filePath}::${n.range.startLine}`}
+              className="flex items-center gap-1 rounded-sivru border border-sivru-border bg-sivru-bg px-1.5 py-0.5 font-mono text-[11px] text-sivru-text"
+              title={`${n.filePath}:${n.range.startLine}${n.diagnostics.length > 0 ? ` · ${n.diagnostics.length} diagnostics` : ""}`}
+            >
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+              {n.name}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

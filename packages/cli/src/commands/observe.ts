@@ -18,10 +18,14 @@ import { fileURLToPath } from "node:url";
 
 import {
   aggregateReplay,
+  auditRetentionDays,
   createObserveServer,
   listSessions,
+  loadObserveConfig,
+  migrateLegacyAcknowledgments,
   readSession,
   replaySession,
+  sweepAuditRetention,
 } from "@sivru/observe";
 import type { ReplayedEvent, ReplayResult, AggregateReport } from "@sivru/observe";
 
@@ -41,17 +45,29 @@ type ServerArgs = {
   port: number;
   host: string;
   noUi: boolean;
+  writable: boolean;
+  logJson: boolean;
 };
+
+function isLoopback(host: string): boolean {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
 
 function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string } {
   let port = DEFAULT_PORT;
   let host = "127.0.0.1";
   let noUi = false;
+  let writable = false;
+  let logJson = false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === undefined) continue;
     if (arg === "--no-ui") {
       noUi = true;
+    } else if (arg === "--writable") {
+      writable = true;
+    } else if (arg === "--log-json") {
+      logJson = true;
     } else if (arg === "--port" || arg === "-p") {
       const next = argv[++i];
       if (next === undefined) return { error: "--port requires a value" };
@@ -73,7 +89,13 @@ function parseServerArgs(argv: readonly string[]): ServerArgs | { error: string 
       return { error: `unknown flag: ${arg}` };
     }
   }
-  return { port, host, noUi };
+  // DESIGN-0021 slot 2: writable mode must bind loopback only.
+  if (writable && !isLoopback(host)) {
+    return {
+      error: `writable mode does not support non-loopback binds (--host ${host}); remove --host or remove --writable`,
+    };
+  }
+  return { port, host, noUi, writable, logJson };
 }
 
 // Locate the static UI assets. Two paths:
@@ -101,8 +123,34 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
   const server = await createObserveServer({
     port: parsed.port,
     host: parsed.host,
+    writable: parsed.writable,
+    logJson: parsed.logJson,
     ...(uiDist !== null ? { uiDistDir: uiDist } : {}),
   });
+
+  // DESIGN-0021 slot 2: make the trust boundary loud on boot.
+  if (parsed.writable) {
+    // Boot housekeeping on the cwd repo (the common single-repo case): sweep
+    // stale audit files + migrate any legacy block.json acknowledged[].
+    const cwd = process.cwd();
+    void sweepAuditRetention(cwd, auditRetentionDays(loadObserveConfig(cwd))).catch(() => {});
+    void migrateLegacyAcknowledgments(cwd, new Date().toISOString())
+      .then((n) => {
+        if (n > 0) {
+          process.stderr.write(
+            `sivru observe — migrated ${n} legacy acknowledgment(s) from .sivru/block.json ` +
+              "to .sivru/acknowledgments.jsonl; you can remove the now-empty `acknowledged` field.\n",
+          );
+        }
+      })
+      .catch(() => {});
+    process.stderr.write(
+      "sivru observe — WRITABLE: the UI + MCP can modify .sivru/ and source files. " +
+        "Writes are logged to .sivru/audit/ (retention: 7 days).\n",
+    );
+  } else {
+    process.stderr.write("sivru observe — READ-ONLY mode (pass --writable to enable edits).\n");
+  }
 
   process.stdout.write(`sivru observe — listening on ${server.url}\n`);
   if (uiDist !== null) {
@@ -465,6 +513,15 @@ async function runObserveInit(argv: readonly string[]): Promise<number> {
     const result = await writeSubagentFile(cwd, dryRun);
     lines.push(...result);
   }
+
+  // DESIGN-0021 slot 2: document the .sivru/ git-tracking policy so teams decide
+  // per-repo. Recommended: commit acknowledgments (team-shared decisions),
+  // ignore feedback (private label data) unless you want shared tuning.
+  lines.push("");
+  lines.push("  block authoring (sivru observe --writable):");
+  lines.push("    .sivru/acknowledgments.jsonl — recommend COMMIT (team-shared diagnostic decisions)");
+  lines.push("    .sivru/feedback.jsonl        — recommend IGNORE by default (private tuning labels)");
+  lines.push("    .sivru/audit/                — recommend IGNORE (local write log, 7-day retention)");
 
   lines.push("");
   if (dryRun) {

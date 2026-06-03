@@ -122,7 +122,7 @@ const USAGE = [
  * responsibility: drive the sivru explain CLI subcommand — parse argv, build the symbol index, assemble the artifact, render as markdown or JSON
  * collaborators: [assembleArtifact, parsePathAndSymbol, loadOrBuildSymbolIndex, renderArtifactMarkdown]
  * invariants:
- *   - exit code reflects the failure class: 1 for an invalid argument or runtime error, 0 on success
+ *   - "exit code reflects the failure class: 1 for an invalid argument or runtime error, 0 on success"
  *   - the artifact is descriptive only — explain never prescribes a fix or rewrites code
  * decisions:
  *   - chose: uncapped CLI output (markdown and --json return the full lists)

@@ -22,6 +22,7 @@ import { ConnectionBanner } from "./components/ConnectionBanner";
 import { SavingsFooter } from "./components/SavingsFooter";
 import { BenchView } from "./components/BenchView";
 import { CheckupView } from "./components/CheckupView";
+import { BlocksView } from "./components/BlocksView";
 import { CostsView } from "./components/CostsView";
 import { ReplayView } from "./components/ReplayView";
 import { SetupChecklist } from "./components/SetupChecklist";
@@ -31,7 +32,7 @@ import { computeSearchProvenance } from "./search-provenance";
 import type { Session, SessionSavings, SivruEvent } from "./types";
 import { isLive, isSivruSearchTool } from "./util";
 
-type View = "sessions" | "checkup" | "replay" | "costs" | "bench";
+type View = "sessions" | "checkup" | "blocks" | "replay" | "costs" | "bench";
 
 type LoadState<T> =
   | { status: "idle" }
@@ -505,7 +506,7 @@ export function App(): JSX.Element {
           <span>observe</span>
         </div>
         <nav className="flex gap-1 text-xs">
-          {(["sessions", "checkup", "replay", "costs", "bench"] as const).map((v) => {
+          {(["sessions", "checkup", "blocks", "replay", "costs", "bench"] as const).map((v) => {
             const active = view === v;
             return (
               <button
@@ -536,7 +537,15 @@ export function App(): JSX.Element {
       {view === "bench" ? (
         <BenchView />
       ) : view === "checkup" ? (
-        <CheckupView path={resolveCheckupPath(selectedProject, sessionsState)} />
+        <CheckupView
+          path={resolveCheckupPath(selectedProject, sessionsState)}
+          onOpenBlocks={() => setView("blocks")}
+        />
+      ) : view === "blocks" ? (
+        <BlocksView
+          path={resolveCheckupPath(selectedProject, sessionsState)}
+          writable={health?.writable === true}
+        />
       ) : view === "costs" ? (
         <main className="min-h-0 flex-1">
           <CostsView

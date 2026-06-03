@@ -5,8 +5,19 @@ import type {
   SessionSavings,
   SivruEvent,
 } from "./types";
+// DESIGN-0021: block types come straight from @sivru/search (the single type
+// source of truth). These are `import type` only — erased at build, so the UI
+// bundle never pulls in the search runtime.
+import type {
+  BlockDiagnostic,
+  GraphEdge,
+  SivruBlockJSON,
+  SourceRange,
+} from "@sivru/search";
 
-export type HealthResponse = { ok: true; version: string };
+export type { BlockDiagnostic, GraphEdge, SivruBlockJSON, SourceRange };
+
+export type HealthResponse = { ok: true; version: string; writable?: boolean };
 export type SessionsResponse = { sessions: Session[] };
 export type EventsResponse = { sessionId: string; events: SivruEvent[] };
 
@@ -202,6 +213,164 @@ export function subscribeToEvents(
 
   return {
     close: () => {
+      es.close();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// /api/blocks (DESIGN-0021 slot 1). The envelope (BlocksResponse /
+// BlockNodeDetail) is observe-specific so it's mirrored here, same as
+// CheckupReport above. The nested shapes (BlockDiagnostic / GraphEdge /
+// SivruBlockJSON / SourceRange) ARE the @sivru/search types, re-exported above.
+// ---------------------------------------------------------------------------
+
+export type BlockNodeDetail = {
+  name: string;
+  filePath: string;
+  kind: "symbol" | "module";
+  range: SourceRange;
+  collaborators: string[];
+  block: SivruBlockJSON | null;
+  diagnostics: BlockDiagnostic[];
+  /** Source file mtime (detail route only) — the editor's 409 save baseline. */
+  mtimeMs?: number;
+};
+
+export type BlocksResponse = {
+  rootPath: string;
+  ranAt: string;
+  nodes: BlockNodeDetail[];
+  edges: GraphEdge[];
+  diagnostics: BlockDiagnostic[];
+  /** Files that had a fence but failed to parse (drives the "partial" state). */
+  filesSkipped: number;
+  /** Declarative UI defaults from .sivru/observe.json. */
+  ui: { defaultSubview: "issues" | "graph" };
+};
+
+export function fetchBlocks(rootPath: string): Promise<BlocksResponse> {
+  return getJson<BlocksResponse>(`/api/blocks?rootPath=${encodeURIComponent(rootPath)}`);
+}
+
+export function fetchBlockDetail(
+  rootPath: string,
+  filePath: string,
+  symbol: string,
+): Promise<BlockNodeDetail> {
+  return getJson<BlockNodeDetail>(
+    `/api/blocks/${encodeURIComponent(filePath)}/${encodeURIComponent(symbol)}?rootPath=${encodeURIComponent(rootPath)}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Slot-2 write helpers. The browser sets the Origin header automatically, which
+// the server's localhost-Origin guard + hono/csrf check. Each returns the
+// shared envelope (mirrors @sivru/observe's HandlerResult).
+// ---------------------------------------------------------------------------
+
+export type BlockMutationResult =
+  | { ok: true; data: unknown }
+  | { ok: false; code: string; message: string; retryable: boolean; data?: unknown };
+
+export type FeedbackKind = "acknowledge" | "false-positive" | "suggest";
+export type DiagnosticRefInput = { code: string; filePath: string; symbolName: string };
+
+async function postJson(url: string, body: unknown): Promise<BlockMutationResult> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  try {
+    return (await res.json()) as BlockMutationResult;
+  } catch {
+    return { ok: false, code: "SIVRU-PARSE", message: `bad response (${res.status})`, retryable: false };
+  }
+}
+
+export function postAutofix(rootPath: string, filePath: string, diagnosticCode?: string): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/autofix", { rootPath, filePath, diagnosticCode });
+}
+
+export function postBlockEdit(
+  rootPath: string,
+  filePath: string,
+  symbol: string,
+  // Server-shaped SivruBlock (hyphenated YAML keys); the editor builds it.
+  block: unknown,
+  expectedMtimeMs?: number,
+): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/edit", { rootPath, filePath, symbol, block, expectedMtimeMs });
+}
+
+export function postAcknowledge(
+  rootPath: string,
+  diagnostic: DiagnosticRefInput,
+  note?: string,
+): Promise<BlockMutationResult> {
+  return postJson("/api/blocks/acknowledge", { rootPath, diagnostic, note });
+}
+
+export function postFeedback(
+  rootPath: string,
+  kind: FeedbackKind,
+  diagnostic: DiagnosticRefInput,
+  label: string,
+  note?: string,
+): Promise<BlockMutationResult> {
+  return postJson("/api/feedback", { rootPath, kind, diagnostic, label, note });
+}
+
+export type BlockUpdatedEvent = { filePath: string; ts: string };
+
+/**
+ * Open the blocks SSE channel for `rootPath`. `onUpdated` fires when a file
+ * under rootPath changed (e.g. a CLI `--autofix` write); the caller refetches
+ * the graph. The server emits both `block.updated` and `block.graph.rebuilt`
+ * for a change — they're coalesced here within a tick into a single
+ * `onUpdated` so the client refetches once, not twice. `onError` fires on
+ * connection trouble so the UI can show the SSE-disconnected state.
+ */
+export function subscribeToBlocks(
+  rootPath: string,
+  onUpdated: (ev: BlockUpdatedEvent) => void,
+  onError?: (err: Event) => void,
+): EventStreamHandle {
+  const url = `/api/blocks/stream?rootPath=${encodeURIComponent(rootPath)}`;
+  const es = new EventSource(url);
+
+  // Coalesce a block.updated + block.graph.rebuilt burst for the same change
+  // into one onUpdated call.
+  let pending: BlockUpdatedEvent | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const flush = (): void => {
+    timer = null;
+    if (pending !== null) {
+      const ev = pending;
+      pending = null;
+      onUpdated(ev);
+    }
+  };
+  const handle = (ev: MessageEvent<string>): void => {
+    try {
+      pending = JSON.parse(ev.data) as BlockUpdatedEvent;
+      if (timer === null) timer = setTimeout(flush, 0);
+    } catch {
+      if (onError !== undefined) onError(ev);
+    }
+  };
+  es.addEventListener("block.updated", handle);
+  es.addEventListener("block.graph.rebuilt", handle);
+
+  if (onError !== undefined) {
+    es.onerror = (ev) => {
+      onError(ev);
+    };
+  }
+  return {
+    close: () => {
+      if (timer !== null) clearTimeout(timer);
       es.close();
     },
   };

@@ -18,6 +18,12 @@ module.exports = {
         // chip next to an interrupted-turn dot). Used for missed-opportunity
         // chips and interrupted-turn outcome dots.
         "sivru-warn": "#fbbf24",
+        // Error red (red-400). Added in DESIGN-0021 slot 1 for the Blocks
+        // tab: broken-collaborator graph edges and error-severity diagnostic
+        // dots. Distinct hue from sivru-warn so the graph's severity axis
+        // survives alongside the reciprocity dash-pattern axis (colorblind-
+        // safe: two independent encodings).
+        "sivru-error": "#f87171",
       },
       fontFamily: {
         sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],

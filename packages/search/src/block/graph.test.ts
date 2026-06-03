@@ -43,6 +43,20 @@ describe("computeBlockGraph", () => {
     expect(codes).toContain("SIVRU-E234");
   });
 
+  it("omits `extracted` by default but returns it under withExtracted", async () => {
+    writeFixture("A.ts", blockYaml("A", ["B"]));
+    writeFixture("B.ts", blockYaml("B", ["A"]));
+    const lean = await computeBlockGraph(tmpDir);
+    expect(lean.extracted).toBeUndefined();
+    const full = await computeBlockGraph(tmpDir, { withExtracted: true });
+    expect(Array.isArray(full.extracted)).toBe(true);
+    const names = full
+      .extracted!.filter((e) => e.block !== null)
+      .map((e) => e.symbolName)
+      .sort();
+    expect(names).toEqual(["A", "B"]);
+  });
+
   it("suppresses E234 for `allowedAsymmetric` entries", async () => {
     writeFixture("A.ts", blockYaml("A", ["B"]));
     writeFixture("B.ts", blockYaml("B", []));

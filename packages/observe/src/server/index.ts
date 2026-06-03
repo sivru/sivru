@@ -34,17 +34,33 @@ export type ObserveServer = {
 };
 
 /** Boot the Hono app on the configured host:port. Returns once the server is listening. */
+/** Loopback binds only — the writable footgun guard keys off this set. */
+function isLoopbackHost(host: string): boolean {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
+
 export async function createObserveServer(
   options?: ObserveServerOptions,
 ): Promise<ObserveServer> {
   const host = options?.host ?? "127.0.0.1";
   const requestedPort = options?.port ?? 0;
 
+  // DESIGN-0021 slot 2: writable mode must never bind to a non-loopback
+  // address. This makes "writable to the whole LAN" structurally impossible.
+  if (options?.writable === true && !isLoopbackHost(host)) {
+    throw new Error(
+      `writable mode does not support non-loopback binds (host=${host}); ` +
+        "remove --host or remove --writable",
+    );
+  }
+
   const appOptions: ObserveAppOptions = {};
   if (options?.source !== undefined) appOptions.source = options.source;
   if (options?.jsonlOptions !== undefined)
     appOptions.jsonlOptions = options.jsonlOptions;
   if (options?.uiDistDir !== undefined) appOptions.uiDistDir = options.uiDistDir;
+  if (options?.writable !== undefined) appOptions.writable = options.writable;
+  if (options?.logJson !== undefined) appOptions.logJson = options.logJson;
 
   const app = createObserveApp(appOptions);
 

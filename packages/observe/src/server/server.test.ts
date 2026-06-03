@@ -574,3 +574,28 @@ describe("@sivru/observe — HTTP server", () => {
     });
   });
 });
+
+describe("createObserveServer — writable boot guard (DESIGN-0021 slot 2)", () => {
+  it("errors when --writable is combined with a non-loopback host", async () => {
+    await expect(
+      createObserveServer({ writable: true, host: "0.0.0.0", port: 0 }),
+    ).rejects.toThrow(/non-loopback/);
+  });
+
+  it("boots writable on the default loopback bind", async () => {
+    const server = await createObserveServer({ writable: true, port: 0 });
+    try {
+      const res = await fetchSelf(server.url, "/api/health");
+      const body = (await res.json()) as { writable: boolean };
+      expect(body.writable).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+});
+
+async function fetchSelf(baseUrl: string, path: string): Promise<Response> {
+  // Local loopback request to our own listener — not egress (the egress test
+  // guards the data layer, not test files).
+  return fetch(`${baseUrl}${path}`);
+}

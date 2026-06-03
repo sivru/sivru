@@ -7,8 +7,33 @@
 
 import { describe, expect, it } from "vitest";
 
-import { groupFindings } from "./CheckupView";
-import type { CheckupReport } from "../api";
+import { countBlockDrift, groupFindings } from "./CheckupView";
+import type { BlockDiagnostic, CheckupReport } from "../api";
+
+describe("countBlockDrift (DESIGN-0021)", () => {
+  it("counts only the cross-block drift codes E233-E236", () => {
+    const diags: BlockDiagnostic[] = [
+      { code: "SIVRU-E233", severity: "warning", message: "stale" },
+      { code: "SIVRU-E234", severity: "warning", message: "asym" },
+      { code: "SIVRU-E234", severity: "warning", message: "asym2" },
+      { code: "SIVRU-E235", severity: "warning", message: "rename" },
+      { code: "SIVRU-E236", severity: "warning", message: "order" },
+      { code: "SIVRU-E217", severity: "error", message: "unrelated" },
+    ];
+    const c = countBlockDrift(diags);
+    expect(c).toEqual({
+      stale: 1,
+      asymmetric: 2,
+      renameSuspect: 1,
+      orderContradiction: 1,
+      total: 5,
+    });
+  });
+
+  it("is all-zero when there are no drift codes", () => {
+    expect(countBlockDrift([]).total).toBe(0);
+  });
+});
 
 function fakeReport(): CheckupReport {
   return {

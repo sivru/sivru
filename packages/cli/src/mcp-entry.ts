@@ -43,6 +43,15 @@ import type {
   SivruIndex,
 } from "@sivru/search";
 import { runCheckup, CheckupConfigError } from "@sivru/observe/coach";
+// DESIGN-0021 slot 2 — agent write surface. These are the SAME shared handlers
+// the HTTP mutation routes call (single source of truth).
+import {
+  acknowledgeDiagnostic,
+  appendFeedbackRecord,
+  applyAutofix,
+  readFeedbackRecords,
+} from "@sivru/observe";
+import type { HandlerContext, HandlerResult, FeedbackKind } from "@sivru/observe";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const SERVER_NAME = "sivru";
@@ -751,7 +760,142 @@ async function checkupTool(args: Record<string, unknown>): Promise<ToolResult> {
 // Server wiring — exported so tests can drive it over an in-memory transport.
 // ---------------------------------------------------------------------------
 
-export function createMcpServer(): Server {
+// ---------------------------------------------------------------------------
+// DESIGN-0021 slot 2 — agent write surface (4 tools). All route through the
+// shared @sivru/observe handlers, gated by `--writable` on `sivru mcp`.
+// ---------------------------------------------------------------------------
+
+const BLOCK_AUTOFIX_TOOL_NAME = "block_autofix";
+const BLOCK_ACKNOWLEDGE_TOOL_NAME = "block_acknowledge";
+const FEEDBACK_APPEND_TOOL_NAME = "feedback_append";
+const FEEDBACK_READ_TOOL_NAME = "feedback_read";
+
+const ROOT_PATH_PROP = {
+  rootPath: { type: "string", description: "Absolute path to the repo root." },
+} as const;
+const DIAGNOSTIC_PROP = {
+  diagnostic: {
+    type: "object",
+    properties: {
+      code: { type: "string" },
+      filePath: { type: "string" },
+      symbolName: { type: "string" },
+    },
+    required: ["code", "filePath", "symbolName"],
+  },
+} as const;
+
+const BLOCK_AUTOFIX_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    ...ROOT_PATH_PROP,
+    filePath: { type: "string", description: "Repo-relative or absolute file to autofix." },
+    diagnosticCode: { type: "string", description: "Optional SIVRU-EXXX that triggered the fix." },
+  },
+  required: ["rootPath", "filePath"],
+};
+const BLOCK_ACKNOWLEDGE_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: { ...ROOT_PATH_PROP, ...DIAGNOSTIC_PROP, note: { type: "string" } },
+  required: ["rootPath", "diagnostic"],
+};
+const FEEDBACK_APPEND_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    ...ROOT_PATH_PROP,
+    ...DIAGNOSTIC_PROP,
+    kind: { type: "string", enum: ["acknowledge", "false-positive", "suggest"] },
+    label: { type: "string" },
+    note: { type: "string" },
+  },
+  required: ["rootPath", "kind", "diagnostic", "label"],
+};
+const FEEDBACK_READ_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    ...ROOT_PATH_PROP,
+    kind: { type: "string", enum: ["acknowledge", "false-positive", "suggest"] },
+    code: { type: "string" },
+  },
+  required: ["rootPath"],
+};
+
+const BLOCK_WRITE_TOOL_DESCRIPTIONS: Record<string, string> = {
+  [BLOCK_AUTOFIX_TOOL_NAME]:
+    "Apply the @sivru YAML-trap autofixer (E237/E238) to a file. Requires the server started with --writable.",
+  [BLOCK_ACKNOWLEDGE_TOOL_NAME]:
+    "Record a diagnostic as intentional (acknowledgment). Requires --writable.",
+  [FEEDBACK_APPEND_TOOL_NAME]:
+    "Append a feedback record (acknowledge / false-positive / suggest). Requires --writable.",
+  [FEEDBACK_READ_TOOL_NAME]: "Read feedback records for a repo. Always allowed (no --writable needed).",
+};
+
+/** Render a HandlerResult as an MCP tool result (the structured envelope). */
+function mcpResult(r: HandlerResult<unknown>): ToolResult {
+  const text = JSON.stringify(r);
+  return r.ok ? ok(text) : fail(text);
+}
+
+function mcpCtx(args: Record<string, unknown>, writable: boolean): HandlerContext | null {
+  const raw = args["rootPath"];
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  return { rootPath: resolvePath(raw), actor: "mcp", writable };
+}
+
+async function blockAutofixTool(args: Record<string, unknown>, writable: boolean): Promise<ToolResult> {
+  const ctx = mcpCtx(args, writable);
+  if (ctx === null) return fail("block_autofix: rootPath is required");
+  const filePath = typeof args["filePath"] === "string" ? args["filePath"] : "";
+  if (filePath.length === 0) return fail("block_autofix: filePath is required");
+  const r = await applyAutofix(
+    ctx,
+    filePath,
+    typeof args["diagnosticCode"] === "string" ? args["diagnosticCode"] : undefined,
+  );
+  return mcpResult(r);
+}
+
+async function blockAcknowledgeTool(args: Record<string, unknown>, writable: boolean): Promise<ToolResult> {
+  const ctx = mcpCtx(args, writable);
+  if (ctx === null) return fail("block_acknowledge: rootPath is required");
+  const d = (args["diagnostic"] ?? {}) as Record<string, unknown>;
+  const r = await acknowledgeDiagnostic(
+    ctx,
+    { code: String(d["code"] ?? ""), filePath: String(d["filePath"] ?? ""), symbolName: String(d["symbolName"] ?? "") },
+    typeof args["note"] === "string" ? args["note"] : undefined,
+  );
+  return mcpResult(r);
+}
+
+async function feedbackAppendTool(args: Record<string, unknown>, writable: boolean): Promise<ToolResult> {
+  const ctx = mcpCtx(args, writable);
+  if (ctx === null) return fail("feedback_append: rootPath is required");
+  const d = (args["diagnostic"] ?? {}) as Record<string, unknown>;
+  const r = await appendFeedbackRecord(
+    ctx,
+    String(args["kind"] ?? "suggest") as FeedbackKind,
+    { code: String(d["code"] ?? ""), filePath: String(d["filePath"] ?? ""), symbolName: String(d["symbolName"] ?? "") },
+    String(args["label"] ?? ""),
+    typeof args["note"] === "string" ? args["note"] : undefined,
+  );
+  return mcpResult(r);
+}
+
+async function feedbackReadTool(args: Record<string, unknown>): Promise<ToolResult> {
+  // Reads are ungated — pass writable:false; readFeedbackRecords ignores it.
+  const ctx = mcpCtx(args, false);
+  if (ctx === null) return fail("feedback_read: rootPath is required");
+  const kind = typeof args["kind"] === "string" ? (args["kind"] as FeedbackKind) : undefined;
+  const code = typeof args["code"] === "string" ? args["code"] : undefined;
+  const r = await readFeedbackRecords(ctx, {
+    ...(kind !== undefined ? { kind } : {}),
+    ...(code !== undefined ? { code } : {}),
+  });
+  return mcpResult(r);
+}
+
+export function createMcpServer(opts?: { writable?: boolean }): Server {
+  const writable = opts?.writable === true;
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} } },
@@ -779,6 +923,26 @@ export function createMcpServer(): Server {
         description: CHECKUP_TOOL_DESCRIPTION,
         inputSchema: CHECKUP_INPUT_SCHEMA,
       },
+      {
+        name: BLOCK_AUTOFIX_TOOL_NAME,
+        description: BLOCK_WRITE_TOOL_DESCRIPTIONS[BLOCK_AUTOFIX_TOOL_NAME]!,
+        inputSchema: BLOCK_AUTOFIX_INPUT_SCHEMA,
+      },
+      {
+        name: BLOCK_ACKNOWLEDGE_TOOL_NAME,
+        description: BLOCK_WRITE_TOOL_DESCRIPTIONS[BLOCK_ACKNOWLEDGE_TOOL_NAME]!,
+        inputSchema: BLOCK_ACKNOWLEDGE_INPUT_SCHEMA,
+      },
+      {
+        name: FEEDBACK_APPEND_TOOL_NAME,
+        description: BLOCK_WRITE_TOOL_DESCRIPTIONS[FEEDBACK_APPEND_TOOL_NAME]!,
+        inputSchema: FEEDBACK_APPEND_INPUT_SCHEMA,
+      },
+      {
+        name: FEEDBACK_READ_TOOL_NAME,
+        description: BLOCK_WRITE_TOOL_DESCRIPTIONS[FEEDBACK_READ_TOOL_NAME]!,
+        inputSchema: FEEDBACK_READ_INPUT_SCHEMA,
+      },
     ],
   }));
 
@@ -794,6 +958,14 @@ export function createMcpServer(): Server {
           return await explainTool(args ?? {});
         case CHECKUP_TOOL_NAME:
           return await checkupTool(args ?? {});
+        case BLOCK_AUTOFIX_TOOL_NAME:
+          return await blockAutofixTool(args ?? {}, writable);
+        case BLOCK_ACKNOWLEDGE_TOOL_NAME:
+          return await blockAcknowledgeTool(args ?? {}, writable);
+        case FEEDBACK_APPEND_TOOL_NAME:
+          return await feedbackAppendTool(args ?? {}, writable);
+        case FEEDBACK_READ_TOOL_NAME:
+          return await feedbackReadTool(args ?? {});
         default:
           return fail(`unknown tool: ${name}`);
       }
@@ -811,8 +983,11 @@ export function createMcpServer(): Server {
  * Connect a server to the given transport and resolve when it closes.
  * Exported separately so tests can drive a non-stdio transport.
  */
-export async function runWithTransport(transport: Transport): Promise<number> {
-  const server = createMcpServer();
+export async function runWithTransport(
+  transport: Transport,
+  opts?: { writable?: boolean },
+): Promise<number> {
+  const server = createMcpServer(opts);
   const closed = new Promise<void>((resolve) => {
     const prev = transport.onclose;
     transport.onclose = (): void => {
@@ -857,10 +1032,17 @@ export async function runWithTransport(transport: Transport): Promise<number> {
  * maturity: stable
  * @end
  */
-export async function runMcp(_argv: readonly string[]): Promise<number> {
-  void _argv;
+export async function runMcp(argv: readonly string[]): Promise<number> {
+  // DESIGN-0021 slot 2: `sivru mcp --writable` enables the block/feedback write
+  // tools (default off → they return SIVRU-WRITABLE-DISABLED). Symmetric with
+  // `sivru observe --writable`; the stdio transport is per-process so trust is
+  // the same as any CLI invocation.
+  const writable = argv.includes("--writable");
+  if (writable) {
+    process.stderr.write("sivru mcp: WRITABLE — block_autofix / block_acknowledge / feedback_append enabled\n");
+  }
   const transport = new StdioServerTransport();
-  return runWithTransport(transport);
+  return runWithTransport(transport, { writable });
 }
 
 export default runMcp;

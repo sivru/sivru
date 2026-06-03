@@ -14,6 +14,8 @@
     "bench:agent": "tsx src/agent-tasks.ts",
     "bench:perf": "tsx src/perf.ts",
     "bench:perf:gate": "tsx src/perf-gate.ts",
+    "bench:block-ui": "tsx src/block-ui-perf.ts",
+    "bench:feedback": "tsx src/feedback-bench.ts",
     "label": "echo 'TODO: labeling tool for the corpus (W0)'",
     "lint": "echo 'TODO: configure eslint in W1'"
   },

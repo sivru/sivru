@@ -30,7 +30,8 @@ import type { SivruEvent } from "../types.js";
 import { estimateSavings } from "../cost/savings.js";
 import { aggregateReplay, replaySession } from "../replay/index.js";
 import { runCheckup, CheckupConfigError } from "../coach/index.js";
-import { probeGit } from "../coach/git-stats.js";
+import { mountBlockRoutes } from "./blocks.js";
+import { isAbsolutePathStrict, isLocalhostOrigin, pathContainment } from "./path-safety.js";
 
 // The version constant lives in the package barrel; re-declare it here to
 // avoid a cycle (../index.js re-exports server/app). Keep in sync.
@@ -50,20 +51,18 @@ export type ObserveAppOptions = {
    * outside this dir is rejected.
    */
   uiDistDir?: string;
+  /**
+   * DESIGN-0021 slot 2: enable the block/feedback mutation routes. Default
+   * false (read-only). When false, every mutation route returns 405 and the UI
+   * hides write affordances. Boot-coupled to a loopback bind in
+   * createObserveServer.
+   */
+  writable?: boolean;
+  /** DESIGN-0021 §Observability: emit the per-request log as JSONL (vs human). */
+  logJson?: boolean;
 };
 
 const DEFAULT_EVENT_LIMIT = 1000;
-
-/**
- * Allow only `http://localhost:*` and `http://127.0.0.1:*` origins.
- * The W6 ui agent runs Vite on localhost; production deployments don't apply.
- * Returns the origin if allowed, otherwise null so hono/cors does NOT echo it
- * into Access-Control-Allow-Origin.
- */
-function isLocalhostOrigin(origin: string): boolean {
-  // Accept e.g. http://localhost:5173, http://127.0.0.1:5173 (any port, none too).
-  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-}
 
 /** Build the Hono app. Pure: no port binding. Tests call `app.fetch(...)` directly. */
 export function createObserveApp(options?: ObserveAppOptions): Hono {
@@ -72,17 +71,48 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
 
   const app = new Hono();
 
+  // Minimal in-memory counters → /api/metrics (Prometheus text; no remote push).
+  const counters = new Map<string, number>();
+  const bump = (key: string): void => {
+    counters.set(key, (counters.get(key) ?? 0) + 1);
+  };
+
   app.use(
     "/api/*",
     cors({
       origin: (origin) => (isLocalhostOrigin(origin) ? origin : null),
-      allowMethods: ["GET", "OPTIONS"],
+      // POST is needed for the slot-2 mutation routes (autofix/edit/acknowledge/
+      // feedback). They're additionally guarded by hono/csrf + the --writable gate.
+      allowMethods: ["GET", "POST", "OPTIONS"],
       allowHeaders: ["Content-Type"],
     }),
   );
 
+  // DESIGN-0021 §Observability: one structured log line per API request
+  // (timestamp, method, route, status, duration, actor) + a request counter.
+  // Human-readable by default; `--log-json` emits JSONL. Read routes get the
+  // same treatment, so a slow GET shows up like a slow mutation.
+  app.use("/api/*", async (c, next) => {
+    const startedAt = Date.now();
+    await next();
+    const durationMs = Date.now() - startedAt;
+    const route = new URL(c.req.url).pathname;
+    const status = c.res.status;
+    const actor = c.req.header("origin") !== undefined ? "ui" : "cli";
+    bump(`http_requests_total{route="${route}",status="${status}"}`);
+    if (options?.logJson === true) {
+      process.stderr.write(
+        JSON.stringify({ ts: new Date().toISOString(), method: c.req.method, route, status, durationMs, actor }) + "\n",
+      );
+    } else {
+      process.stderr.write(
+        `${new Date().toISOString()} ${c.req.method} ${route} ${status} ${durationMs}ms ${actor}\n`,
+      );
+    }
+  });
+
   app.get("/api/health", (c) =>
-    c.json({ ok: true, version: SIVRU_OBSERVE_VERSION }),
+    c.json({ ok: true, version: SIVRU_OBSERVE_VERSION, writable: options?.writable === true }),
   );
 
   app.get("/api/sessions", async (c) => {
@@ -374,7 +404,7 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     // existence (or non-existence) of paths outside the allowed
     // surface — e.g. probing `/etc/shadow` returns SIVRU-E245
     // uniformly whether the file exists or not.
-    const containment = await checkupPathContained(abs);
+    const containment = await pathContainment(abs);
     if (!containment.allowed) {
       return c.json(
         { error: "SIVRU-E245 checkup-path-unsafe", code: "SIVRU-E245" },
@@ -458,6 +488,22 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     }
   });
 
+  // ----- /api/blocks + /api/feedback (DESIGN-0021) -----
+  // Slot 1: read-only graph + triage + SSE. Slot 2: mutation routes behind the
+  // --writable gate + hono/csrf.
+  app.get("/api/metrics", (c) => {
+    const lines = [
+      "# sivru observe metrics (DESIGN-0021)",
+      `sivru_observe_writable_mode ${options?.writable === true ? 1 : 0}`,
+    ];
+    for (const [key, value] of counters) {
+      lines.push(`sivru_observe_${key} ${value}`);
+    }
+    return c.text(lines.join("\n") + "\n", 200, { "content-type": "text/plain; version=0.0.4" });
+  });
+
+  mountBlockRoutes(app, { writable: options?.writable === true, bump });
+
   // Static UI mount — served only when `uiDistDir` is supplied. Hono's
   // `notFound` runs after all explicit routes miss, so `/api/...` is reached
   // first; everything else falls through to the static handler. SPA-style:
@@ -522,39 +568,3 @@ function parseTruthy(raw: string | undefined): boolean {
   return false;
 }
 
-function isAbsolutePathStrict(p: string): boolean {
-  // node:path.isAbsolute accepts both POSIX and Windows shapes; we want
-  // platform-native absolute paths only.
-  if (process.platform === "win32") return /^[a-zA-Z]:[\\/]/.test(p);
-  return p.startsWith("/");
-}
-
-interface ContainmentResult {
-  allowed: boolean;
-  degraded?: true;
-}
-
-/**
- * DESIGN-0005 §2 path-safety: allow `abs` if it is under `homedir()` OR
- * inside (or a descendant of) a git working tree. When the git binary
- * is missing on the server, degrade to homedir-only and surface the
- * fallback via `degraded: true` so the caller can attach SIVRU-E244.
- */
-async function checkupPathContained(abs: string): Promise<ContainmentResult> {
-  const home = homedir();
-  if (isUnder(abs, home)) return { allowed: true };
-  const probe = await probeGit(abs);
-  if (probe.available) return { allowed: true };
-  if (probe.reason === "missing") {
-    return { allowed: false, degraded: true };
-  }
-  return { allowed: false };
-}
-
-function isUnder(child: string, parent: string): boolean {
-  const c = normalize(child);
-  const p = normalize(parent);
-  if (c === p) return true;
-  const pTrim = p.endsWith(sep) ? p : p + sep;
-  return c.startsWith(pTrim);
-}
