@@ -1,6 +1,6 @@
 {
   "name": "@sivru/cli",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Sivru CLI + MCP server — fast code search for coding agents.",
   "license": "MIT",
   "type": "module",

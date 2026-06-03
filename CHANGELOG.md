@@ -7,6 +7,8 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-06-04
+
 **Authored-context UI — slot 2 (the write surface).** `sivru observe
 --writable` turns the read-only Blocks tab into a full lifecycle surface:
 fix a YAML trap, acknowledge an intentional finding, mark a false
