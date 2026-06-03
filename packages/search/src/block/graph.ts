@@ -64,7 +64,7 @@ export type BlockGraph = {
  *   - rule: graph build is O(N × M) where N = blocked symbols, M = avg collaborators length — fine at repo scale
  *     enforced-by: null
  *   - rule: SIVRU-E236 is opt-in via graph.orderingChecks
- *     enforced-by: packages/search/src/block/graph.test.ts::opt-in via graph.orderingChecks: detects 'runs after' contradiction
+ *     enforced-by: "packages/search/src/block/graph.test.ts::opt-in via graph.orderingChecks: detects 'runs after' contradiction"
  * decisions:
  *   - chose: in-memory graph per invocation rather than indexed graph storage
  *     because: graph is small (10s-100s of edges); persistence cost outweighs build cost
