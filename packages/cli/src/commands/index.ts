@@ -18,6 +18,7 @@ export { runSkill } from "./skill.js";
 export { runExplain } from "./explain.js";
 export { runBlock } from "./block.js";
 export { runCheckupCmd } from "./checkup.js";
+export { runCompletion } from "./completion.js";
 
 export type Command =
   | "search"
@@ -34,4 +35,5 @@ export type Command =
   | "block"
   | "checkup"
   | "version"
+  | "completion"
   | "help";

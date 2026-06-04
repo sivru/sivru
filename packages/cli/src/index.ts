@@ -19,6 +19,7 @@ import {
   runSession,
   runSkill,
   runVersion,
+  runCompletion,
 } from "./commands/index.js";
 import { runMcp } from "./mcp-entry.js";
 
@@ -85,10 +86,12 @@ async function main(): Promise<number> {
     case "-h":
       return runHelp(argv);
 
+    case "completion":
+      return runCompletion(argv);
+
     case "find-related":
     case "cache":
     case "model":
-    case "completion":
       process.stderr.write(
         `sivru ${cmd} — not yet implemented; tracked on https://github.com/sivru/sivru\n`,
       );
