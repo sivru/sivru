@@ -53,9 +53,11 @@ import {
 } from "@sivru/observe";
 import type { HandlerContext, HandlerResult, FeedbackKind } from "@sivru/observe";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { SIVRU_VERSION } from "./commands/version.js";
 
 const SERVER_NAME = "sivru";
-const SERVER_VERSION = "0.7.0";
+// Advertise the real package version in the MCP handshake (was a stale literal).
+const SERVER_VERSION = SIVRU_VERSION;
 
 // ---------------------------------------------------------------------------
 // Tool surface — the JSON-Schema we advertise via tools/list.

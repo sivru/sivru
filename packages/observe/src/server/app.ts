@@ -32,10 +32,9 @@ import { aggregateReplay, replaySession } from "../replay/index.js";
 import { runCheckup, CheckupConfigError } from "../coach/index.js";
 import { mountBlockRoutes } from "./blocks.js";
 import { isAbsolutePathStrict, isLocalhostOrigin, pathContainment } from "./path-safety.js";
-
-// The version constant lives in the package barrel; re-declare it here to
-// avoid a cycle (../index.js re-exports server/app). Keep in sync.
-const SIVRU_OBSERVE_VERSION = "0.7.0";
+// Standalone version module (reads package.json) — no cycle, since version.ts
+// imports nothing from the package barrel.
+import { SIVRU_OBSERVE_VERSION } from "../version.js";
 
 export type ObserveAppOptions = {
   /**
