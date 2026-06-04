@@ -383,6 +383,13 @@ export async function initBlock(
       invariants: seedInvariants,
     });
 
+    if (responsibilitySource === "todo" || seedInvariants.some((i) => i.startsWith("TODO"))) {
+      process.stderr.write(
+        `sivru-block-init: generated block for ${decl.name} contains TODO placeholders — ` +
+          "review and replace before committing.\n",
+      );
+    }
+
     if (!opts.write) {
       return { kind: "ok", block };
     }

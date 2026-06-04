@@ -596,11 +596,29 @@ export function mountBlockRoutes(app: Hono, opts: MountBlockRoutesOptions): void
     const body = await parseBody(c);
     const ctx = await ctxFromBody(c, body);
     if (ctx instanceof Response) return ctx;
+    const rawBlock = body["block"];
+    if (
+      typeof rawBlock !== "object" ||
+      rawBlock === null ||
+      typeof (rawBlock as Record<string, unknown>)["schema"] !== "number" ||
+      typeof (rawBlock as Record<string, unknown>)["role"] !== "string" ||
+      typeof (rawBlock as Record<string, unknown>)["responsibility"] !== "string"
+    ) {
+      return c.json(
+        {
+          ok: false,
+          code: "SIVRU-E249",
+          message: "invalid block shape: expected { schema: number, role: string, responsibility: string }",
+          retryable: false,
+        },
+        400,
+      );
+    }
     const r = await editBlock(
       ctx,
       String(body["filePath"] ?? ""),
       String(body["symbol"] ?? ""),
-      body["block"] as never,
+      rawBlock as never,
       typeof body["expectedMtimeMs"] === "number" ? body["expectedMtimeMs"] : undefined,
     );
     if (r.ok) bump("block_edits_total");

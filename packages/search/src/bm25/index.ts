@@ -89,8 +89,11 @@ export function createBm25Index(options: Bm25Options = {}): Bm25Index {
       const list = postings.get(term);
       if (list === undefined || list.length === 0) continue;
       const nq = list.length;
+      // Corruption guard: nq should never exceed n, but if it does the IDF
+      // formula would take the log of a negative number and produce NaN.
+      if (nq > n) continue;
       const idf = Math.log((n - nq + 0.5) / (nq + 0.5) + 1);
-      if (idf === 0) continue;
+      if (idf === 0 || Number.isNaN(idf)) continue;
       for (const { docId, freq } of list) {
         const dl = docLengths.get(docId) ?? 0;
         const norm = avgDL === 0 ? 1 : 1 - b + (b * dl) / avgDL;

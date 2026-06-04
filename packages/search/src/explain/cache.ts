@@ -10,10 +10,16 @@
 // `formatVersion` is bumped whenever `SymbolIndexEntry` changes shape.
 
 import { promises as fsp } from "node:fs";
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 
+import {
+  bestEffortUnlink,
+  isMissing,
+  repoDir,
+  repoSlug,
+  sanitizeForFilename,
+} from "../cache-utils.js";
 import {
   buildSymbolIndex,
   type BuildSymbolIndexOptions,
@@ -63,39 +69,15 @@ function defaultCacheDir(): string {
   return join(homedir(), ".cache", "sivru", "symbol-indexes");
 }
 
-function repoSlug(repoPath: string): string {
-  return createHash("sha256").update(resolvePath(repoPath)).digest("hex");
-}
-
-function repoDir(cacheDir: string, repoPath: string): string {
-  return join(cacheDir, repoSlug(repoPath));
-}
-
-function sanitize(s: string): string {
-  return s.replace(/[<>:"/\\|?*]/g, "__");
-}
-
 function entryPath(cacheDir: string, key: SymbolIndexCacheKey): string {
-  return join(repoDir(cacheDir, key.repoPath), `${sanitize(key.stateId)}.json`);
+  return join(repoDir(cacheDir, key.repoPath), `${sanitizeForFilename(key.stateId)}.json`);
 }
 
 function tmpPath(cacheDir: string, key: SymbolIndexCacheKey): string {
   return join(
     repoDir(cacheDir, key.repoPath),
-    `${sanitize(key.stateId)}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`,
+    `${sanitizeForFilename(key.stateId)}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`,
   );
-}
-
-function isMissing(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException).code === "ENOENT";
-}
-
-async function bestEffortUnlink(p: string): Promise<void> {
-  try {
-    await fsp.unlink(p);
-  } catch {
-    /* ignore */
-  }
 }
 
 export function createSymbolIndexCache(

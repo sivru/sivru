@@ -60,7 +60,8 @@ export type SkipReason =
   | "too-large"
   | "permission-denied"
   | "symlink-loop"
-  | "not-a-regular-file";
+  | "not-a-regular-file"
+  | "max-depth";
 
 export type WalkOptions = {
   /** Default: true. Honor `.gitignore` files (root + nested). `.git/` always skipped. */
@@ -69,6 +70,8 @@ export type WalkOptions = {
   followSymlinks?: boolean;
   /** Default: 1_048_576 (1 MiB). Files larger than this are skipped. */
   maxFileBytes?: number;
+  /** Default: 200. Maximum directory depth to recurse; prevents stack exhaustion on pathological trees. */
+  maxDepth?: number;
   /** Optional callback invoked once per skipped path. */
   onSkip?: (relPath: string, reason: SkipReason) => void;
 };

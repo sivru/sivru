@@ -22,6 +22,7 @@ const ignore = ignoreImport as unknown as () => Ignore;
 import type { WalkEntry, WalkOptions } from "../types.js";
 
 const DEFAULT_MAX_FILE_BYTES = 1_048_576; // 1 MiB
+const DEFAULT_MAX_DEPTH = 200;
 const BINARY_PROBE_BYTES = 8192;
 // `.git/` is always skipped — independent of any user-supplied .gitignore.
 const ALWAYS_IGNORE = [".git"];
@@ -36,6 +37,7 @@ type Resolved = {
   respectGitignore: boolean;
   followSymlinks: boolean;
   maxFileBytes: number;
+  maxDepth: number;
   onSkip: WalkOptions["onSkip"];
 };
 
@@ -144,13 +146,14 @@ export async function* walk(
     respectGitignore: options.respectGitignore ?? true,
     followSymlinks: options.followSymlinks ?? false,
     maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     onSkip: options.onSkip,
   };
 
   const baseLayer: Layer = { dir: root, ig: ignore().add(ALWAYS_IGNORE) };
   const seenDirs = new Set<string>();
 
-  yield* walkDir(root, root, [baseLayer], seenDirs, resolvedOpts);
+  yield* walkDir(root, root, [baseLayer], seenDirs, 0, resolvedOpts);
 }
 
 async function* walkDir(
@@ -158,8 +161,13 @@ async function* walkDir(
   currentDir: string,
   layers: readonly Layer[],
   seenDirs: Set<string>,
+  depth: number,
   opts: Resolved,
 ): AsyncGenerator<WalkEntry> {
+  if (depth > opts.maxDepth) {
+    opts.onSkip?.(relPosix(rootDir, currentDir), "max-depth");
+    return;
+  }
   let realStat: Stats;
   try {
     realStat = await fsp.stat(currentDir);
@@ -229,7 +237,7 @@ async function* walkDir(
         opts.onSkip?.(relPosix(rootDir, absPath), "gitignore");
         continue;
       }
-      yield* walkDir(rootDir, absPath, activeLayers, seenDirs, opts);
+      yield* walkDir(rootDir, absPath, activeLayers, seenDirs, depth + 1, opts);
       continue;
     }
 
