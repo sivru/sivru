@@ -7,6 +7,57 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-06-05
+
+**Serving authored context — `explain` now leads with intent.**
+`sivru explain` and `mcp__sivru__explain` surface the `@sivru` block on
+each symbol *before* the derived facts, so an agent reads why the code is
+shaped this way — and when that reasoning expires — before it reads what
+the code mechanically is. The block extraction shipped in v0.6; this is
+the release that makes it readable. Implements
+[DESIGN-0017](docs/design/0017-serving-authored-context.md) at
+surface-only scope (the eng review reconciled Part 2 against the drift
+machinery DESIGN-0019 already shipped).
+
+### Added
+
+- **`AUTHORED CONTEXT` section in `sivru explain`** — full per-symbol
+  render of the `@sivru` block: role, responsibility, invariants (with
+  their `enforced-by` reference), time-bounded decisions (`chose` /
+  `because` / `valid-while` / `revisit-if`), maturity, and collaborators.
+  Rendered first, before `PUBLIC API` — intent before mechanism. The
+  `--json` path already carried the structured `authored[].block`; the
+  `explain` MCP tool description now names authored context.
+- **`BLOCKS HEALTH` section + `artifact.blocks_health`** — lint
+  diagnostics for the target file's blocks, computed from the same single
+  extraction. Surfaces the full `validateBlock` diagnostic set
+  (missing-required, enforcement-unset, …) **including diagnostics on
+  blocks that failed to parse**, which the authored render omits — so a
+  broken block surfaces instead of silently vanishing. Quiet by design:
+  a clean note when blocks have no issues, omitted entirely for blockless
+  files. The markdown render caps at 20 diagnostics (the full set is always
+  in `--json` and `sivru block validate`) so health never buries the
+  derived-fact sections it now renders above. Points to `sivru block
+  staleness` / `graph` for diff-scoped git drift (kept in the dedicated
+  commands, not run inline).
+- **SKILL.md** — the `sivru explain` and `@sivru`-authoring sections now
+  teach the agent that `explain` hands back authored context, and codify
+  the rule: if your edit alters a symbol's contract or invalidates a
+  decision, update its block in the same edit.
+- **`countSeverities` (`@sivru/search`) + `formatDiagnostic` (CLI lib)** —
+  shared helpers consolidating the error/warning split and the diagnostic
+  line renderer that were duplicated across the `sivru block` subcommands
+  and the new explain surface. `formatDiagnostic` carries two explicit
+  styles (`path-prefixed` for multi-file block listings, `code-first` for
+  the single-file explain section).
+
+### Deferred (tracked, block-reliability follow-on)
+
+- `broken-collaborator` (resolve `collaborators` against the v0.2 symbol
+  index) — DESIGN-0019's E235 rename-suspect covers the common case.
+- `expired-decision` — opt-in/off by design; needs a `DecisionChecker`
+  evaluator (the type stub exists).
+
 ## [0.9.0] — 2026-06-04
 
 **Authored-context UI — slot 2 (the write surface).** `sivru observe

@@ -192,3 +192,17 @@ export function validateExtracted(
 export function hasErrors(diagnostics: readonly BlockDiagnostic[]): boolean {
   return diagnostics.some((d) => d.severity === "error");
 }
+
+/**
+ * Split a diagnostic list into error / warning counts — the
+ * `{ errors, warnings }` summary the CLI block subcommands and the
+ * explain BLOCKS HEALTH section both print. Severity is binary
+ * (`error | warning`), so `warnings = total - errors`.
+ */
+export function countSeverities(diagnostics: readonly BlockDiagnostic[]): {
+  errors: number;
+  warnings: number;
+} {
+  const errors = diagnostics.filter((d) => d.severity === "error").length;
+  return { errors, warnings: diagnostics.length - errors };
+}

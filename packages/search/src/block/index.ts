@@ -34,7 +34,12 @@ export {
 } from "./extract.js";
 export type { ExtractBlocksOptions } from "./extract.js";
 
-export { validateBlock, validateExtracted, hasErrors } from "./validate.js";
+export {
+  validateBlock,
+  validateExtracted,
+  hasErrors,
+  countSeverities,
+} from "./validate.js";
 
 export { blockToJSON } from "./toJSON.js";
 

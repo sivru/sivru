@@ -57,11 +57,17 @@ mentions sivru — route by the shape of the question.
 ## Before you edit a file — `sivru.explain`
 
 When you are about to change a file or a symbol, call `sivru.explain` on
-it first. It returns five descriptive sections — public API, callers,
-callees, churn, ownership — for the target. Use the caller list to know
-what depends on what you are about to touch, the churn + ownership to
-gauge how settled the code is, and the tests section to see what already
-covers it.
+it first. It leads with **authored context** — the `@sivru` block on each
+symbol (role, responsibility, invariants, time-bounded decisions) when one
+exists — then the descriptive sections: public API, callers, callees,
+churn, ownership, tests, and a **block-health** line flagging any lint on
+the file's blocks. Read the authored context before anything else: it is
+the intent — *why* the code is shaped this way, and when that reasoning
+expires — that the derived facts cannot recover. Then use the caller list
+to know what depends on what you are about to touch, the churn + ownership
+to gauge how settled the code is, and the tests section to see what
+already covers it. If `BLOCKS HEALTH` reports errors on a block you are
+about to rely on, treat that block's intent as suspect, not authoritative.
 
 Two extra shapes are worth knowing:
 
@@ -114,11 +120,16 @@ Run `sivru block validate <path>` before committing. Errors block CI;
 warnings (e.g. block-prose at >25 lines, decision-no-revisit) ship.
 
 If you are about to edit a symbol that ALREADY carries an `@sivru`
-block: READ it before editing. The block tells you the role the
-symbol plays in the system and the decisions that shaped it — that
-context is exactly what tests cannot recover. If the change makes
-one of the decisions stale, update its `revisit-if` (or remove the
-decision entirely) in the same commit.
+block: READ it before editing — `sivru.explain` surfaces it as the
+`AUTHORED CONTEXT` section, so the call you already make before an edit
+hands you the intent for free. The block tells you the role the symbol
+plays in the system and the decisions that shaped it — that context is
+exactly what tests cannot recover. The rule: if your change alters the
+symbol's contract or invalidates a decision, update its block in the
+same edit — revise `responsibility` / `invariants`, update or remove the
+stale decision's `revisit-if`. An edit that changes behaviour but leaves
+the block asserting the old intent is worse than no block: it lies to the
+next agent.
 
 ## sivru also observes sessions
 

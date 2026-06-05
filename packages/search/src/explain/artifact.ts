@@ -31,6 +31,7 @@ import {
 import { extractBlocks } from "../block/extract.js";
 import { blockToJSON } from "../block/toJSON.js";
 import { validateExtracted } from "../block/validate.js";
+import type { BlockDiagnostic } from "../block/types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -319,12 +320,15 @@ export async function assembleArtifact(
 
   const artifactPath = isRegion ? `${target}::${symbol}` : target;
 
-  // ---- authored (DESIGN-0016) ------------------------------------------
+  // ---- authored (DESIGN-0016) + health (DESIGN-0017 §2) ----------------
   // v0.5 emitted `authored: []` unconditionally; v0.6 fills the slot from
   // `@sivru` blocks extracted from the target file. Region-level filters to
   // the region's symbol; file-level includes every block. Any extraction or
-  // validation failure becomes an empty list (never blocks the artifact).
-  const authored = await collectAuthored(
+  // validation failure becomes empty lists (never blocks the artifact).
+  // `blocks_health` carries the lint diagnostics from the SAME extraction —
+  // including for invalid blocks that `authored` omits, so a broken block
+  // surfaces instead of vanishing.
+  const { authored, health: blocks_health } = await collectAuthoredAndHealth(
     index.repoPath,
     target,
     regionExport,
@@ -339,6 +343,7 @@ export async function assembleArtifact(
     ownership,
     tests,
     authored,
+    blocks_health,
     callers_truncated: null,
     callees_truncated: null,
     callers_skipped_reason: callersSkippedReason,
@@ -346,24 +351,41 @@ export async function assembleArtifact(
   };
 }
 
-async function collectAuthored(
+/**
+ * Extract the target file's `@sivru` blocks ONCE and split the result into
+ * two views (DESIGN-0017): `authored` — the valid blocks rendered as
+ * authored context (intent) — and `health` — every lint diagnostic,
+ * INCLUDING those on blocks that failed to parse or validate. The two views
+ * differ deliberately: authored context must never show a misleading
+ * intent, but a broken block must still surface as a health signal rather
+ * than disappear (v0.6's behaviour of silently dropping invalid blocks is
+ * exactly the rot DESIGN-0017 §2 closes). Region-level filters both views to
+ * the region's symbol. Any extraction failure yields empty lists.
+ */
+async function collectAuthoredAndHealth(
   repoPath: string,
   target: string,
   regionExport: Export | null,
-): Promise<AuthoredEntry[]> {
+): Promise<{ authored: AuthoredEntry[]; health: BlockDiagnostic[] }> {
   try {
     const abs = resolvePath(repoPath, target);
     const extracted = await extractBlocks(abs);
+    // Side effect: pushes validateBlock diagnostics into each eb.diagnostics
+    // (parse errors are already there from extractBlocks). We read them off
+    // the blocks below so authored and health stay in lockstep.
     validateExtracted(extracted);
-    const out: AuthoredEntry[] = [];
+    const authored: AuthoredEntry[] = [];
+    const health: BlockDiagnostic[] = [];
     for (const eb of extracted) {
-      if (eb.block === null) continue; // never silently dropped from CLI;
-      // the explain artifact intentionally omits invalid blocks since
-      // surfacing them as authored context would be misleading.
       if (regionExport !== null) {
+        // A region targets a single symbol; module-level and other-symbol
+        // blocks are out of scope for both views.
         if (eb.kind !== "symbol") continue;
         if (eb.symbolName !== regionExport.name) continue;
       }
+      // Health includes diagnostics for invalid (block === null) blocks too.
+      health.push(...eb.diagnostics);
+      if (eb.block === null) continue; // invalid: surfaced in health, not authored.
       const entry: AuthoredEntry = {
         kind: eb.kind,
         startLine: eb.range.startLine,
@@ -371,11 +393,11 @@ async function collectAuthored(
         block: blockToJSON(eb.block),
       };
       if (eb.symbolName !== undefined) entry.symbol = eb.symbolName;
-      out.push(entry);
+      authored.push(entry);
     }
-    return out;
+    return { authored, health };
   } catch {
-    return [];
+    return { authored: [], health: [] };
   }
 }
 
