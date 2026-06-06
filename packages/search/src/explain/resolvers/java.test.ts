@@ -221,6 +221,52 @@ public class Foo {
     expect(names).not.toContain("doPrivate");
   });
 
+  it("detects a public member whose chunk carries a leading @sivru Javadoc (regression: annotated symbols dropped)", () => {
+    // The chunker prepends the Javadoc to chunk.content; a 7+ line @sivru block
+    // pushes `public` past the 3-line visibility window, which used to drop the
+    // member from the public API and 404 region explain on it.
+    const content = [
+      "  /**",
+      "   * @sivru",
+      "   * schema: 1",
+      "   * role: widget-maker",
+      "   * responsibility: make widgets",
+      "   * @end",
+      "   */",
+      "  public void make() {}",
+    ].join("\n");
+    const chunks: Chunk[] = [
+      makeChunk({
+        name: "make",
+        nodeType: "method_declaration",
+        line: 8,
+        content,
+      }),
+      makeChunk({
+        name: "hidden",
+        nodeType: "method_declaration",
+        line: 18,
+        content: [
+          "  /**",
+          "   * @sivru",
+          "   * schema: 1",
+          "   * role: helper",
+          "   * responsibility: internal",
+          "   * @end",
+          "   */",
+          "  private void hidden() {}",
+        ].join("\n"),
+      }),
+    ];
+    const out = javaResolver.parseFile(
+      "src/main/java/com/example/Foo.java",
+      "",
+      chunks,
+    );
+    expect(out.exports.map((e) => e.name)).toEqual(["make"]);
+    expect(out.exports[0]!.signature).toBe("public void make() {}");
+  });
+
   it("captures all top-level imports", () => {
     const source = [
       `package com.example;`,

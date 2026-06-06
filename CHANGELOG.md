@@ -51,6 +51,21 @@ machinery DESIGN-0019 already shipped).
   styles (`path-prefixed` for multi-file block listings, `code-first` for
   the single-file explain section).
 
+### Fixed
+
+- **Annotated symbols were dropped from the explain symbol index.** An
+  exported (TS/JS) or public (Java) symbol whose declaration sat behind an
+  `@sivru` doc-comment was missing from `explain`'s `PUBLIC API`, and
+  region-level explain (`path::symbol`) on it failed with `SIVRU-E2004` —
+  i.e. you could not drill into exactly the symbols that carry authored
+  intent. Cause: the export/visibility resolvers tested the keyword
+  (`export` / `public`) against a fixed 3–5 line head window, and a
+  multi-line `@sivru` block pushed the declaration past it. A shared
+  `codeHead()` now skips the leading comment carrier first; it also fixes
+  the signature line (was showing `/**`). Found during DESIGN-0017 QA;
+  pre-existing (DESIGN-0016 era). Regression tests added for TS + Java +
+  the helper.
+
 ### Deferred (tracked, block-reliability follow-on)
 
 - `broken-collaborator` (resolve `collaborators` against the v0.2 symbol

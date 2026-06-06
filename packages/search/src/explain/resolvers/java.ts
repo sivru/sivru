@@ -15,6 +15,7 @@ import { dirname, join, posix, resolve as resolvePath } from "node:path";
 
 import type { Chunk } from "../../types.js";
 import type { Export, ImportEdge, Resolver } from "../types.js";
+import { codeHead } from "./chunk-head.js";
 
 const JAVA_TYPE_NODE_TYPES = new Set([
   "class_declaration",
@@ -37,8 +38,9 @@ function nodeTypeToExportKind(nodeType: string): Export["kind"] {
 }
 
 function signatureFromChunk(chunk: Chunk): string {
-  const firstLine = chunk.content.split(/\r?\n/).find((l) => l.trim().length > 0);
-  if (firstLine === undefined) return "";
+  // Past any leading Javadoc / `@sivru` block, not the comment's first line.
+  const firstLine = codeHead(chunk.content, 1).split(/\r?\n/)[0];
+  if (firstLine === undefined || firstLine.trim().length === 0) return "";
   const trimmed = firstLine.trim();
   return trimmed.length > 200 ? trimmed.slice(0, 197) + "..." : trimmed;
 }
@@ -47,7 +49,10 @@ function chunkLooksPublic(chunk: Chunk): boolean {
   // Cheap visibility heuristic: scan the first ~3 lines of the chunk content
   // for an explicit access modifier. Lack of any modifier = package-private
   // in Java; we treat that as "not exported" for the public-API view.
-  const head = chunk.content.split(/\r?\n/, 3).join(" ");
+  // `codeHead` skips the leading comment carrier first, so a multi-line
+  // `@sivru` Javadoc no longer pushes `public` out of the window (which used
+  // to drop annotated public members from the index — same bug as TS export).
+  const head = codeHead(chunk.content, 3).replace(/\r?\n/g, " ");
   if (/\b(private|protected)\b/.test(head)) return false;
   return /\bpublic\b/.test(head);
 }

@@ -13,6 +13,7 @@ import { dirname, join, posix, resolve as resolvePath } from "node:path";
 
 import type { Chunk } from "../../types.js";
 import type { Export, Resolver } from "../types.js";
+import { codeHead } from "./chunk-head.js";
 
 // Tree-sitter `nodeType` values the chunker produces for exportable
 // declarations in TS/JS. The chunker uses TypeScript and JavaScript
@@ -60,12 +61,13 @@ function nodeTypeToExportKind(nodeType: string): Export["kind"] {
 }
 
 /**
- * Pull the first non-empty line of a chunk's source as the signature. Strips
- * leading whitespace; truncates if the line is unusually long.
+ * Pull the first non-empty CODE line of a chunk as the signature — past any
+ * leading `@sivru`/JSDoc comment. Strips leading whitespace; truncates if the
+ * line is unusually long.
  */
 function signatureFromChunk(chunk: Chunk): string {
-  const firstLine = chunk.content.split(/\r?\n/).find((l) => l.trim().length > 0);
-  if (firstLine === undefined) return "";
+  const firstLine = codeHead(chunk.content, 1).split(/\r?\n/)[0];
+  if (firstLine === undefined || firstLine.trim().length === 0) return "";
   const trimmed = firstLine.trim();
   return trimmed.length > 200 ? trimmed.slice(0, 197) + "..." : trimmed;
 }
@@ -251,9 +253,10 @@ export const typescriptResolver: Resolver = {
       // a leading doc comment + `export` keyword in `chunk.content`. Cheap
       // string check is good enough — false positives are tolerable here
       // (we surface "public_api"; the agent can still see non-exported
-      // declarations as informational context).
-      const head = chunk.content.split(/\r?\n/, 5).join("\n");
-      const isExported = /\bexport\b/.test(head);
+      // declarations as informational context). `codeHead` skips the leading
+      // comment carrier first, so a long `@sivru` block no longer pushes the
+      // `export` keyword out of the window (BUG: annotated symbols dropped).
+      const isExported = /\bexport\b/.test(codeHead(chunk.content, 5));
       if (!isExported) continue;
       exports.push({
         name: chunk.symbolName,

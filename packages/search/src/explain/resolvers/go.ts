@@ -14,6 +14,7 @@ import { dirname, join, posix, resolve as resolvePath, sep } from "node:path";
 
 import type { Chunk } from "../../types.js";
 import type { Export, ImportEdge, Resolver } from "../types.js";
+import { codeHead } from "./chunk-head.js";
 
 const GO_EXPORTABLE_NODE_TYPES = new Set([
   "function_declaration",
@@ -29,8 +30,9 @@ function nodeTypeToExportKind(nodeType: string): Export["kind"] {
 }
 
 function signatureFromChunk(chunk: Chunk): string {
-  const firstLine = chunk.content.split(/\r?\n/).find((l) => l.trim().length > 0);
-  if (firstLine === undefined) return "";
+  // Past any leading `//` doc-comment / `@sivru` block, not the comment line.
+  const firstLine = codeHead(chunk.content, 1).split(/\r?\n/)[0];
+  if (firstLine === undefined || firstLine.trim().length === 0) return "";
   const trimmed = firstLine.trim();
   return trimmed.length > 200 ? trimmed.slice(0, 197) + "..." : trimmed;
 }

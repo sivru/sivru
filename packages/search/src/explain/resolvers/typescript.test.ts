@@ -172,6 +172,58 @@ describe("typescriptResolver.parseFile", () => {
     expect(c.kind).toBe("class");
   });
 
+  it("detects an export whose chunk carries a leading @sivru block (regression: annotated symbols dropped)", () => {
+    // The chunker prepends the leading doc-comment to chunk.content. A 7+ line
+    // @sivru block pushes the `export` keyword past a naive 5-line head window,
+    // which used to drop the symbol from the export index entirely — so it
+    // vanished from public_api and region explain 404'd on it.
+    const content = [
+      "/**",
+      " * @sivru",
+      " * schema: 1",
+      " * role: widget-maker",
+      " * responsibility: make widgets",
+      " * @end",
+      " */",
+      "export function makeWidget(): void {}",
+    ].join("\n");
+    const chunks: Chunk[] = [
+      makeChunk({
+        name: "makeWidget",
+        nodeType: "function_declaration",
+        line: 8,
+        content,
+      }),
+    ];
+    const out = typescriptResolver.parseFile("src/a.ts", "", chunks);
+    expect(out.exports.map((e) => e.name)).toEqual(["makeWidget"]);
+    // Signature must be the real declaration, not the comment's `/**` line.
+    expect(out.exports[0]!.signature).toBe("export function makeWidget(): void {}");
+  });
+
+  it("does NOT mark a non-exported declaration with a leading @sivru block as exported", () => {
+    const content = [
+      "/**",
+      " * @sivru",
+      " * schema: 1",
+      " * role: helper",
+      " * responsibility: internal helper",
+      " * @end",
+      " */",
+      "function internalHelper(): void {}",
+    ].join("\n");
+    const chunks: Chunk[] = [
+      makeChunk({
+        name: "internalHelper",
+        nodeType: "function_declaration",
+        line: 8,
+        content,
+      }),
+    ];
+    const out = typescriptResolver.parseFile("src/a.ts", "", chunks);
+    expect(out.exports).toHaveLength(0);
+  });
+
   it("extracts raw imports and their identifiers", () => {
     const source = [
       `import Foo from "./foo";`,
