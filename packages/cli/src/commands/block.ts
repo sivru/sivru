@@ -34,6 +34,7 @@ import {
   checkBridges,
   checkEnforcement,
   computeBlockGraph,
+  countSeverities,
   extractBlocksFromFiles,
   hasErrors,
   initBlock,
@@ -46,6 +47,8 @@ import {
   type ExtractedBlock,
   type SivruBlockJSON,
 } from "@sivru/search";
+
+import { formatDiagnostic } from "../lib/diagnostics.js";
 
 type ValidateArgs = {
   subcommand: "validate";
@@ -415,13 +418,6 @@ function isCleanInGit(filePath: string, repoRoot: string): boolean {
   }
 }
 
-function formatDiagnostic(d: BlockDiagnostic): string {
-  const loc = d.location;
-  const where =
-    loc !== undefined ? `${loc.filePath}:${loc.startLine}` : "<unknown>";
-  return `${where}: ${d.severity} ${d.code}: ${d.message}`;
-}
-
 type ExtractEntry = {
   filePath: string;
   kind: "symbol" | "module";
@@ -532,7 +528,7 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
             `${e.filePath}:${e.range.startLine} ${e.kind} ${sym} role=${role}\n`,
           );
           for (const d of e.diagnostics) {
-            process.stdout.write(`  ${formatDiagnostic(d)}\n`);
+            process.stdout.write(`  ${formatDiagnostic(d, "path-prefixed")}\n`);
           }
         }
       }
@@ -543,10 +539,9 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
       const enf = await checkEnforcement(blocks, repoRoot);
       for (const d of enf) {
         const stream = d.severity === "error" ? process.stderr : process.stdout;
-        stream.write(formatDiagnostic(d) + "\n");
+        stream.write(formatDiagnostic(d, "path-prefixed") + "\n");
       }
-      const errCount = enf.filter((d) => d.severity === "error").length;
-      const warnCount = enf.length - errCount;
+      const { errors: errCount, warnings: warnCount } = countSeverities(enf);
       process.stdout.write(
         `sivru block check-enforcement: ${blocks.length} block(s); ${errCount} error(s), ${warnCount} warning(s)\n`,
       );
@@ -557,10 +552,10 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
       const bridges = await checkBridges(blocks, repoRoot);
       for (const d of bridges) {
         const stream = d.severity === "error" ? process.stderr : process.stdout;
-        stream.write(formatDiagnostic(d) + "\n");
+        stream.write(formatDiagnostic(d, "path-prefixed") + "\n");
       }
-      const errCount = bridges.filter((d) => d.severity === "error").length;
-      const warnCount = bridges.length - errCount;
+      const { errors: errCount, warnings: warnCount } =
+        countSeverities(bridges);
       process.stdout.write(
         `sivru block check-bridges: ${blocks.length} block(s); ${errCount} error(s), ${warnCount} warning(s)\n`,
       );
@@ -570,10 +565,10 @@ export async function runBlock(argv: readonly string[]): Promise<number> {
     // validate
     for (const d of diagnostics) {
       const stream = d.severity === "error" ? process.stderr : process.stdout;
-      stream.write(formatDiagnostic(d) + "\n");
+      stream.write(formatDiagnostic(d, "path-prefixed") + "\n");
     }
-    const errCount = diagnostics.filter((d) => d.severity === "error").length;
-    const warnCount = diagnostics.length - errCount;
+    const { errors: errCount, warnings: warnCount } =
+      countSeverities(diagnostics);
     process.stdout.write(
       `sivru block validate: ${blocks.length} block(s); ${errCount} error(s), ${warnCount} warning(s)\n`,
     );
@@ -654,10 +649,11 @@ async function runGraph(args: GraphArgs): Promise<number> {
   }
   for (const d of graph.diagnostics) {
     const stream = d.severity === "error" ? process.stderr : process.stdout;
-    stream.write(formatDiagnostic(d) + "\n");
+    stream.write(formatDiagnostic(d, "path-prefixed") + "\n");
   }
-  const errCount = graph.diagnostics.filter((d) => d.severity === "error").length;
-  const warnCount = graph.diagnostics.length - errCount;
+  const { errors: errCount, warnings: warnCount } = countSeverities(
+    graph.diagnostics,
+  );
   process.stdout.write(
     `sivru block graph --check: ${graph.nodes.length} block(s); ${errCount} error(s), ${warnCount} warning(s)\n`,
   );

@@ -211,6 +211,16 @@ export type ExplainArtifact = {
   tests: TestHit[];
   /** Always empty in v0.5; v0.6 (DESIGN-0016) fills. */
   authored: AuthoredEntry[];
+  /**
+   * DESIGN-0017 §2 drift surface: lint diagnostics for the `@sivru`
+   * blocks on the target file (or the region's symbol, region-level).
+   * Unlike `authored`, this INCLUDES diagnostics for blocks that failed
+   * to parse/validate — so the agent sees when authored context is
+   * broken rather than silently absent. Empty for a file with no blocks
+   * or no issues. Git-based diff-scoped drift (staleness, cross-block
+   * graph) stays in the dedicated `sivru block` subcommands.
+   */
+  blocks_health: import("../block/types.js").BlockDiagnostic[];
   /** `null` when not truncated; number of dropped entries otherwise. */
   callers_truncated: number | null;
   callees_truncated: number | null;

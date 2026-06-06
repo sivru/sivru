@@ -1,10 +1,43 @@
 # DESIGN-0017: Serving authored context — `explain` integration + drift
 
-**Status:** Draft <!-- Draft → Accepted → Implemented → Superseded -->
-**Targets:** v0.7.0
+**Status:** Implemented at v0.10.0 (promoted Draft → Accepted on 2026-06-05
+by `/plan-eng-review` iter-1 PASS, surface-only scope; implemented same
+day) <!-- Draft → Accepted → Implemented → Superseded -->
+**Targets:** v0.10.0 (planned v0.7.0; the slot moved as the v0.7–v0.9
+sequence diverged — see ROADMAP "shipped sequence" note)
 **Issue:** filed when v0.7 becomes next release
 **Created:** 2026-05-15
 **Author:** @pochadri
+
+> **Implementation note (2026-06-05) — surface-only Part 2.** Between this
+> doc's Draft and its build, DESIGN-0019 (block reliability) shipped a
+> *superset* of Part 2's drift machinery as standalone `sivru block`
+> subcommands: `validate` (missing-required, E217), `staleness` (E233),
+> `graph` (cross-block E234–E236), `check-enforcement` (E230–E232),
+> `check-bridges`. The eng review therefore scoped Part 2 down to
+> **surfacing**, not rebuilding:
+>
+> - `sivru explain` / `mcp__sivru__explain` now lead with an `AUTHORED
+>   CONTEXT` section (Part 1, fully delivered) and carry a `BLOCKS HEALTH`
+>   section + `blocks_health: BlockDiagnostic[]` on the artifact. Health
+>   surfaces the **full `validateBlock` diagnostic set** for the target
+>   file — including diagnostics on blocks that failed to parse, which the
+>   authored render omits (closing the "invalid block silently vanishes"
+>   rot this doc names).
+> - **`broken-collaborator`** (resolve `collaborators` against the v0.2
+>   symbol index) is **deferred** — unbuilt; DESIGN-0019's E235
+>   rename-suspect covers the common case. Tracked as a block-reliability
+>   follow-on.
+> - **`expired-decision`** is **deferred** — opt-in/off by this doc's own
+>   design; needs a `DecisionChecker` registry (the type stub exists, no
+>   evaluator).
+> - **Diff-scoped git drift** (staleness, cross-block graph) is **not run
+>   inline** in `explain` — it needs a git ref `explain` does not carry and
+>   is better as the dedicated, already-shipped `sivru block staleness` /
+>   `graph` commands. `BLOCKS HEALTH` prints a one-line pointer to them.
+>
+> Acceptance criteria below are annotated `[met]` / `[deferred]`
+> accordingly.
 
 ## Problem
 
@@ -101,17 +134,27 @@ inputs, not the verdict.
 
 ## Acceptance criteria
 
-- `sivru explain <path>` shows an "Authored context" section for
-  annotated symbols, in markdown and JSON.
-- `mcp__sivru__explain` JSON carries `block` per symbol.
-- `sivru block check` reports the four diagnostic types and exits
-  non-zero on error-level diagnostics.
-- `broken-collaborator` resolves entries against the v0.2 symbol
-  index.
-- A repo with no blocks: `explain` output is unchanged from v0.5.0;
-  `block check` reports clean and exits zero.
-- `@sivru/skill` SKILL.md has an authoring section covering when and
-  how to write a block.
+- **[met]** `sivru explain <path>` shows an `AUTHORED CONTEXT` section
+  for annotated symbols, in markdown and JSON, rendered before the
+  derived facts.
+- **[met]** `mcp__sivru__explain` JSON carries `block` per symbol (in
+  `artifact.authored[].block`, preserved through the MCP cap).
+- **[met, reconciled]** Block drift is reported — not via a new `sivru
+  block check`, but via the DESIGN-0019 `sivru block` subcommands
+  (`validate` / `staleness` / `graph` / `check-enforcement`), each
+  exiting non-zero on error-level diagnostics. `explain` surfaces the
+  cheap, git-free subset (the full `validateBlock` set, incl.
+  missing-required) as `BLOCKS HEALTH` + `artifact.blocks_health`, and
+  points to the git-based commands for diff-scoped drift.
+- **[deferred]** `broken-collaborator` resolving entries against the
+  v0.2 symbol index — unbuilt; E235 rename-suspect covers the common
+  case. Block-reliability follow-on.
+- **[met]** A repo with no blocks: `explain` adds no authored/health
+  noise (the `BLOCKS HEALTH` section is omitted entirely); the `sivru
+  block` commands report clean and exit zero.
+- **[met]** `@sivru/skill` SKILL.md has an authoring section covering
+  when and how to write a block, now tied to `explain`'s `AUTHORED
+  CONTEXT` surfacing and the "update the block in the same edit" rule.
 
 ## Test plan
 

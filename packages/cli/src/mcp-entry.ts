@@ -88,11 +88,13 @@ const SEARCH_INPUT_SCHEMA = {
 const EXPLAIN_TOOL_NAME = "explain";
 // Routing hint: the before-edit workflow. See SEARCH_TOOL_DESCRIPTION note.
 export const EXPLAIN_TOOL_DESCRIPTION =
-  "Get the public API, callers, callees, churn, and ownership of a file or " +
+  "Get a symbol's authored `@sivru` context (role, invariants, decisions) " +
+  "plus the public API, callers, callees, churn, and ownership of a file or " +
   "symbol before editing it. Use after locating a file and before changing " +
-  "a symbol — it surfaces who else depends on what you are about to touch. " +
-  "Pass `path: \"<file>::<symbol>\"` for a region-level view. `diff: true` " +
-  "shows what an in-progress edit is about to break.";
+  "a symbol — it surfaces the intent behind the code and who else depends " +
+  "on what you are about to touch. Pass `path: \"<file>::<symbol>\"` for a " +
+  "region-level view. `diff: true` shows what an in-progress edit is about " +
+  "to break.";
 const EXPLAIN_INPUT_SCHEMA = {
   type: "object" as const,
   properties: {

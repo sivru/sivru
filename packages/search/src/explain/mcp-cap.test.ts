@@ -22,6 +22,7 @@ function emptyArtifact(): ExplainArtifact {
     ownership: [],
     tests: [],
     authored: [],
+    blocks_health: [],
     callers_truncated: null,
     callees_truncated: null,
     callers_skipped_reason: null,
@@ -114,6 +115,39 @@ describe("applyMcpCap", () => {
     art.callers = repeatCaller(45);
     applyMcpCap(art, 30);
     expect(art.callers).toHaveLength(45);
+  });
+
+  it("preserves authored[].block and blocks_health through the cap (DESIGN-0017 MCP parity)", () => {
+    const art = emptyArtifact();
+    art.callers = repeatCaller(45); // force the cap path to run
+    art.authored = [
+      {
+        symbol: "makeWidget",
+        kind: "symbol",
+        block: {
+          schema: 1,
+          role: "widget-maker",
+          responsibility: "make widgets",
+          maturity: "stable",
+          collaborators: [],
+          invariants: [],
+          invariantsV2: [],
+          decisions: [],
+        },
+      },
+    ];
+    art.blocks_health = [
+      {
+        code: "SIVRU-E217",
+        severity: "error",
+        message: "missing-required: `role` is required",
+      },
+    ];
+    const out = applyMcpCap(art, 30);
+    expect(out.callers).toHaveLength(30); // cap did run
+    expect(out.authored[0]?.block?.role).toBe("widget-maker");
+    expect(out.blocks_health).toHaveLength(1);
+    expect(out.blocks_health[0]?.code).toBe("SIVRU-E217");
   });
 });
 

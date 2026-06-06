@@ -4,7 +4,18 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { parseExplainArgs, runExplain } from "./explain.js";
+import {
+  parseExplainArgs,
+  renderArtifactMarkdown,
+  renderAuthoredSection,
+  renderBlocksHealth,
+  runExplain,
+} from "./explain.js";
+import type {
+  ExplainArtifact,
+  SivruBlockJSON,
+  BlockDiagnostic,
+} from "@sivru/search";
 
 type Captured = { stdout: string; stderr: string; restore: () => void };
 
@@ -204,5 +215,212 @@ describe("runExplain (smoke)", () => {
     };
     expect(parsed.diff_mode).toBe(true);
     expect(parsed.removed_symbols?.map((r) => r.symbol)).toEqual(["alpha"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DESIGN-0017 — authored-context surfacing + block health rendering.
+// Pure render helpers over ExplainArtifact, so unit-testable directly.
+// ---------------------------------------------------------------------------
+
+function baseArtifact(over: Partial<ExplainArtifact> = {}): ExplainArtifact {
+  return {
+    path: "src/foo.ts",
+    public_api: [],
+    callers: [],
+    callees: [],
+    churn: { commitCount: 0, lastCommitAt: null, sinceDays: 90 },
+    ownership: [],
+    tests: [],
+    authored: [],
+    blocks_health: [],
+    callers_truncated: null,
+    callees_truncated: null,
+    callers_skipped_reason: null,
+    footer: "scope footer",
+    ...over,
+  };
+}
+
+function fullBlock(over: Partial<SivruBlockJSON> = {}): SivruBlockJSON {
+  return {
+    schema: 1,
+    role: "widget-maker",
+    responsibility: "make widgets from sprockets",
+    maturity: "stable",
+    collaborators: ["sprocketFactory", "widgetCache"],
+    invariants: ["widgets are immutable once made"],
+    invariantsV2: [
+      { rule: "widgets are immutable once made", enforcedBy: "widget.test.ts" },
+    ],
+    decisions: [
+      {
+        chose: "an in-memory cache over a disk cache",
+        because: "widgets are cheap to recompute",
+        validWhile: "the working set fits in memory",
+        revisitIf: "a user reports OOM under load",
+      },
+    ],
+    ...over,
+  };
+}
+
+describe("renderAuthoredSection (DESIGN-0017 §1)", () => {
+  it("renders a full symbol block: role, responsibility, invariants, decisions, maturity, collaborators", () => {
+    const art = baseArtifact({
+      authored: [
+        { symbol: "makeWidget", kind: "symbol", block: fullBlock() },
+      ],
+    });
+    const out = renderAuthoredSection(art).join("\n");
+    expect(out).toContain("AUTHORED CONTEXT");
+    expect(out).toContain("makeWidget  [stable]");
+    expect(out).toContain("role: widget-maker");
+    expect(out).toContain("responsibility: make widgets from sprockets");
+    expect(out).toContain("invariants:");
+    expect(out).toContain(
+      "- widgets are immutable once made  (enforced-by: widget.test.ts)",
+    );
+    expect(out).toContain("decisions:");
+    expect(out).toContain("- chose: an in-memory cache over a disk cache");
+    expect(out).toContain("because: widgets are cheap to recompute");
+    expect(out).toContain("valid-while: the working set fits in memory");
+    expect(out).toContain("revisit-if: a user reports OOM under load");
+    expect(out).toContain(
+      "collaborators: sprocketFactory, widgetCache",
+    );
+  });
+
+  it("labels a module-kind block as (module)", () => {
+    const art = baseArtifact({
+      authored: [{ kind: "module", block: fullBlock({ maturity: null }) }],
+    });
+    const out = renderAuthoredSection(art).join("\n");
+    expect(out).toContain("(module)");
+    // maturity null → no bracket suffix on the header line.
+    expect(out).not.toContain("(module)  [");
+  });
+
+  it("omits empty optional groups without crashing", () => {
+    const art = baseArtifact({
+      authored: [
+        {
+          symbol: "bare",
+          kind: "symbol",
+          block: fullBlock({
+            maturity: null,
+            collaborators: [],
+            invariants: [],
+            invariantsV2: [],
+            decisions: [],
+          }),
+        },
+      ],
+    });
+    const out = renderAuthoredSection(art).join("\n");
+    expect(out).toContain("bare");
+    expect(out).toContain("role: widget-maker");
+    expect(out).not.toContain("invariants:");
+    expect(out).not.toContain("decisions:");
+    expect(out).not.toContain("collaborators:");
+  });
+
+  it("omits the revisit-if line when revisitIf is null", () => {
+    const art = baseArtifact({
+      authored: [
+        {
+          symbol: "x",
+          kind: "symbol",
+          block: fullBlock({
+            decisions: [
+              {
+                chose: "A",
+                because: "B",
+                validWhile: "C",
+                revisitIf: null,
+              },
+            ],
+          }),
+        },
+      ],
+    });
+    const out = renderAuthoredSection(art).join("\n");
+    expect(out).toContain("valid-while: C");
+    expect(out).not.toContain("revisit-if:");
+  });
+
+  it("shows the no-blocks line when there is no authored context", () => {
+    const out = renderAuthoredSection(baseArtifact()).join("\n");
+    expect(out).toContain("AUTHORED CONTEXT");
+    expect(out).toContain("(no @sivru blocks attached)");
+  });
+});
+
+describe("renderBlocksHealth (DESIGN-0017 §2)", () => {
+  const errDiag: BlockDiagnostic = {
+    code: "SIVRU-E217",
+    severity: "error",
+    message: "missing-required: `role` is required",
+    location: { filePath: "src/foo.ts", startLine: 12, endLine: 20 },
+  };
+
+  it("lists diagnostics and points to the diff-scoped drift commands", () => {
+    const art = baseArtifact({ blocks_health: [errDiag] });
+    const out = renderBlocksHealth(art).join("\n");
+    expect(out).toContain("BLOCKS HEALTH");
+    expect(out).toContain("1 error(s), 0 warning(s)");
+    expect(out).toContain(
+      "- SIVRU-E217 [error] missing-required: `role` is required  (line 12)",
+    );
+    expect(out).toContain("sivru block staleness");
+    expect(out).toContain("sivru block graph");
+  });
+
+  it("surfaces a broken block even when authored context is empty", () => {
+    // An invalid block (block === null) contributes a diagnostic but no
+    // authored entry — the section must still render so it does not vanish.
+    const art = baseArtifact({ authored: [], blocks_health: [errDiag] });
+    const out = renderBlocksHealth(art).join("\n");
+    expect(out).toContain("BLOCKS HEALTH");
+    expect(out).toContain("SIVRU-E217");
+  });
+
+  it("shows a clean note when blocks exist with no diagnostics", () => {
+    const art = baseArtifact({
+      authored: [{ symbol: "ok", kind: "symbol", block: fullBlock() }],
+    });
+    const out = renderBlocksHealth(art).join("\n");
+    expect(out).toContain("BLOCKS HEALTH");
+    expect(out).toContain("(clean — 1 block, no issues)");
+  });
+
+  it("stays silent for a blockless file (section omitted)", () => {
+    expect(renderBlocksHealth(baseArtifact())).toEqual([]);
+  });
+
+  it("is wired into the full markdown render", () => {
+    const art = baseArtifact({
+      authored: [{ symbol: "makeWidget", kind: "symbol", block: fullBlock() }],
+    });
+    const md = renderArtifactMarkdown(art);
+    // Authored context renders before the derived PUBLIC API section.
+    expect(md.indexOf("AUTHORED CONTEXT")).toBeLessThan(md.indexOf("PUBLIC API"));
+    expect(md).toContain("BLOCKS HEALTH");
+  });
+
+  it("caps the rendered diagnostic list so health never buries the derived facts", () => {
+    // 25 diagnostics > the 20-line render cap.
+    const many: BlockDiagnostic[] = Array.from({ length: 25 }, (_, i) => ({
+      code: "SIVRU-E217",
+      severity: "warning" as const,
+      message: `issue ${i}`,
+      location: { filePath: "src/foo.ts", startLine: i + 1, endLine: i + 1 },
+    }));
+    const out = renderBlocksHealth(baseArtifact({ blocks_health: many }));
+    const diagLines = out.filter((l) => l.trimStart().startsWith("- SIVRU-"));
+    expect(diagLines).toHaveLength(20);
+    expect(out.join("\n")).toContain("... 5 more");
+    // The count summary still reflects the FULL set, not the capped render.
+    expect(out.join("\n")).toContain("0 error(s), 25 warning(s)");
   });
 });

@@ -16,6 +16,7 @@ import {
   buildSymbolIndex,
   buildCommitCounts,
   computeStateId,
+  countSeverities,
   loadOrBuildSymbolIndex,
   parsePathAndSymbol,
   resolveAndAssertInside,
@@ -23,6 +24,16 @@ import {
   type ExplainArtifact,
   type ExplainOptions,
 } from "@sivru/search";
+
+import { formatDiagnostic } from "../lib/diagnostics.js";
+
+/**
+ * Max block-health diagnostics rendered inline in the markdown BLOCKS HEALTH
+ * section. The full set is always in `--json` and `sivru block validate`;
+ * this only bounds the human render so a pathological file does not bury the
+ * derived-fact sections that follow.
+ */
+const BLOCKS_HEALTH_RENDER_CAP = 20;
 
 type ExplainArgs = {
   /** Raw target argument (`<path>` or `<path>::<symbol>`). */
@@ -194,6 +205,16 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
   lines.push("=".repeat(Math.max(title.length, 40)));
   lines.push("");
 
+  // DESIGN-0017: authored context renders before derived facts — intent
+  // before mechanism. The agent reads why the code is shaped this way
+  // before it reads what the code mechanically is.
+  for (const line of renderAuthoredSection(art)) lines.push(line);
+
+  // DESIGN-0017 §2: block health — lint diagnostics for the file's blocks,
+  // including broken ones the authored section omits. Quiet for blockless
+  // files. Diff-scoped git drift lives in the `sivru block` subcommands.
+  for (const line of renderBlocksHealth(art)) lines.push(line);
+
   lines.push("PUBLIC API");
   if (art.public_api.length === 0) {
     lines.push("  (none)");
@@ -261,24 +282,6 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
   }
   lines.push("");
 
-  // v0.6 fills artifact.authored[] from extracted @sivru blocks; full
-  // surfacing (per-block role + responsibility + decisions) is v0.7
-  // (DESIGN-0017). The CLI markdown renderer prints a one-line summary
-  // here so the agent at least sees that authored context exists; the
-  // structured payload is in the --json output.
-  if (art.authored.length === 0) {
-    lines.push("AUTHORED  (no @sivru blocks attached)");
-  } else {
-    const roles = art.authored
-      .map((a) => a.block?.role)
-      .filter((r): r is string => typeof r === "string");
-    const roleStr = roles.length > 0 ? `roles: ${roles.join(", ")}` : "";
-    lines.push(
-      `AUTHORED  ${art.authored.length} block(s); ${roleStr} (full payload in --json)`,
-    );
-  }
-  lines.push("");
-
   if (art.diff_mode === true) {
     lines.push("DIFF MODE — removed symbols + their callers");
     if (!art.removed_symbols || art.removed_symbols.length === 0) {
@@ -306,4 +309,110 @@ export function renderArtifactMarkdown(art: ExplainArtifact): string {
   lines.push(`  ${art.footer}`);
 
   return lines.join("\n");
+}
+
+/**
+ * Render the AUTHORED CONTEXT section (DESIGN-0017 §1). One entry per
+ * `@sivru` block on the target — role, responsibility, invariants (with
+ * their `enforced-by` reference when present), time-bounded decisions
+ * (`chose / because / valid-while / revisit-if`), maturity, and
+ * collaborators. This is the authored intent the agent reads before the
+ * derived facts. A target with no blocks renders a single
+ * "(no @sivru blocks attached)" line so the section is always present and
+ * consumers can rely on it. The structured payload is also in `--json`.
+ */
+export function renderAuthoredSection(art: ExplainArtifact): string[] {
+  const lines: string[] = ["AUTHORED CONTEXT"];
+  const entries = art.authored.filter((e) => e.block != null);
+  if (entries.length === 0) {
+    lines.push("  (no @sivru blocks attached)");
+    lines.push("");
+    return lines;
+  }
+  for (const entry of entries) {
+    // Non-null by the filter above; narrow for the type checker.
+    const block = entry.block!;
+    const label =
+      entry.kind === "module" || !entry.symbol ? "(module)" : entry.symbol;
+    const maturity = block.maturity ? `  [${block.maturity}]` : "";
+    lines.push(`  ${label}${maturity}`);
+    lines.push(`    role: ${block.role}`);
+    lines.push(`    responsibility: ${block.responsibility}`);
+    if (block.invariantsV2.length > 0) {
+      lines.push("    invariants:");
+      for (const inv of block.invariantsV2) {
+        const by = inv.enforcedBy ? `  (enforced-by: ${inv.enforcedBy})` : "";
+        lines.push(`      - ${inv.rule}${by}`);
+      }
+    }
+    if (block.decisions.length > 0) {
+      lines.push("    decisions:");
+      for (const d of block.decisions) {
+        lines.push(`      - chose: ${d.chose}`);
+        lines.push(`        because: ${d.because}`);
+        lines.push(`        valid-while: ${d.validWhile}`);
+        if (d.revisitIf) lines.push(`        revisit-if: ${d.revisitIf}`);
+      }
+    }
+    if (block.collaborators.length > 0) {
+      lines.push(`    collaborators: ${block.collaborators.join(", ")}`);
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
+/**
+ * Render the BLOCKS HEALTH section (DESIGN-0017 §2). Surfaces the lint
+ * diagnostics carried in `art.blocks_health` — the cheap, git-free checks
+ * (missing-required and the rest of the v0.6/v0.19 block linter), computed
+ * over the target file during artifact assembly. Crucially this INCLUDES
+ * diagnostics for blocks that failed to parse or validate, which the
+ * authored section omits: a broken block surfaces here instead of silently
+ * vanishing — the rot DESIGN-0017 §2 exists to close.
+ *
+ * The section is quiet by design:
+ *   - diagnostics present            → list them + a pointer to the
+ *                                      diff-scoped `sivru block` drift checks
+ *   - blocks present, no diagnostics → a one-line "clean" note
+ *   - no blocks at all               → omit the section entirely, so
+ *                                      blockless files read exactly as before
+ *
+ * Diff-scoped git drift (staleness, cross-block graph) is intentionally NOT
+ * run inline — it needs a git ref `explain` does not carry and is better as
+ * the dedicated, already-shipped `sivru block staleness` / `graph` commands.
+ */
+export function renderBlocksHealth(art: ExplainArtifact): string[] {
+  const diags = art.blocks_health;
+  const hasBlocks = art.authored.length > 0 || diags.length > 0;
+  if (!hasBlocks) return []; // blockless file: stay silent.
+
+  const lines: string[] = ["BLOCKS HEALTH"];
+  if (diags.length === 0) {
+    const n = art.authored.length;
+    lines.push(`  (clean — ${n} block${n === 1 ? "" : "s"}, no issues)`);
+    lines.push("");
+    return lines;
+  }
+
+  const { errors, warnings } = countSeverities(diags);
+  lines.push(`  ${errors} error(s), ${warnings} warning(s)`);
+  // Health renders before the derived facts, so an unbounded list would bury
+  // PUBLIC API et al. Cap the human render (the full set is always in --json /
+  // `sivru block validate`); the cap is generous since real files carry a
+  // handful of blocks.
+  const shown = diags.slice(0, BLOCKS_HEALTH_RENDER_CAP);
+  for (const d of shown) {
+    lines.push(`    - ${formatDiagnostic(d, "code-first")}`);
+  }
+  if (diags.length > shown.length) {
+    lines.push(
+      `    ... ${diags.length - shown.length} more (run \`sivru block validate <path>\` for all)`,
+    );
+  }
+  lines.push(
+    "  run `sivru block staleness` / `sivru block graph` for diff-scoped drift",
+  );
+  lines.push("");
+  return lines;
 }

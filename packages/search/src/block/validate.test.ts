@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_BLOCK_CONFIG } from "./config.js";
-import type { SivruBlock, SourceRange } from "./types.js";
-import { hasErrors, validateBlock } from "./validate.js";
+import type { BlockDiagnostic, SivruBlock, SourceRange } from "./types.js";
+import { countSeverities, hasErrors, validateBlock } from "./validate.js";
 
 const loc: SourceRange = { filePath: "test.ts", startLine: 1, endLine: 10 };
 
@@ -223,5 +223,31 @@ describe("validateBlock — DESIGN-0019 §8 per-language maxLines", () => {
     const out = validateBlock(block(), { location: javaLoc });
     const e211 = out.find((d) => d.code === "SIVRU-E211");
     expect(e211?.message).toContain("(java)");
+  });
+});
+
+describe("countSeverities", () => {
+  const d = (severity: "error" | "warning"): BlockDiagnostic => ({
+    code: "SIVRU-E000",
+    severity,
+    message: "x",
+  });
+
+  it("splits a mixed list into error / warning counts", () => {
+    expect(countSeverities([d("error"), d("warning"), d("error")])).toEqual({
+      errors: 2,
+      warnings: 1,
+    });
+  });
+
+  it("returns zeroes for an empty list", () => {
+    expect(countSeverities([])).toEqual({ errors: 0, warnings: 0 });
+  });
+
+  it("counts an all-warning list with no errors", () => {
+    expect(countSeverities([d("warning"), d("warning")])).toEqual({
+      errors: 0,
+      warnings: 2,
+    });
   });
 });
