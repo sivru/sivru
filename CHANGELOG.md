@@ -7,7 +7,30 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
-## [0.10.0] — 2026-06-05
+## [0.10.1] — 2026-06-07
+
+**Windows path portability.** `sivru block check-enforcement` /
+`mcp__sivru__checkup` silently produced wrong results on Windows: an
+`enforced-by` reference to an absolute test path was treated as relative
+(its absolute check was `path.startsWith("/")`, which is false for a
+`C:\…` Windows path), so the file was looked up under the wrong location
+and reported as missing — a false `SIVRU-E231`. sivru targets coding
+agents, many of which run on Windows, so this was real user-facing
+breakage.
+
+### Fixed
+
+- **`resolveFileAnchored` (block enforcement)** now uses
+  `node:path`'s `isAbsolute` + `resolve` instead of a `/`-prefix check and
+  hand-rolled string concatenation, so absolute and relative `enforced-by`
+  paths resolve correctly on Windows as well as POSIX.
+- **CI is green on Windows again.** Three test helpers carried POSIX-only
+  separator assumptions that failed on Windows (and had left the Windows CI
+  leg red since before v0.9.0): `mkRepo` in `authored.test.ts` and
+  `block.test.ts` built parent dirs with a `/`-only regex (creating the file
+  path as a directory → `EISDIR`), and `artifact.test.ts` mocked
+  `fileExists` with a posix-slash suffix the native `absPath` never matched.
+  All now use `dirname` / `basename`.
 
 **Serving authored context — `explain` now leads with intent.**
 `sivru explain` and `mcp__sivru__explain` surface the `@sivru` block on

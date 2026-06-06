@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { basename } from "node:path";
 
 import { assembleArtifact, buildFooter } from "./artifact.js";
 import { createSymbolIndexFromEntries } from "./cache.js";
@@ -290,10 +291,11 @@ describe("assembleArtifact: tests", () => {
       mkEntry("src/foo.ts"),
       mkEntry("src/foo.test.ts"),
     ]);
-    const fileExists = (absPath: string) =>
-      absPath.endsWith("/foo.test.ts");
+    // basename, not endsWith("/…"): production builds a NATIVE absPath, which
+    // uses `\` separators on Windows, so a posix-slash suffix never matches.
+    const fileExists = (absPath: string) => basename(absPath) === "foo.test.ts";
     const readSyncOrUndef = (absPath: string) =>
-      absPath.endsWith("/foo.test.ts")
+      basename(absPath) === "foo.test.ts"
         ? `it("a", () => {});\nit("b", () => {});\ntest("c", () => {});`
         : undefined;
     const art = await assembleArtifact(baseOpts(), idx, {
@@ -311,8 +313,7 @@ describe("assembleArtifact: tests", () => {
       mkEntry("src/foo.ts"),
       mkEntry("src/foo.test.ts"),
     ]);
-    const fileExists = (absPath: string) =>
-      absPath.endsWith("/foo.test.ts");
+    const fileExists = (absPath: string) => basename(absPath) === "foo.test.ts";
     const readSyncOrUndef = () => "it('a', ()=>{});";
     const art = await assembleArtifact(baseOpts(), idx, {
       gitLog: noopGit,

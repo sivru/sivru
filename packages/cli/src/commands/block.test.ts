@@ -35,8 +35,9 @@ function mkRepo(files: Record<string, string>): string {
   created.push(dir);
   for (const [rel, content] of Object.entries(files)) {
     const abs = join(dir, rel);
-    mkdirSync(join(abs, "..").replace(/\/[^/]+$/, ""), { recursive: true });
-    mkdirSync(abs.replace(/\/[^/]+$/, ""), { recursive: true });
+    // `dirname`, not a `/`-only regex: `join` yields `\` on Windows, where the
+    // regex never matched and `mkdirSync` created the file path as a directory.
+    mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, content);
   }
   return dir;

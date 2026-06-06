@@ -9,7 +9,7 @@
 
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -40,7 +40,10 @@ function mkRepo(files: Record<string, string>): string {
   created.push(dir);
   for (const [rel, content] of Object.entries(files)) {
     const abs = join(dir, rel);
-    mkdirSync(abs.replace(/\/[^/]+$/, ""), { recursive: true });
+    // `dirname`, not a `/`-only regex: on Windows `join` yields `\` separators,
+    // so the regex never matched and `mkdirSync` created the file path itself
+    // as a directory → EISDIR on write.
+    mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, content);
   }
   return dir;
