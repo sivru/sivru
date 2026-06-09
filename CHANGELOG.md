@@ -24,13 +24,21 @@ breakage.
   `node:path`'s `isAbsolute` + `resolve` instead of a `/`-prefix check and
   hand-rolled string concatenation, so absolute and relative `enforced-by`
   paths resolve correctly on Windows as well as POSIX.
-- **CI is green on Windows again.** Three test helpers carried POSIX-only
-  separator assumptions that failed on Windows (and had left the Windows CI
-  leg red since before v0.9.0): `mkRepo` in `authored.test.ts` and
-  `block.test.ts` built parent dirs with a `/`-only regex (creating the file
-  path as a directory → `EISDIR`), and `artifact.test.ts` mocked
-  `fileExists` with a posix-slash suffix the native `absPath` never matched.
-  All now use `dirname` / `basename`.
+- **CI is green on Windows again** (the leg had been red since before
+  v0.9.0). The breakage was entirely Windows-fragile *test* assertions — no
+  other product code was affected:
+  - `@sivru/search`: `mkRepo` in `authored.test.ts` / `block.test.ts` built
+    parent dirs with a `/`-only regex (creating the file path as a directory
+    → `EISDIR`); `artifact.test.ts` mocked `fileExists` with a posix-slash
+    suffix the native `absPath` never matched; `enforcement.test.ts` embedded
+    absolute paths with backslashes inside YAML double-quotes (where `\…` is
+    an escape). Now `dirname` / `basename` / forward-slash-normalized.
+  - `@sivru/observe`: `blocks.test.ts` asserted POSIX path literals against
+    native-separator output; `server.test.ts` stubbed only `HOME` (Windows
+    `os.homedir()` reads `USERPROFILE`); `git-info.test.ts` compared 8.3
+    short paths (`RUNNER~1`) to git's long form and flaked on an `EBUSY`
+    rmdir. Now platform-resolved expectations, both home vars stubbed,
+    realpath'd scratch dirs, and `rmSync` retries.
 
 **Serving authored context — `explain` now leads with intent.**
 `sivru explain` and `mcp__sivru__explain` surface the `@sivru` block on

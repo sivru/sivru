@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { createObserveApp } from "./app.js";
 import { _internal, buildBlocksResponse, isWatchNoise, resolveFileWithinRoot } from "./blocks.js";
@@ -459,14 +459,19 @@ describe("isWatchNoise", () => {
 });
 
 describe("resolveFileWithinRoot", () => {
+  // Resolve the root and expectations through node:path so the assertions hold
+  // on Windows too: a bare "/repo" literal is not a stable absolute path there,
+  // and the function returns native-separator output.
+  const root = resolve("/repo");
+  const expected = resolve(root, "src/a.ts");
   it("accepts a relative path under root", () => {
-    expect(resolveFileWithinRoot("/repo", "src/a.ts")).toBe("/repo/src/a.ts");
+    expect(resolveFileWithinRoot(root, "src/a.ts")).toBe(expected);
   });
   it("accepts an absolute path under root", () => {
-    expect(resolveFileWithinRoot("/repo", "/repo/src/a.ts")).toBe("/repo/src/a.ts");
+    expect(resolveFileWithinRoot(root, expected)).toBe(expected);
   });
   it("rejects traversal escaping root", () => {
-    expect(resolveFileWithinRoot("/repo", "../../etc/passwd")).toBeNull();
+    expect(resolveFileWithinRoot(root, "../../etc/passwd")).toBeNull();
   });
   it("rejects an absolute path outside root", () => {
     expect(resolveFileWithinRoot("/repo", "/etc/passwd")).toBeNull();

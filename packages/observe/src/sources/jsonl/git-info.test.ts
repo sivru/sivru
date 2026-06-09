@@ -26,12 +26,18 @@ function git(cwd: string, ...args: string[]): void {
 }
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), "sivru-gitinfo-"));
+  // Canonicalize the scratch root: on Windows GH runners `tmpdir()` is an 8.3
+  // short path (`…\RUNNER~1\…`) while git/realpath report the long form
+  // (`…\runneradmin\…`), so a raw mkdtemp path won't equal the production
+  // output. Realpathing once here keeps every derived path canonical.
+  scratch = realpathSync(mkdtempSync(join(tmpdir(), "sivru-gitinfo-")));
   _resetGitInfoCache();
 });
 
 afterEach(() => {
-  rmSync(scratch, { recursive: true, force: true });
+  // maxRetries: a just-finished git process can still hold a handle on Windows,
+  // making the immediate rmdir fail with EBUSY. Retry instead of flaking.
+  rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe("resolveGitInfo", () => {
