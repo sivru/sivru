@@ -54,9 +54,12 @@ export function parseNodeVersion(raw: string): ParsedNodeVersion | null {
 async function exec(
   cmd: string,
   args: readonly string[],
-  timeoutMs = 4000,
+  opts: { timeoutMs?: number; shell?: boolean } = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const r: ExecResult = await runCmd(cmd, args, { timeoutMs });
+  const r: ExecResult = await runCmd(cmd, args, {
+    timeoutMs: opts.timeoutMs ?? 4000,
+    ...(opts.shell ? { shell: true } : {}),
+  });
   if (r.ok) return { code: 0, stdout: r.stdout, stderr: "" };
   if (r.reason === "missing") return { code: 127, stdout: "", stderr: r.stderr };
   // Both "non-zero" and "timeout" map to exit-1 for the legacy callers.
@@ -98,7 +101,12 @@ export function checkNodeVersion(): CheckResult {
 }
 
 export async function checkPnpmVersion(): Promise<CheckResult> {
-  const r = await exec("pnpm", ["--version"]);
+  // On Windows the launcher is `pnpm.cmd`; bare execFile can't resolve it, so
+  // run the version probe through the shell there (args are a fixed literal —
+  // no injection surface). Other platforms stay shell-free.
+  const r = await exec("pnpm", ["--version"], {
+    shell: process.platform === "win32",
+  });
   if (r.code === 127) {
     return {
       name: "pnpm",

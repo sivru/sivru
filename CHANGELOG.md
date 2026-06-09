@@ -20,13 +20,23 @@ breakage.
 
 ### Fixed
 
+Three production Windows bugs, plus a sweep of Windows-fragile test
+assertions that had left the Windows CI leg red since before v0.9.0:
+
 - **`resolveFileAnchored` (block enforcement)** now uses
   `node:path`'s `isAbsolute` + `resolve` instead of a `/`-prefix check and
   hand-rolled string concatenation, so absolute and relative `enforced-by`
   paths resolve correctly on Windows as well as POSIX.
-- **CI is green on Windows again** (the leg had been red since before
-  v0.9.0). The breakage was entirely Windows-fragile *test* assertions — no
-  other product code was affected:
+- **`relativizePath` (ground-truth)** emitted native `\` separators on
+  Windows (`src\auth\login.ts`), leaking into ground-truth keys that are
+  meant to be stable POSIX-relative paths. Now POSIX-normalized.
+- **`sivru doctor`'s pnpm check** reported "pnpm not found" on Windows even
+  when pnpm was installed: the launcher is `pnpm.cmd`, which bare `execFile`
+  can't resolve. `runCmd` gained an opt-in `shell` flag (default off, so the
+  coach's path-bearing git calls are untouched) that the pnpm probe uses on
+  Windows.
+- **CI is green on Windows again.** The remaining breakage was
+  Windows-fragile *test* assertions:
   - `@sivru/search`: `mkRepo` in `authored.test.ts` / `block.test.ts` built
     parent dirs with a `/`-only regex (creating the file path as a directory
     → `EISDIR`); `artifact.test.ts` mocked `fileExists` with a posix-slash
@@ -39,6 +49,14 @@ breakage.
     short paths (`RUNNER~1`) to git's long form and flaked on an `EBUSY`
     rmdir. Now platform-resolved expectations, both home vars stubbed,
     realpath'd scratch dirs, and `rmSync` retries.
+  - `@sivru/cli`: parseArgs tests (explain / checkup / bench-personal /
+    block) asserted POSIX path literals against `resolve()`d native output;
+    `bench-history` / `skill` tests stubbed only `HOME`. Now `resolve()` /
+    `isAbsolute()` and both home vars stubbed. A repo-root `.gitattributes`
+    forces `eol=lf` so Windows checkouts don't break the byte-exact
+    bundled-`SKILL.md` comparison in `sivru skill install`.
+
+## [0.10.0] — 2026-06-05
 
 **Serving authored context — `explain` now leads with intent.**
 `sivru explain` and `mcp__sivru__explain` surface the `@sivru` block on

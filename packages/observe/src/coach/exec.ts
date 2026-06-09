@@ -35,6 +35,13 @@ export interface ExecOptions {
   cwd?: string;
   /** Soft timeout in milliseconds. Default 4000ms (doctor.ts precedent). */
   timeoutMs?: number;
+  /**
+   * Run through the platform shell. Default off — keep it off for any call
+   * that passes file-path args (a path with spaces is mis-quoted under a
+   * shell). Opt in ONLY to resolve a launcher binary on Windows, where a tool
+   * like `pnpm` is really `pnpm.cmd` and bare `execFile` cannot find it.
+   */
+  shell?: boolean;
 }
 
 /**
@@ -64,6 +71,7 @@ export function runCmd(
       args.slice(),
       {
         ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
+        ...(opts.shell ? { shell: true } : {}),
         timeout: timeoutMs,
         encoding: "utf8",
         maxBuffer: 10 * 1024 * 1024,
