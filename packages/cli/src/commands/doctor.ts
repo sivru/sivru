@@ -232,7 +232,10 @@ export async function checkClaudeProjectsDir(): Promise<CheckResult> {
 }
 
 export async function checkMcpRegistration(): Promise<CheckResult> {
-  const which = await exec("which", ["claude"]);
+  // `which` doesn't exist on Windows (the equivalent is `where`); using it
+  // there would always report claude-missing even when it's installed.
+  const whichCmd = process.platform === "win32" ? "where" : "which";
+  const which = await exec(whichCmd, ["claude"]);
   if (which.code !== 0) {
     return {
       name: "mcp registration",

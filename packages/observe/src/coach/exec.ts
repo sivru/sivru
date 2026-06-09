@@ -45,18 +45,44 @@ export interface ExecOptions {
 }
 
 /**
- * Run `cmd args` and resolve with a discriminated result. Never throws.
+ * Tokens allowed when `shell: true`: letters, digits, and the punctuation that
+ * appears in launcher names, flags, and paths (`. _ - / \ : =`). Anything else
+ * (spaces, quotes, `; & | $ ( ) < > \` * ?` …) is rejected, which keeps shell
+ * mode usable only for fixed-arg launcher probes — never an injection vector.
+ */
+const SHELL_SAFE_TOKEN = /^[A-Za-z0-9._:=/\\-]+$/;
+
+/**
+ * Run `cmd args` and resolve with a discriminated result. The returned
+ * promise never rejects on command failure:
  *
  * - Binary not on PATH → `{ ok: false, reason: "missing" }`
  * - Non-zero exit → `{ ok: false, reason: "non-zero" }`
  * - Timeout fires → `{ ok: false, reason: "timeout" }`
  * - Success → `{ ok: true, stdout }`
+ *
+ * It throws synchronously in exactly one case — a programming guard: `shell:
+ * true` combined with an argument that carries shell metacharacters. Shell
+ * mode exists only to resolve a launcher binary on Windows; it must never be
+ * handed caller- or path-derived data, so we fail loud rather than let it
+ * become a command-injection vector.
  */
 export function runCmd(
   cmd: string,
   args: readonly string[],
   opts: ExecOptions = {},
 ): Promise<ExecResult> {
+  if (opts.shell) {
+    for (const token of [cmd, ...args]) {
+      if (!SHELL_SAFE_TOKEN.test(token)) {
+        throw new Error(
+          `runCmd: shell:true rejects ${JSON.stringify(token)} — it contains ` +
+            `characters unsafe under a shell. shell mode is for launcher ` +
+            `resolution (e.g. pnpm.cmd) with simple, fixed args only.`,
+        );
+      }
+    }
+  }
   const timeoutMs = opts.timeoutMs ?? 4000;
   return new Promise((resolveFn) => {
     let settled = false;

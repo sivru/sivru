@@ -34,4 +34,25 @@ describe("runCmd", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("timeout");
   });
+
+  it("runs through the shell when shell:true (safe, fixed args)", async () => {
+    // The Windows pnpm-launcher case in shape — here just prove shell mode
+    // resolves and runs on every platform.
+    const r = await runCmd("echo", ["hello"], {
+      shell: true,
+      timeoutMs: 30_000,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.stdout.trim()).toBe("hello");
+  });
+
+  it("throws on shell:true with shell-metacharacter args (injection guard)", () => {
+    // Programming guard: shell mode must never be handed an injection payload.
+    expect(() => runCmd("echo", ["hi; rm -rf /"], { shell: true })).toThrow(
+      /shell:true rejects/,
+    );
+    expect(() => runCmd("echo", ["$(whoami)"], { shell: true })).toThrow();
+    // The same arg is fine WITHOUT shell mode (execFile passes it literally).
+    expect(() => runCmd("echo", ["hi; rm -rf /"])).not.toThrow();
+  });
 });
