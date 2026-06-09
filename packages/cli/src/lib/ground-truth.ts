@@ -113,7 +113,10 @@ export function relativizePath(
   if (abs === root) return null;
   if (abs === root + sep) return null;
   if (!abs.startsWith(root + sep)) return null;
-  return abs.slice(root.length + 1);
+  // Emit a POSIX-relative key (the repo-wide convention for stable,
+  // cross-platform ground-truth paths) — `slice` would otherwise leak the
+  // native `\` separator on Windows.
+  return abs.slice(root.length + 1).split(sep).join("/");
 }
 
 /**

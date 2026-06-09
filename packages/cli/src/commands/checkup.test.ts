@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,7 +50,7 @@ describe("parseCheckupArgs", () => {
   it("accepts a positional path", () => {
     const r = parseCheckupArgs(["/some/abs/path"]);
     expect(r.kind).toBe("ok");
-    if (r.kind === "ok") expect(r.args.path).toBe("/some/abs/path");
+    if (r.kind === "ok") expect(r.args.path).toBe(resolve("/some/abs/path"));
   });
 
   it("parses --json", () => {

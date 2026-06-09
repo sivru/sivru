@@ -18,6 +18,9 @@ beforeEach(() => {
   originalHome = process.env["HOME"];
   process.env["HOME"] = tmpHome;
   vi.stubEnv("HOME", tmpHome);
+  // os.homedir() reads USERPROFILE on Windows, not HOME, so stub both —
+  // otherwise the route resolves the real home there and finds no runs.
+  vi.stubEnv("USERPROFILE", tmpHome);
 });
 
 afterEach(() => {

@@ -16,6 +16,7 @@ import { runSkill } from "./skill.js";
 let homeDir: string;
 let projectRepo: string;
 let origHome: string | undefined;
+let origUserProfile: string | undefined;
 
 beforeEach(async () => {
   homeDir = await mkdtemp(join(tmpdir(), "sivru-skill-home-"));
@@ -23,11 +24,17 @@ beforeEach(async () => {
   execFileSync("git", ["init", "-q"], { cwd: projectRepo });
   origHome = process.env.HOME;
   process.env.HOME = homeDir;
+  // os.homedir() reads USERPROFILE on Windows, not HOME — redirect both so the
+  // user scope points at the temp dir on every platform.
+  origUserProfile = process.env.USERPROFILE;
+  process.env.USERPROFILE = homeDir;
 });
 
 afterEach(async () => {
   if (origHome === undefined) delete process.env.HOME;
   else process.env.HOME = origHome;
+  if (origUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = origUserProfile;
   await rm(homeDir, { recursive: true, force: true });
   await rm(projectRepo, { recursive: true, force: true });
 });

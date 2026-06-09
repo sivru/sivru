@@ -9,7 +9,7 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,7 +69,7 @@ describe("parseBlockArgs", () => {
     expect(out.kind).toBe("ok");
     if (out.kind === "ok" && out.args.subcommand === "extract") {
       expect(out.args.json).toBe(true);
-      expect(out.args.rootPaths).toEqual(["/some/path"]);
+      expect(out.args.rootPaths).toEqual([resolve("/some/path")]);
     }
   });
 
@@ -77,7 +77,7 @@ describe("parseBlockArgs", () => {
     const out = parseBlockArgs(["validate", "/a", "/b", "/c"]);
     expect(out.kind).toBe("ok");
     if (out.kind === "ok" && out.args.subcommand === "validate") {
-      expect(out.args.rootPaths).toEqual(["/a", "/b", "/c"]);
+      expect(out.args.rootPaths).toEqual(["/a", "/b", "/c"].map((p) => resolve(p)));
     }
   });
 
@@ -102,7 +102,7 @@ describe("parseBlockArgs", () => {
     const out = parseBlockArgs(["check-enforcement", "/a", "/b"]);
     expect(out.kind).toBe("ok");
     if (out.kind === "ok" && out.args.subcommand === "check-enforcement") {
-      expect(out.args.rootPaths).toEqual(["/a", "/b"]);
+      expect(out.args.rootPaths).toEqual(["/a", "/b"].map((p) => resolve(p)));
     }
   });
 
@@ -128,7 +128,7 @@ describe("parseBlockArgs", () => {
     const out = parseBlockArgs(["init", "/some/file.ts", "--symbol=Foo", "--write"]);
     expect(out.kind).toBe("ok");
     if (out.kind === "ok" && out.args.subcommand === "init") {
-      expect(out.args.filePath).toBe("/some/file.ts");
+      expect(out.args.filePath).toBe(resolve("/some/file.ts"));
       expect(out.args.symbol).toBe("Foo");
       expect(out.args.write).toBe(true);
     }
