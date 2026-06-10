@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isAbsolute } from "node:path";
 
 import {
   _internal,
@@ -160,7 +161,7 @@ describe("parseArgs", () => {
   it("--repo resolves to absolute path", () => {
     const r = parse(["personal", "--repo", "."]);
     if ("error" in r) throw new Error(r.error);
-    expect(r.repo).toMatch(/^\//);
+    expect(isAbsolute(r.repo)).toBe(true);
   });
 
   it("rejects unknown flags", () => {

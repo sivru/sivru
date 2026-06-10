@@ -365,7 +365,10 @@ describe("@sivru/observe — HTTP server", () => {
     beforeEach(async () => {
       tmpHome = mkdtempSync(join(tmpdir(), "observe-bench-history-"));
       vi.stubEnv("HOME", tmpHome);
-      // We don't override XDG dirs — only HOME — because bench-history
+      // `os.homedir()` reads USERPROFILE on Windows (not HOME), so stub both —
+      // otherwise the route resolves the real home on Windows and finds 0 runs.
+      vi.stubEnv("USERPROFILE", tmpHome);
+      // We don't override XDG dirs — only the home — because bench-history
       // routes resolve via os.homedir() directly.
     });
 

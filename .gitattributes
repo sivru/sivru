@@ -1,0 +1,14 @@
+# Normalize line endings to LF on checkout for all platforms. Without this,
+# Windows checkouts (git core.autocrlf=true) get CRLF, which breaks byte-exact
+# comparisons — e.g. the bundled SKILL.md asset vs what `sivru skill install`
+# wrote, and any test that asserts on `\n`-joined file contents.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending-normalized.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.wasm binary

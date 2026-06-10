@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -88,8 +89,8 @@ describe("parseExplainArgs", () => {
     const b = parseExplainArgs(["src/foo.ts", "--repo", "/tmp/x"]);
     expect(a.kind).toBe("ok");
     expect(b.kind).toBe("ok");
-    if (a.kind === "ok") expect(a.args.repoRoot).toBe("/tmp/x");
-    if (b.kind === "ok") expect(b.args.repoRoot).toBe("/tmp/x");
+    if (a.kind === "ok") expect(a.args.repoRoot).toBe(resolve("/tmp/x"));
+    if (b.kind === "ok") expect(b.args.repoRoot).toBe(resolve("/tmp/x"));
   });
 });
 

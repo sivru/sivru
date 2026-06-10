@@ -232,7 +232,7 @@ export function foo() {}
  * responsibility: r
  * invariants:
  *   - rule: "always y"
- *     enforced-by: "${join(tmpDir, "src", "subject.test.ts")}::clears state"
+ *     enforced-by: "${join(tmpDir, "src", "subject.test.ts").replaceAll("\\", "/")}::clears state"
  * @end
  */
 export function foo() {}
@@ -257,7 +257,7 @@ export function foo() {}
  * responsibility: r
  * invariants:
  *   - rule: "always y"
- *     enforced-by: "${join(tmpDir, "src", "subject.test.ts")}::clears state"
+ *     enforced-by: "${join(tmpDir, "src", "subject.test.ts").replaceAll("\\", "/")}::clears state"
  * @end
  */
 export function foo() {}

@@ -7,6 +7,55 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-06-07
+
+**Windows path portability.** `sivru block check-enforcement` /
+`mcp__sivru__checkup` silently produced wrong results on Windows: an
+`enforced-by` reference to an absolute test path was treated as relative
+(its absolute check was `path.startsWith("/")`, which is false for a
+`C:\…` Windows path), so the file was looked up under the wrong location
+and reported as missing — a false `SIVRU-E231`. sivru targets coding
+agents, many of which run on Windows, so this was real user-facing
+breakage.
+
+### Fixed
+
+Three production Windows bugs, plus a sweep of Windows-fragile test
+assertions that had left the Windows CI leg red since before v0.9.0:
+
+- **`resolveFileAnchored` (block enforcement)** now uses
+  `node:path`'s `isAbsolute` + `resolve` instead of a `/`-prefix check and
+  hand-rolled string concatenation, so absolute and relative `enforced-by`
+  paths resolve correctly on Windows as well as POSIX.
+- **`relativizePath` (ground-truth)** emitted native `\` separators on
+  Windows (`src\auth\login.ts`), leaking into ground-truth keys that are
+  meant to be stable POSIX-relative paths. Now POSIX-normalized.
+- **`sivru doctor`'s pnpm check** reported "pnpm not found" on Windows even
+  when pnpm was installed: the launcher is `pnpm.cmd`, which bare `execFile`
+  can't resolve. `runCmd` gained an opt-in `shell` flag (default off, so the
+  coach's path-bearing git calls are untouched) that the pnpm probe uses on
+  Windows.
+- **CI is green on Windows again.** The remaining breakage was
+  Windows-fragile *test* assertions:
+  - `@sivru/search`: `mkRepo` in `authored.test.ts` / `block.test.ts` built
+    parent dirs with a `/`-only regex (creating the file path as a directory
+    → `EISDIR`); `artifact.test.ts` mocked `fileExists` with a posix-slash
+    suffix the native `absPath` never matched; `enforcement.test.ts` embedded
+    absolute paths with backslashes inside YAML double-quotes (where `\…` is
+    an escape). Now `dirname` / `basename` / forward-slash-normalized.
+  - `@sivru/observe`: `blocks.test.ts` asserted POSIX path literals against
+    native-separator output; `server.test.ts` stubbed only `HOME` (Windows
+    `os.homedir()` reads `USERPROFILE`); `git-info.test.ts` compared 8.3
+    short paths (`RUNNER~1`) to git's long form and flaked on an `EBUSY`
+    rmdir. Now platform-resolved expectations, both home vars stubbed,
+    realpath'd scratch dirs, and `rmSync` retries.
+  - `@sivru/cli`: parseArgs tests (explain / checkup / bench-personal /
+    block) asserted POSIX path literals against `resolve()`d native output;
+    `bench-history` / `skill` tests stubbed only `HOME`. Now `resolve()` /
+    `isAbsolute()` and both home vars stubbed. A repo-root `.gitattributes`
+    forces `eol=lf` so Windows checkouts don't break the byte-exact
+    bundled-`SKILL.md` comparison in `sivru skill install`.
+
 ## [0.10.0] — 2026-06-05
 
 **Serving authored context — `explain` now leads with intent.**

@@ -104,6 +104,17 @@ function extractQueryString(
  * caller realpath'ing both sides before passing in; otherwise the
  * comparison is plain string-prefix.
  */
+/**
+ * Normalize OS path separators to POSIX `/` so ground-truth keys are stable
+ * across platforms. Only the given separator is converted (`sepChar` defaults
+ * to the platform one), so a legitimate backslash inside a POSIX filename is
+ * preserved. `sepChar` is injectable so the Windows behaviour is testable on
+ * POSIX.
+ */
+export function toPosixPath(p: string, sepChar: string = sep): string {
+  return sepChar === "/" ? p : p.split(sepChar).join("/");
+}
+
 export function relativizePath(
   absPath: string,
   projectRoot: string,
@@ -113,7 +124,10 @@ export function relativizePath(
   if (abs === root) return null;
   if (abs === root + sep) return null;
   if (!abs.startsWith(root + sep)) return null;
-  return abs.slice(root.length + 1);
+  // Emit a POSIX-relative key (the repo-wide convention for stable,
+  // cross-platform ground-truth paths) — `slice` would otherwise leak the
+  // native `\` separator on Windows.
+  return toPosixPath(abs.slice(root.length + 1));
 }
 
 /**

@@ -35,21 +35,54 @@ export interface ExecOptions {
   cwd?: string;
   /** Soft timeout in milliseconds. Default 4000ms (doctor.ts precedent). */
   timeoutMs?: number;
+  /**
+   * Run through the platform shell. Default off — keep it off for any call
+   * that passes file-path args (a path with spaces is mis-quoted under a
+   * shell). Opt in ONLY to resolve a launcher binary on Windows, where a tool
+   * like `pnpm` is really `pnpm.cmd` and bare `execFile` cannot find it.
+   */
+  shell?: boolean;
 }
 
 /**
- * Run `cmd args` and resolve with a discriminated result. Never throws.
+ * Tokens allowed when `shell: true`: letters, digits, and the punctuation that
+ * appears in launcher names, flags, and paths (`. _ - / \ : =`). Anything else
+ * (spaces, quotes, `; & | $ ( ) < > \` * ?` …) is rejected, which keeps shell
+ * mode usable only for fixed-arg launcher probes — never an injection vector.
+ */
+const SHELL_SAFE_TOKEN = /^[A-Za-z0-9._:=/\\-]+$/;
+
+/**
+ * Run `cmd args` and resolve with a discriminated result. The returned
+ * promise never rejects on command failure:
  *
  * - Binary not on PATH → `{ ok: false, reason: "missing" }`
  * - Non-zero exit → `{ ok: false, reason: "non-zero" }`
  * - Timeout fires → `{ ok: false, reason: "timeout" }`
  * - Success → `{ ok: true, stdout }`
+ *
+ * It throws synchronously in exactly one case — a programming guard: `shell:
+ * true` combined with an argument that carries shell metacharacters. Shell
+ * mode exists only to resolve a launcher binary on Windows; it must never be
+ * handed caller- or path-derived data, so we fail loud rather than let it
+ * become a command-injection vector.
  */
 export function runCmd(
   cmd: string,
   args: readonly string[],
   opts: ExecOptions = {},
 ): Promise<ExecResult> {
+  if (opts.shell) {
+    for (const token of [cmd, ...args]) {
+      if (!SHELL_SAFE_TOKEN.test(token)) {
+        throw new Error(
+          `runCmd: shell:true rejects ${JSON.stringify(token)} — it contains ` +
+            `characters unsafe under a shell. shell mode is for launcher ` +
+            `resolution (e.g. pnpm.cmd) with simple, fixed args only.`,
+        );
+      }
+    }
+  }
   const timeoutMs = opts.timeoutMs ?? 4000;
   return new Promise((resolveFn) => {
     let settled = false;
@@ -64,6 +97,7 @@ export function runCmd(
       args.slice(),
       {
         ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
+        ...(opts.shell ? { shell: true } : {}),
         timeout: timeoutMs,
         encoding: "utf8",
         maxBuffer: 10 * 1024 * 1024,

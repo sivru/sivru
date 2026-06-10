@@ -5,6 +5,7 @@ import {
   extractGroundTruth,
   isEntityShapedQuery,
   relativizePath,
+  toPosixPath,
 } from "./ground-truth.js";
 
 const ROOT = "/repo";
@@ -36,6 +37,22 @@ describe("relativizePath", () => {
 
   it("handles trailing-separator edge case", () => {
     expect(relativizePath("/repo/", "/repo")).toBeNull();
+  });
+});
+
+describe("toPosixPath", () => {
+  // `sepChar` is injected so the Windows behaviour is exercised on POSIX CI.
+  it("converts Windows backslash separators to POSIX", () => {
+    expect(toPosixPath("src\\auth\\login.ts", "\\")).toBe("src/auth/login.ts");
+  });
+
+  it("leaves POSIX paths untouched", () => {
+    expect(toPosixPath("src/auth/login.ts", "/")).toBe("src/auth/login.ts");
+  });
+
+  it("only converts the given separator (preserves a literal backslash on POSIX)", () => {
+    // On POSIX `\` is a valid filename char and must NOT be treated as a sep.
+    expect(toPosixPath("weird\\name.ts", "/")).toBe("weird\\name.ts");
   });
 });
 

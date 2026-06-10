@@ -18,6 +18,7 @@
 // it's a per-block property, not a resolver result.
 
 import { readFile } from "node:fs/promises";
+import { isAbsolute, resolve } from "node:path";
 
 import { detectLanguage } from "../chunker/language.js";
 import { getParser, isChunkableLanguage, type SyntaxNode } from "../chunker/grammars.js";
@@ -238,8 +239,11 @@ async function resolveFileAnchored(
   ref: { kind: "file-anchored"; path: string; name: string },
   repoRoot: string,
 ): Promise<ResolveResult> {
-  // Path is resolved relative to repoRoot when not absolute.
-  const path = ref.path.startsWith("/") ? ref.path : `${repoRoot.replace(/\/$/, "")}/${ref.path}`;
+  // Path is resolved relative to repoRoot when not absolute. `isAbsolute`
+  // (not a `/` prefix check) is required for Windows, where absolute paths
+  // start with a drive letter (`C:\…`) — a posix-only check there treats an
+  // absolute path as relative and prepends repoRoot, producing a garbage path.
+  const path = isAbsolute(ref.path) ? ref.path : resolve(repoRoot, ref.path);
   let content: string;
   try {
     content = await readFile(path, "utf8");

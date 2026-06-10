@@ -15,7 +15,10 @@ import { _resetGitInfoCache, resolveGitInfo } from "./git-info";
 let scratch: string;
 function realpath(p: string): string {
   try {
-    return realpathSync(p);
+    // `.native` (the OS realpath) expands Windows 8.3 short names
+    // (`…\RUNNER~1\…`) to the long form git reports; plain realpathSync does
+    // not, so the test's expected path would never equal production's.
+    return realpathSync.native(p);
   } catch {
     return p;
   }
@@ -26,12 +29,23 @@ function git(cwd: string, ...args: string[]): void {
 }
 
 beforeEach(() => {
-  scratch = mkdtempSync(join(tmpdir(), "sivru-gitinfo-"));
+  // Canonicalize the scratch root: on Windows GH runners `tmpdir()` is an 8.3
+  // short path (`…\RUNNER~1\…`) while git/realpath report the long form
+  // (`…\runneradmin\…`), so a raw mkdtemp path won't equal the production
+  // output. Realpathing once here keeps every derived path canonical.
+  scratch = realpathSync.native(mkdtempSync(join(tmpdir(), "sivru-gitinfo-")));
   _resetGitInfoCache();
 });
 
 afterEach(() => {
-  rmSync(scratch, { recursive: true, force: true });
+  // Best-effort cleanup. A just-finished git process can still hold a handle on
+  // Windows, making rmdir fail with EBUSY; retry, and never let a cleanup
+  // failure fail the test (the OS reclaims tmpdir regardless).
+  try {
+    rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch {
+    // ignore — temp dir, not test-relevant
+  }
 });
 
 describe("resolveGitInfo", () => {
