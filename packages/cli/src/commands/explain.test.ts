@@ -84,6 +84,26 @@ describe("parseExplainArgs", () => {
     expect(out.kind).toBe("err");
   });
 
+  it("accepts --project with no <path> (DESIGN-0018)", () => {
+    const out = parseExplainArgs(["--project"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.args.project).toBe(true);
+      expect(out.args.target).toBe("");
+    }
+  });
+
+  it("rejects --project combined with a <path>", () => {
+    const out = parseExplainArgs(["--project", "src/foo.ts"]);
+    expect(out.kind).toBe("err");
+  });
+
+  it("--project honors --repo", () => {
+    const out = parseExplainArgs(["--project", "--repo=/tmp/x"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") expect(out.args.project).toBe(true);
+  });
+
   it("supports --repo=<dir> shorthand and long form", () => {
     const a = parseExplainArgs(["src/foo.ts", "--repo=/tmp/x"]);
     const b = parseExplainArgs(["src/foo.ts", "--repo", "/tmp/x"]);

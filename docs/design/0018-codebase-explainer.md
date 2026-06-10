@@ -1,10 +1,72 @@
 # DESIGN-0018: Codebase explainer — the interactive projection
 
-**Status:** Draft <!-- Draft → Accepted → Implemented → Superseded -->
-**Targets:** v0.8.0
+**Status:** Accepted (promoted from Draft on 2026-06-10 by
+`/plan-eng-review` iter-1 PASS; sliced into 3 shippable releases — Slice 1
+in flight) <!-- Draft → Accepted → Implemented → Superseded -->
+**Targets:** Slice 1 → v0.11.0 (planned v0.8.0; the slot moved as the
+v0.8–v0.10 sequence diverged — see ROADMAP "shipped sequence" note)
 **Issue:** filed when v0.8 becomes next release
 **Created:** 2026-05-15
 **Author:** @pochadri
+
+> **Implementation note (2026-06-10) — locked in eng review.** The feature
+> ships in **three slices**, each a release; the HTML *projection* is a
+> standalone self-contained file, never an observe-ui tab.
+>
+> - **Slice 1 (this release) — model + `--project` JSON, UI-free.** The
+>   agent-consumable foundation. Everything downstream projects from it.
+> - **Slice 2 — `--html`** read-only projection (hash routing, 3+
+>   inline-SVG diagrams, client-side search, self-verify route walk).
+>   Run `/plan-design-review` on it (real visual surface).
+> - **Slice 3 — feedback loop** (annotate → export patch → apply to
+>   `@sivru` blocks / `.sivru/explainer.md`).
+>
+> **Model shape (the contract slices 2/3 consume) — locked.** One generic
+> recursive node, typed by level, NOT four rigid per-level interfaces:
+>
+> ```
+> ExplainerNode {
+>   id: string                 // stable, route-able (e.g. "module:packages/cli")
+>   level: "system" | "module" | "package" | "symbol"
+>   name: string
+>   path: string               // repo-relative POSIX
+>   children: ExplainerNode[]
+>   derived: {
+>     exports: string[]              // public API names (symbol level)
+>     importsResolved: string[]      // repo-relative targets
+>     churn: number                  // commitCount from the index
+>     depEdges: string[]             // module/package level: ids it depends on
+>     collaborators: string[]        // symbol level: block.collaborators ∪ import callees
+>   }
+>   block: SivruBlockJSON | null     // the fused @sivru block
+>   narrative?: string               // system level only
+> }
+> ```
+>
+> Slice 1 emits the **full** structural data (`depEdges`, `collaborators`)
+> even though it renders nothing — so the contract is locked once and
+> slices 2/3 are pure consumers (no schema re-litigation).
+>
+> **Build strategy — locked.** Build from **one** `loadOrBuildSymbolIndex`
+> pass + `buildCommitCounts` (already one batched git call) +
+> `extractBlocks` (prefer the index's opt-in block cache, fall back to a
+> parse). **No per-file `assembleArtifact` loop** — that would be ~2,000
+> per-file git calls on a large repo and blow the <10s gate. The index
+> entry already carries `exports`, resolved `imports`, and `commitCount`;
+> module dep-edges derive from the resolved imports. Per-file deep facts
+> (callers, ownership, tests) stay reachable via the existing
+> `explain <file>` drill-down, not duplicated into the project model.
+>
+> **Directory → level mapping — locked.** Monorepo: `module` = workspace
+> package dir, `package` = top-level `src/` subdir; single-package repo:
+> collapse `module`/`package`. The one ambiguous rule; it gets its own
+> unit test on both repo shapes.
+>
+> **Open questions — resolved.** (1) Narrative source: read
+> `ARCHITECTURE.md`/`README` if present → `.sivru/explainer.md` → stub.
+> (2) Symbol cap: load-bearing only (has a `@sivru` block OR a public
+> export) — falls out of building from the index. (3) Caching:
+> `computeStateId`-keyed model cache, reusing the explain cache mechanism.
 
 ## Problem
 

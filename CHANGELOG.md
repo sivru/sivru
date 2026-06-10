@@ -7,6 +7,48 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-06-10
+
+**Codebase explainer — `sivru explain --project` (Slice 1: the model).**
+A whole-repo projection: `sivru explain --project` walks the repo and emits a
+four-level model — System → Module → Package → Symbol — as JSON, fusing the
+facts sivru already derives (public API, resolved imports, churn,
+module/package dependency edges, per-symbol collaborators) with the authored
+`@sivru` blocks on each symbol. It is the agent-consumable foundation the
+HTML projection (Slice 2) and the feedback loop (Slice 3) will render from.
+Implements [DESIGN-0018](docs/design/0018-codebase-explainer.md), Slice 1.
+
+### Added
+
+- **`sivru explain --project`** — emits the `ExplainerModel` (a generic
+  recursive `ExplainerNode` typed by level) for the whole repo. A monorepo's
+  workspace packages become modules and their `src/` subdirs become packages;
+  a single-package repo collapses module/package onto one node. Symbol pages
+  are capped to load-bearing symbols (a public export OR an `@sivru` block),
+  so the model stays navigable rather than listing every function.
+- **Cross-module dependency edges** derived from package-name imports
+  (`@sivru/search`), which the file-level resolver leaves unresolved —
+  so the module dependency graph is populated, not empty.
+- **`computeStateId`-keyed model cache** (`~/.cache/sivru/explainer-models/`,
+  atomic write). Built from one symbol-index pass + the index's batched churn
+  + `@sivru` extraction (gated behind an `@sivru` substring so the vast
+  majority of files skip the tree-sitter parse, and run with bounded
+  concurrency) — NOT a per-file `assembleArtifact` loop. On the sivru repo:
+  ~3.5s cold, ~1.6s warm, ~0.3s on a model-cache hit, with the cached output
+  byte-identical to a fresh build.
+- **Works on a brand-new repo.** `--project` on a fresh `git init` with no
+  commits builds a churn-0 model rather than crashing (churn lookup is
+  best-effort).
+
+### Deferred (later slices, tracked in DESIGN-0018)
+
+- `--html` self-contained projection (hash routing, inline-SVG diagrams,
+  search, self-verify route walk) — Slice 2, with a `/plan-design-review`.
+- Feedback loop (annotate → patch → apply to `@sivru` blocks /
+  `.sivru/explainer.md`) — Slice 3.
+- An MCP `explain_project` tool — the CLI JSON is consumable today; the MCP
+  surface lands when an agent flow needs it.
+
 ## [0.10.1] — 2026-06-07
 
 **Windows path portability.** `sivru block check-enforcement` /
