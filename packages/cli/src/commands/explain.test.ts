@@ -104,6 +104,24 @@ describe("parseExplainArgs", () => {
     if (out.kind === "ok") expect(out.args.project).toBe(true);
   });
 
+  it("--html implies --project and takes an --out (DESIGN-0018 Slice 2)", () => {
+    const out = parseExplainArgs(["--html", "--out=/tmp/x.html"]);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.args.html).toBe(true);
+      expect(out.args.project).toBe(true);
+      expect(out.args.out).toBe("/tmp/x.html");
+    }
+  });
+
+  it("rejects --out without --html", () => {
+    expect(parseExplainArgs(["--project", "--out=/tmp/x.html"]).kind).toBe("err");
+  });
+
+  it("rejects --html combined with a <path>", () => {
+    expect(parseExplainArgs(["--html", "src/foo.ts"]).kind).toBe("err");
+  });
+
   it("supports --repo=<dir> shorthand and long form", () => {
     const a = parseExplainArgs(["src/foo.ts", "--repo=/tmp/x"]);
     const b = parseExplainArgs(["src/foo.ts", "--repo", "/tmp/x"]);

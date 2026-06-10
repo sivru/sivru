@@ -26,7 +26,13 @@ import {
 } from "@sivru/search";
 
 import { formatDiagnostic } from "../lib/diagnostics.js";
-import { projectModel } from "../explainer/index.js";
+import { writeFile } from "node:fs/promises";
+
+import { projectModel, renderHtml } from "../explainer/index.js";
+
+/** Warn (not fail) when the generated HTML exceeds this size. */
+const HTML_SIZE_WARN_BYTES = 5 * 1024 * 1024;
+const DEFAULT_HTML_OUT = "sivru-explainer.html";
 
 /**
  * Max block-health diagnostics rendered inline in the markdown BLOCKS HEALTH
@@ -47,6 +53,10 @@ type ExplainArgs = {
   json: boolean;
   /** Whole-repo projection (DESIGN-0018): emit the explainer model, ignore <path>. */
   project: boolean;
+  /** Render the projection as a single self-contained HTML file (implies --project). */
+  html: boolean;
+  /** Output path for --html (default ./sivru-explainer.html). */
+  out: string | null;
 };
 
 type ParseOk = { kind: "ok"; args: ExplainArgs };
@@ -60,6 +70,8 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let diff = false;
   let json = false;
   let project = false;
+  let html = false;
+  let out: string | null = null;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -74,6 +86,24 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     if (a === "--project") {
       project = true;
+      continue;
+    }
+    if (a === "--html") {
+      html = true;
+      project = true; // --html only renders the whole-repo projection
+      continue;
+    }
+    if (a.startsWith("--out=")) {
+      out = a.slice("--out=".length);
+      continue;
+    }
+    if (a === "--out") {
+      const next = argv[i + 1];
+      if (next === undefined) {
+        return { kind: "err", message: `--out requires a value` };
+      }
+      out = next;
+      i++;
       continue;
     }
     if (a.startsWith("--since=")) {
@@ -111,6 +141,9 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     positionals.push(a);
   }
 
+  if (out !== null && !html) {
+    return { kind: "err", message: "--out only applies to --html" };
+  }
   if (project) {
     // Whole-repo projection takes no <path>; reject one so the contract is clear.
     if (positionals.length > 0) {
@@ -121,7 +154,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     return {
       kind: "ok",
-      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true },
+      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out },
     };
   }
   if (positionals.length === 0) {
@@ -133,17 +166,21 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   }
   return {
     kind: "ok",
-    args: { target, repoRoot, sinceDays, depth, diff, json, project: false },
+    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null },
   };
 }
 
 const USAGE = [
   "sivru explain <path> [--json] [--since=<N>] [--depth=1] [--repo=<dir>]",
   "sivru explain --project [--repo=<dir>]",
+  "sivru explain --html [--out=<path>] [--repo=<dir>]",
   "",
   "  <path>            Repo-relative file path (or path::symbol for region-level)",
   "  --project         Whole-repo projection: emit the explainer model JSON",
   "                    (System → Module → Package → Symbol). Takes no <path>.",
+  "  --html            Render the projection as one self-contained HTML file",
+  "                    (implies --project). Default ./sivru-explainer.html.",
+  "  --out=<path>      Output path for --html",
   "  --json            Emit the bare ExplainArtifact JSON",
   "  --since=<N>       Churn window in days (default 90)",
   "  --depth=<N>       Call-graph depth (v0.5 only supports 1)",
@@ -180,11 +217,27 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
   if (args.project) {
     try {
       const model = await projectModel(args.repoRoot);
+      if (args.html) {
+        // renderHtml self-verifies and throws SIVRU-E2011 rather than emit a
+        // broken file — so a written file is always a coherent artifact.
+        const html = renderHtml(model);
+        const outPath = resolvePath(args.out ?? DEFAULT_HTML_OUT);
+        await writeFile(outPath, html, "utf8");
+        const kb = Math.round(html.length / 1024);
+        process.stdout.write(`Wrote ${outPath} (${kb} KB)\n`);
+        if (html.length > HTML_SIZE_WARN_BYTES) {
+          process.stderr.write(
+            `sivru explain --html: warning — output is ${kb} KB; ` +
+              `very large repos may produce big files\n`,
+          );
+        }
+        return 0;
+      }
       process.stdout.write(JSON.stringify(model) + "\n");
       return 0;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`sivru explain --project: ${msg}\n`);
+      process.stderr.write(`sivru explain ${args.html ? "--html" : "--project"}: ${msg}\n`);
       return 1;
     }
   }

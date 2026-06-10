@@ -60,3 +60,6 @@ docs/internal/
 
 # QA reports generated locally
 qa-report-*.html
+
+# Generated codebase explainer (DESIGN-0018) — regenerated, never committed
+sivru-explainer.html

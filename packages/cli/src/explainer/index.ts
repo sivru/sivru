@@ -1,9 +1,11 @@
 // Public surface of the codebase explainer (DESIGN-0018).
 //
-// Slice 1: the model + `--project` JSON. Slices 2 (`--html`) and 3 (feedback)
-// add to this barrel without reshaping the ExplainerModel contract.
+// Slice 1: the model + `--project` JSON. Slice 2: `--html` (the self-contained
+// projection). Slice 3 (feedback) adds without reshaping the model contract.
 
 export { buildExplainerModel, projectModel } from "./model.js";
+export { renderHtml } from "./html/render.js";
+export { selfVerify } from "./html/routes.js";
 export type {
   BuildModelDeps,
   ExtractedForFile,
