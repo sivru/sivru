@@ -13,11 +13,17 @@
 // the load/save round-trip storage layer. See `evictLruTodo` below.
 
 import { promises as fsp } from "node:fs";
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import type { Chunk } from "../types.js";
+import {
+  bestEffortUnlink,
+  isMissing,
+  repoDir,
+  repoSlug,
+  sanitizeForFilename,
+} from "../cache-utils.js";
 
 /**
  * Bumped when the on-disk format changes incompatibly.
@@ -112,25 +118,6 @@ function defaultCacheDir(): string {
   return join(homedir(), ".cache", "sivru", "indexes");
 }
 
-function repoSlug(repoPath: string): string {
-  // Hash the *resolved* absolute path so two different cwds for the same
-  // logical repo collide intentionally; different repos cannot.
-  return createHash("sha256").update(resolve(repoPath)).digest("hex");
-}
-
-function repoDir(cacheDir: string, repoPath: string): string {
-  return join(cacheDir, repoSlug(repoPath));
-}
-
-/**
- * Strip characters that are invalid in NTFS filenames: `: < > " / \ | ? *`
- * State-ids include `:` (between sha and diff-hash, or after `mtime:`) so
- * we replace those with `__` here. POSIX filesystems are unaffected.
- */
-function sanitizeForFilename(s: string): string {
-  return s.replace(/[<>:"/\\|?*]/g, "__");
-}
-
 // One cache file per (stateId, embedderId): same corpus state under two
 // embedders produces two distinct chunk sets (DESIGN-0002 §4), so they
 // must not share an on-disk entry.
@@ -149,10 +136,6 @@ function tmpPath(cacheDir: string, key: CacheKey): string {
   );
 }
 
-function isMissing(err: unknown): boolean {
-  return (err as NodeJS.ErrnoException).code === "ENOENT";
-}
-
 function encodeFloat32(arr: Float32Array): string {
   // Base64-encode the underlying byte view of the Float32Array. Use
   // `byteOffset`/`byteLength` because the array may be a view onto a
@@ -164,20 +147,18 @@ function encodeFloat32(arr: Float32Array): string {
 
 function decodeFloat32(b64: string, expectedCount: number): Float32Array | null {
   const buf = Buffer.from(b64, "base64");
-  if (buf.byteLength !== expectedCount * 4) return null;
+  if (buf.byteLength !== expectedCount * 4) {
+    process.stderr.write(
+      `sivru-cache: embedding size mismatch (got ${buf.byteLength} bytes, expected ${expectedCount * 4}); ` +
+        "the cache file may be corrupt. Rebuilding from scratch.\n",
+    );
+    return null;
+  }
   // Copy into a freshly-aligned ArrayBuffer so the Float32 view is safe
   // regardless of the Buffer pool's alignment.
   const ab = new ArrayBuffer(buf.byteLength);
   new Uint8Array(ab).set(buf);
   return new Float32Array(ab);
-}
-
-async function bestEffortUnlink(p: string): Promise<void> {
-  try {
-    await fsp.unlink(p);
-  } catch {
-    /* ignore */
-  }
 }
 
 // --- factory --------------------------------------------------------------

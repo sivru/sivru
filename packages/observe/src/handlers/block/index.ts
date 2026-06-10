@@ -167,13 +167,22 @@ export async function editBlock(
   // Client baseline conflict (the long edit window): the form was opened
   // against an older version of the file.
   if (expectedMtimeMs !== undefined && Math.round(expectedMtimeMs) !== Math.round(mtime1)) {
-    const current = await readFile(abs, "utf8").catch(() => "");
-    return err(
-      "SIVRU-FILE-CHANGED",
-      "file was modified externally; reload latest before saving",
-      true,
-      { mtimeMs: mtime1, content: current },
-    );
+    try {
+      const current = await readFile(abs, "utf8");
+      return err(
+        "SIVRU-FILE-CHANGED",
+        "file was modified externally; reload latest before saving",
+        true,
+        { mtimeMs: mtime1, content: current },
+      );
+    } catch (e: unknown) {
+      return err(
+        "SIVRU-FILE-CHANGED",
+        `file was modified externally and cannot be re-read: ${e instanceof Error ? e.message : String(e)}`,
+        true,
+        { mtimeMs: mtime1, content: null },
+      );
+    }
   }
 
   // Locate the target block at its current range (catches symbol rename/move).
@@ -200,11 +209,20 @@ export async function editBlock(
   // against a concurrent CLI `--autofix`.
   const mtime2 = (await stat(abs)).mtimeMs;
   if (Math.round(mtime2) !== Math.round(mtime1)) {
-    const current = await readFile(abs, "utf8").catch(() => "");
-    return err("SIVRU-FILE-CHANGED", "file changed during save; reload latest", true, {
-      mtimeMs: mtime2,
-      content: current,
-    });
+    try {
+      const current = await readFile(abs, "utf8");
+      return err("SIVRU-FILE-CHANGED", "file changed during save; reload latest", true, {
+        mtimeMs: mtime2,
+        content: current,
+      });
+    } catch (e: unknown) {
+      return err(
+        "SIVRU-FILE-CHANGED",
+        `file changed during save and cannot be re-read: ${e instanceof Error ? e.message : String(e)}`,
+        true,
+        { mtimeMs: mtime2, content: null },
+      );
+    }
   }
 
   // Atomic write: temp + rename. Clean up the temp file if the rename fails

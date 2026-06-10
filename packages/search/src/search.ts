@@ -627,13 +627,16 @@ export async function buildIndex(
     const raw = state.bm25.search(queryTokens, depth);
     const signalReranked = rerank(raw, query, depth, bm25Signals);
     const finalHits = await applyCrossEncoder(signalReranked, query, k);
-    return finalHits.map((hit) => {
+    const out: SearchHit[] = [];
+    for (const hit of finalHits) {
       const chunk = state.chunks[hit.id];
       if (chunk === undefined) {
-        throw new Error(`bm25 returned unknown id ${hit.id}`);
+        process.stderr.write(`sivru-search: bm25 returned stale id ${hit.id} (skipped)\n`);
+        continue;
       }
-      return { chunk, score: hit.score, source: "bm25" };
-    });
+      out.push({ chunk, score: hit.score, source: "bm25" });
+    }
+    return out;
   };
 
   const searchHybrid = async (query: string, k: number): Promise<SearchHit[]> => {
@@ -663,13 +666,16 @@ export async function buildIndex(
     const fused = reciprocalRankFusion([bm25Hits, semanticHits], { topN: fuseDepth });
     const signalReranked = rerank(fused, query, fuseDepth, hybridSignals);
     const finalHits = await applyCrossEncoder(signalReranked, query, k);
-    return finalHits.map((hit) => {
+    const out: SearchHit[] = [];
+    for (const hit of finalHits) {
       const chunk = state.chunks[hit.id];
       if (chunk === undefined) {
-        throw new Error(`hybrid returned unknown id ${hit.id}`);
+        process.stderr.write(`sivru-search: hybrid returned stale id ${hit.id} (skipped)\n`);
+        continue;
       }
-      return { chunk, score: hit.score, source: "hybrid" };
-    });
+      out.push({ chunk, score: hit.score, source: "hybrid" });
+    }
+    return out;
   };
 
   const findRelated = async (args: {
@@ -796,7 +802,7 @@ export async function buildIndex(
       const prev = state.fileMtimes.get(filePath);
       if (prev === undefined) {
         added.push(filePath);
-      } else if (info.mtimeMs > prev) {
+      } else if (info.mtimeMs !== prev) {
         modified.push(filePath);
       }
     }
@@ -909,13 +915,21 @@ export async function buildIndex(
       const filter = options.embed?.filter ?? defaultEmbedFilter;
       const includedIds: number[] = [];
       for (let i = 0; i < nextChunks.length; i++) {
-        if (filter(nextChunks[i]!)) includedIds.push(i);
+        const chunk = nextChunks[i];
+        if (chunk === undefined) continue;
+        if (filter(chunk)) includedIds.push(i);
       }
       const vectors: Float32Array[] = new Array(includedIds.length);
       const toEmbedTexts: string[] = [];
       const toEmbedTargets: number[] = [];
       for (let i = 0; i < includedIds.length; i++) {
-        const chunk = nextChunks[includedIds[i]!]!;
+        const chunkId = includedIds[i];
+        if (chunkId === undefined) continue;
+        const chunk = nextChunks[chunkId];
+        if (chunk === undefined) {
+          process.stderr.write(`sivru-search: refreshStale missing chunk at id ${chunkId}\n`);
+          continue;
+        }
         const cached = oldEmbeddingBySignature.get(chunkSignature(chunk));
         if (cached !== undefined) {
           vectors[i] = cached;

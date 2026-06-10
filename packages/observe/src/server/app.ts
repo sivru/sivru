@@ -134,13 +134,25 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
     // recent N (older events first within the returned window). For typical
     // session sizes the buffer is small (default 1000); the underlying source
     // streams lazily from disk.
-    const buffer: SivruEvent[] = [];
+    //
+    // We use a fixed-size circular buffer (Array + head index) instead of
+    // Array.shift() so large sessions stay O(n) total rather than O(n²).
+    const ring: SivruEvent[] = new Array(limit);
+    let ringCount = 0;
+    let ringHead = 0;
     for await (const event of source.readSession(match.path)) {
-      buffer.push(event);
-      if (buffer.length > limit) buffer.shift();
+      ring[ringHead] = event;
+      ringHead = (ringHead + 1) % limit;
+      if (ringCount < limit) ringCount++;
+    }
+    // Re-order into chronological order: oldest first.
+    const events: SivruEvent[] = [];
+    const start = ringCount < limit ? 0 : ringHead;
+    for (let i = 0; i < ringCount; i++) {
+      events.push(ring[(start + i) % limit]!);
     }
 
-    return c.json({ sessionId: id, events: buffer });
+    return c.json({ sessionId: id, events });
   });
 
   // Live-tail SSE: replay existing events then watch for appends. The
@@ -168,6 +180,8 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
       let pendingLine = "";
       let watching = false;
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+      let reading = false;
+      let activeRs: ReturnType<typeof createReadStream> | null = null;
 
       const writeEvent = async (ev: SivruEvent): Promise<void> => {
         await stream.writeSSE({ event: "event", data: JSON.stringify(ev) });
@@ -177,43 +191,58 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
       // SivruEvents. Mutates byteOffset, eventIndex, and pendingLine.
       const readNewBytes = async (fileSize: number): Promise<void> => {
         if (fileSize <= byteOffset) return;
-        await new Promise<void>((resolvePromise, reject) => {
-          const rs = createReadStream(filePath, {
-            encoding: "utf8",
-            start: byteOffset,
-            end: fileSize - 1, // inclusive
-          });
-          rs.on("data", (chunk) => {
-            // utf8 encoding => chunk is string
-            pendingLine += chunk as string;
-            // Drain complete lines.
-            let nl = pendingLine.indexOf("\n");
-            while (nl !== -1) {
-              const line = pendingLine.slice(0, nl);
-              pendingLine = pendingLine.slice(nl + 1);
-              const { events, nextIndex } = parseJsonlLine(
-                // Strip a trailing CR if the file uses CRLF.
-                line.endsWith("\r") ? line.slice(0, -1) : line,
-                fallbackSessionId,
-                eventIndex,
-              );
-              eventIndex = nextIndex;
-              for (const ev of events) {
-                // Fire and forget — errors propagate through stream.
-                void writeEvent(ev);
+        if (reading) return; // skip overlapping reads; next poll catches up
+        reading = true;
+        try {
+          await new Promise<void>((resolvePromise, reject) => {
+            const rs = createReadStream(filePath, {
+              encoding: "utf8",
+              start: byteOffset,
+              end: fileSize - 1, // inclusive
+            });
+            activeRs = rs;
+            rs.on("data", (chunk) => {
+              // utf8 encoding => chunk is string
+              pendingLine += chunk as string;
+              // Drain complete lines.
+              let nl = pendingLine.indexOf("\n");
+              while (nl !== -1) {
+                const line = pendingLine.slice(0, nl);
+                pendingLine = pendingLine.slice(nl + 1);
+                const { events, nextIndex } = parseJsonlLine(
+                  // Strip a trailing CR if the file uses CRLF.
+                  line.endsWith("\r") ? line.slice(0, -1) : line,
+                  fallbackSessionId,
+                  eventIndex,
+                );
+                eventIndex = nextIndex;
+                for (const ev of events) {
+                  // Fire and forget — errors propagate through stream.
+                  void writeEvent(ev);
+                }
+                nl = pendingLine.indexOf("\n");
               }
-              nl = pendingLine.indexOf("\n");
-            }
+            });
+            rs.on("end", () => {
+              byteOffset = fileSize;
+              activeRs = null;
+              resolvePromise();
+            });
+            rs.on("error", (err) => {
+              activeRs = null;
+              reject(err);
+            });
           });
-          rs.on("end", () => {
-            byteOffset = fileSize;
-            resolvePromise();
-          });
-          rs.on("error", (err) => reject(err));
-        });
+        } finally {
+          reading = false;
+        }
       };
 
       const cleanup = (): void => {
+        if (activeRs !== null) {
+          activeRs.destroy();
+          activeRs = null;
+        }
         if (watching) {
           unwatchFile(filePath, onChange);
           watching = false;
@@ -235,8 +264,10 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
           pendingLine = "";
         }
         if (curr.size > byteOffset) {
-          void readNewBytes(curr.size).catch(() => {
-            // Swallow — best-effort live tail. The next poll will retry.
+          void readNewBytes(curr.size).catch((err: unknown) => {
+            process.stderr.write(
+              `observe-sse: readNewBytes failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}\n`,
+            );
           });
         }
       }
@@ -258,8 +289,10 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
       }
       try {
         await readNewBytes(initialSize);
-      } catch {
-        // ignore — we'll still keep the stream open in case the file appears.
+      } catch (err: unknown) {
+        process.stderr.write(
+          `observe-sse: initial backfill failed for ${filePath}: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
       }
 
       // 2. Start polling. fs.watchFile is more reliable than fs.watch on
@@ -274,8 +307,11 @@ export function createObserveApp(options?: ObserveAppOptions): Hono {
         if (stream.closed || stream.aborted) return;
         // Direct write so we don't go through writeSSE (which would emit a
         // data: line); plain comment frame is enough.
-        void stream.write(": ping\n\n").catch(() => {
+        void stream.write(": ping\n\n").catch((err: unknown) => {
           // If write fails, the stream is gone — let onAbort handle teardown.
+          process.stderr.write(
+            `observe-sse: heartbeat write failed: ${err instanceof Error ? err.message : String(err)}\n`,
+          );
         });
       }, 15_000);
 

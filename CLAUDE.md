@@ -95,7 +95,7 @@ See [`ROADMAP.md`](ROADMAP.md) for direction.
 
 - Embed code only; BM25-only-index docs and configs
 - Real-agent replay via the Anthropic SDK (opt-in)
-- `sivru completion` + `sivru bench tthw`
+- `sivru bench tthw`
 - Serving authored context — surface `@sivru` blocks through
   `sivru explain` (DESIGN-0017; next planned release).
 - Codebase explainer (DESIGN-0018).

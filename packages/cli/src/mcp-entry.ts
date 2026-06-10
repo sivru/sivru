@@ -248,6 +248,13 @@ async function getOrBuildIndex(
     }
     return buildIndex(absPath);
   })();
+  // Race guard: a concurrent call may have set the cache while we were
+  // constructing the promise (the event loop can interleave between the
+  // first `get` above and here). If so, return the winner's promise.
+  const winner = indexCache.get(key);
+  if (winner !== undefined) {
+    return winner.promise;
+  }
   // Drop the cache entry on failure so subsequent calls retry.
   promise.catch(() => {
     const current = indexCache.get(key);

@@ -133,7 +133,13 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
     // Boot housekeeping on the cwd repo (the common single-repo case): sweep
     // stale audit files + migrate any legacy block.json acknowledged[].
     const cwd = process.cwd();
-    void sweepAuditRetention(cwd, auditRetentionDays(loadObserveConfig(cwd))).catch(() => {});
+    void sweepAuditRetention(cwd, auditRetentionDays(loadObserveConfig(cwd))).catch(
+      (err: unknown) => {
+        process.stderr.write(
+          `sivru observe — audit sweep failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      },
+    );
     void migrateLegacyAcknowledgments(cwd, new Date().toISOString())
       .then((n) => {
         if (n > 0) {
@@ -143,7 +149,11 @@ async function runObserveServer(argv: readonly string[]): Promise<number> {
           );
         }
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        process.stderr.write(
+          `sivru observe — legacy migration failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      });
     process.stderr.write(
       "sivru observe — WRITABLE: the UI + MCP can modify .sivru/ and source files. " +
         "Writes are logged to .sivru/audit/ (retention: 7 days).\n",

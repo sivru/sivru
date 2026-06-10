@@ -304,7 +304,10 @@ const TEXT_EXTS = new Set([
   ".json", ".toml", ".yaml", ".yml",
 ]);
 
-async function walkText(root: string, rel = ""): Promise<string[]> {
+const WALK_MAX_DEPTH = 200;
+
+async function walkText(root: string, rel = "", depth = 0): Promise<string[]> {
+  if (depth > WALK_MAX_DEPTH) return [];
   const out: string[] = [];
   let entries: Dirent[];
   try {
@@ -317,7 +320,7 @@ async function walkText(root: string, rel = ""): Promise<string[]> {
     if (entry.name === "node_modules" || entry.name === ".git") continue;
     const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
     if (entry.isDirectory()) {
-      const nested = await walkText(root, childRel);
+      const nested = await walkText(root, childRel, depth + 1);
       out.push(...nested);
     } else if (entry.isFile()) {
       const dot = entry.name.lastIndexOf(".");
