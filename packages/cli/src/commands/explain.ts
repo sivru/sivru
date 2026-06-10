@@ -26,6 +26,7 @@ import {
 } from "@sivru/search";
 
 import { formatDiagnostic } from "../lib/diagnostics.js";
+import { projectModel } from "../explainer/index.js";
 
 /**
  * Max block-health diagnostics rendered inline in the markdown BLOCKS HEALTH
@@ -36,7 +37,7 @@ import { formatDiagnostic } from "../lib/diagnostics.js";
 const BLOCKS_HEALTH_RENDER_CAP = 20;
 
 type ExplainArgs = {
-  /** Raw target argument (`<path>` or `<path>::<symbol>`). */
+  /** Raw target argument (`<path>` or `<path>::<symbol>`). Empty when --project. */
   target: string;
   /** Repo root to explain against (defaults to cwd). */
   repoRoot: string;
@@ -44,6 +45,8 @@ type ExplainArgs = {
   depth: number;
   diff: boolean;
   json: boolean;
+  /** Whole-repo projection (DESIGN-0018): emit the explainer model, ignore <path>. */
+  project: boolean;
 };
 
 type ParseOk = { kind: "ok"; args: ExplainArgs };
@@ -56,6 +59,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let depth = 1;
   let diff = false;
   let json = false;
+  let project = false;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -66,6 +70,10 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     if (a === "--diff") {
       diff = true;
+      continue;
+    }
+    if (a === "--project") {
+      project = true;
       continue;
     }
     if (a.startsWith("--since=")) {
@@ -103,6 +111,19 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     positionals.push(a);
   }
 
+  if (project) {
+    // Whole-repo projection takes no <path>; reject one so the contract is clear.
+    if (positionals.length > 0) {
+      return {
+        kind: "err",
+        message: "--project explains the whole repo; it takes no <path> argument",
+      };
+    }
+    return {
+      kind: "ok",
+      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true },
+    };
+  }
   if (positionals.length === 0) {
     return { kind: "err", message: "missing <path> argument" };
   }
@@ -112,14 +133,17 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   }
   return {
     kind: "ok",
-    args: { target, repoRoot, sinceDays, depth, diff, json },
+    args: { target, repoRoot, sinceDays, depth, diff, json, project: false },
   };
 }
 
 const USAGE = [
   "sivru explain <path> [--json] [--since=<N>] [--depth=1] [--repo=<dir>]",
+  "sivru explain --project [--repo=<dir>]",
   "",
   "  <path>            Repo-relative file path (or path::symbol for region-level)",
+  "  --project         Whole-repo projection: emit the explainer model JSON",
+  "                    (System → Module → Package → Symbol). Takes no <path>.",
   "  --json            Emit the bare ExplainArtifact JSON",
   "  --since=<N>       Churn window in days (default 90)",
   "  --depth=<N>       Call-graph depth (v0.5 only supports 1)",
@@ -150,6 +174,20 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
     return 1;
   }
   const { args } = parsed;
+
+  // DESIGN-0018 Slice 1: whole-repo projection. Emits the explainer model as
+  // JSON; the `--html` projection and feedback loop are later slices.
+  if (args.project) {
+    try {
+      const model = await projectModel(args.repoRoot);
+      process.stdout.write(JSON.stringify(model) + "\n");
+      return 0;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`sivru explain --project: ${msg}\n`);
+      return 1;
+    }
+  }
 
   try {
     const { path: relPath, symbol } = parsePathAndSymbol(args.target);
