@@ -163,6 +163,29 @@ describe("applyBlockEdits — refusals (never corrupt)", () => {
     expect(r.outcomes[0]!.status).toBe("not-found");
     expect(r.ok).toBe(false);
   });
+
+  it("refuses a sourcePath that escapes the repo root (path traversal)", async () => {
+    const { base, written } = deps();
+    for (const bad of ["../../etc/passwd", "/etc/passwd"]) {
+      const r = await applyBlockEdits(
+        patch([edit({ sourcePath: bad, edit: { field: "role", op: "set", value: "x" } })]),
+        { repoRoot: "/repo", deps: base },
+      );
+      expect(r.outcomes[0]!.status).toBe("escapes-repo");
+    }
+    expect(Object.keys(written)).toEqual([]); // nothing written anywhere
+  });
+
+  it("escapes a newline in a value so it can't split the source line", async () => {
+    const { base, written } = deps();
+    await applyBlockEdits(
+      patch([edit({ edit: { field: "responsibility", op: "set", value: "line one\nline two" } })]),
+      { repoRoot: "/repo", deps: base },
+    );
+    const out = written["x.ts"]!.split("\n");
+    expect(out).toHaveLength(SRC.split("\n").length); // no extra line
+    expect(out[4]).toBe(' * responsibility: "line one\\nline two"'); // \n escaped
+  });
 });
 
 describe("applyBlockEdits — dirty guard, dry-run, EOL, idempotency", () => {

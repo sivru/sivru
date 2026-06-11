@@ -14,16 +14,13 @@
 //   - refuse a file with uncommitted changes unless --force;
 //   - preserve the file's EOL.
 
-import { execFile } from "node:child_process";
 import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { promisify } from "node:util";
+import { resolve, sep } from "node:path";
 
 import { extractBlocks, hashBlockContent } from "@sivru/search";
 
+import { gitFileDirty } from "../lib/git.js";
 import type { BlockEdit, FeedbackPatch } from "./patch.js";
-
-const execFileAsync = promisify(execFile);
 
 type ExtractedLike = {
   symbolName?: string;
@@ -37,8 +34,8 @@ export interface ApplyDeps {
   writeFile: (absPath: string, content: string) => Promise<void>;
   extract: (absPath: string, content: string) => Promise<ExtractedLike[]>;
   hash: (block: unknown) => string;
-  /** True if the file has uncommitted changes. */
-  isDirty: (absPath: string) => Promise<boolean>;
+  /** True if the file has uncommitted changes (scoped to `repoRoot`). */
+  isDirty: (absPath: string, repoRoot: string) => Promise<boolean>;
 }
 
 export interface ApplyOptions {
@@ -54,6 +51,7 @@ export type EditStatus =
   | "not-found" // no block with that symbol
   | "ambiguous" // >1 block matches symbol AND hash
   | "dirty" // file has uncommitted changes and no --force
+  | "escapes-repo" // sourcePath resolves outside the repo root (rejected)
   | "field-absent" // the field line isn't present (adding fields is deferred)
   | "unsupported-format"; // multi-line value / list form (deferred)
 
@@ -80,24 +78,26 @@ const defaultDeps: ApplyDeps = {
   extract: async (p, content) =>
     (await extractBlocks(p, { content })) as unknown as ExtractedLike[],
   hash: (b) => hashBlockContent(b),
-  isDirty: async (p) => {
-    try {
-      const { stdout } = await execFileAsync("git", ["status", "--porcelain", "--", p]);
-      return stdout.trim().length > 0;
-    } catch {
-      return false; // not a git repo → treat as clean (force not required)
-    }
-  },
+  isDirty: (p, root) => gitFileDirty(root, p),
 };
 
 /** Strip a line's comment prefix (`*` / `//` / `#`), same heuristic as autofix. */
 const stripComment = (l: string): string =>
   l.replace(/^\s*(?:\/\/\/|\/\/|\*|#)\s?/, "");
 
-/** Quote a YAML scalar only when it would otherwise be misparsed. */
+/** Quote a YAML scalar when it would otherwise be misparsed. A control char
+ *  (newline/tab/cr) is always escaped inside double quotes so a multi-line value
+ *  can never split the single source line. */
 function yamlScalar(v: string): string {
-  if (v === "" || /^[\s]|[\s]$|[:#]|^["'\[{>|&*!%@`]/.test(v)) {
-    return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  const hasControl = /[\n\r\t]/.test(v);
+  if (v === "" || hasControl || /^[\s]|[\s]$|[:#]|^["'\[{>|&*!%@`]/.test(v)) {
+    const escaped = v
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t");
+    return `"${escaped}"`;
   }
   return v;
 }
@@ -154,8 +154,17 @@ export async function applyBlockEdits(
     (byFile.get(e.sourcePath) ?? byFile.set(e.sourcePath, []).get(e.sourcePath)!).push(e);
   }
 
+  const root = resolve(opts.repoRoot);
   for (const [sourcePath, fileEdits] of byFile) {
-    const abs = resolve(opts.repoRoot, sourcePath);
+    const abs = resolve(root, sourcePath);
+    // The patch is untrusted input: refuse any path that escapes the repo root
+    // (`..` traversal or an absolute path) — never write outside the repo.
+    if (abs !== root && !abs.startsWith(root + sep)) {
+      for (const e of fileEdits) {
+        outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "escapes-repo", detail: "sourcePath resolves outside the repo root" });
+      }
+      continue;
+    }
     let content: string;
     try {
       content = await deps.readFile(abs);
@@ -165,7 +174,7 @@ export async function applyBlockEdits(
       }
       continue;
     }
-    if (opts.force !== true && (await deps.isDirty(abs))) {
+    if (opts.force !== true && (await deps.isDirty(abs, root))) {
       for (const e of fileEdits) {
         outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "dirty", detail: "uncommitted changes; re-run with --force" });
       }

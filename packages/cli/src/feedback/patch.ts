@@ -76,6 +76,23 @@ export function parsePatch(raw: string): FeedbackPatch {
     throw new FeedbackPatchError("patch.edits must be an array");
   }
   for (const e of p.edits as unknown[]) validateEdit(e);
+  if (p.narrative !== undefined) {
+    if (!Array.isArray(p.narrative)) throw new FeedbackPatchError("patch.narrative must be an array");
+    for (const n of p.narrative as unknown[]) {
+      if (typeof n !== "object" || n === null || typeof (n as Record<string, unknown>).value !== "string") {
+        throw new FeedbackPatchError("each narrative edit must have a string `value`");
+      }
+    }
+  }
+  if (p.notes !== undefined) {
+    if (!Array.isArray(p.notes)) throw new FeedbackPatchError("patch.notes must be an array");
+    for (const n of p.notes as unknown[]) {
+      const note = n as Record<string, unknown>;
+      if (typeof n !== "object" || n === null || typeof note.targetNodeId !== "string" || typeof note.note !== "string") {
+        throw new FeedbackPatchError("each note must have string `targetNodeId` and `note`");
+      }
+    }
+  }
   return value as FeedbackPatch;
 }
 

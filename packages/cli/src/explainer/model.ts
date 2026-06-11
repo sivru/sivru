@@ -31,12 +31,8 @@ import {
   type SymbolIndex,
 } from "@sivru/search";
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
 import { mapWithConcurrency } from "../lib/concurrency.js";
-
-const execFileAsync = promisify(execFile);
+import { gitHeadShort } from "../lib/git.js";
 import { moduleDirOf, packageSegOf } from "./levels.js";
 import { loadModelCache, saveModelCache } from "./model-cache.js";
 import { resolveNarrative, type NarrativeDeps } from "./narrative.js";
@@ -464,20 +460,10 @@ export async function buildExplainerModel(
     schema: 1,
     repoPath: abs,
     stateId,
-    head: deps.head ?? (await gitHead(abs)),
+    head: deps.head ?? (await gitHeadShort(abs)),
     root,
     stats: { files: entries.length, symbols: symbolCount, modules: modules.length },
   };
-}
-
-/** Short git HEAD at build time — stamped into feedback patches; "" if not a git repo. */
-async function gitHead(repoRoot: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("git", ["-C", repoRoot, "rev-parse", "--short", "HEAD"]);
-    return stdout.trim();
-  } catch {
-    return "";
-  }
 }
 
 function setFileChurn(

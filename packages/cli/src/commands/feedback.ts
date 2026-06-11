@@ -7,17 +7,14 @@
 // the patch, warns on repo/HEAD drift, orchestrates the three writers, prints a
 // summary, and sets a CI-gateable exit code (nonzero if any edit was refused).
 
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 
 import { applyBlockEdits } from "../feedback/apply.js";
 import { applyNarrative } from "../feedback/narrative.js";
 import { appendNotes } from "../feedback/notes.js";
 import { FeedbackPatchError, parsePatch } from "../feedback/patch.js";
-
-const execFileAsync = promisify(execFile);
+import { gitHeadShort } from "../lib/git.js";
 
 const USAGE = [
   "sivru feedback apply <patch.json> [--dry-run] [--force] [--repo=<dir>]",
@@ -75,8 +72,8 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
 
   // Warn (don't fail) on repo / HEAD drift — the per-block hash gate is the
   // real safety net; this just helps the user understand a wall of refusals.
-  const head = await gitHead(repoRoot);
-  if (head !== null && patch.head && head !== patch.head) {
+  const head = await gitHeadShort(repoRoot);
+  if (head !== "" && patch.head && head !== patch.head) {
     process.stderr.write(
       `sivru feedback apply: note — patch was generated at ${patch.head}, repo is at ${head}; ` +
         `stale edits will be refused.\n`,
@@ -84,7 +81,10 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
   }
 
   const result = await applyBlockEdits(patch, { repoRoot, dryRun, force });
-  const narrative = await applyNarrative(patch.narrative ?? [], repoRoot);
+  // Narrative + notes are skipped under --dry-run (it writes nothing, anywhere).
+  const narrative = dryRun
+    ? { written: false, path: "" }
+    : await applyNarrative(patch.narrative ?? [], repoRoot);
   const notes = dryRun ? { added: 0, path: "" } : await appendNotes(patch.notes ?? [], repoRoot);
 
   // Summary.
@@ -110,13 +110,4 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
 
   // Nonzero exit if anything was refused (so CI / scripts can gate).
   return refused.length > 0 ? 1 : 0;
-}
-
-async function gitHead(repoRoot: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync("git", ["-C", repoRoot, "rev-parse", "--short", "HEAD"]);
-    return stdout.trim();
-  } catch {
-    return null;
-  }
 }
