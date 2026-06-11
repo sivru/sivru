@@ -22,7 +22,8 @@ the next `sivru explain` reflects it everywhere. Completes
     collaborators) inline;
   - **author** a new `@sivru` block on an un-annotated symbol (the "add intent"
     affordance) — apply inserts a minimal block above the declaration;
-  - **suggest** the system narrative.
+  - **suggest** the system narrative;
+  - leave a **freeform note** (recorded to `.sivru/feedback-notes.md`).
   Annotations accumulate in `localStorage`; **Export** downloads a `patch.json`
   (stamped with git HEAD; each edit carries the block's content hash).
 - **`sivru feedback apply <patch.json>`** — a distinct subcommand (not a flag on
@@ -34,8 +35,11 @@ the next `sivru explain` reflects it everywhere. Completes
   input, so: each edit is hash-gated and symbol-located — a changed block is
   **refused, never corrupted**; a `sourcePath` that escapes the repo root (`..`,
   absolute, or a symlink out) is **rejected** (lexical + realpath); a missing
-  symbol/file is a **reported failure, never a silent drop**; create inserts run
-  bottom-up and edits re-extract after, so line ranges never shift; field values
+  symbol/file is a **reported failure, never a silent drop**; a create whose
+  `declLine` no longer holds the symbol is **refused** (creates aren't
+  hash-gated, so they're guarded against a moved declaration); create inserts
+  run bottom-up and edits re-extract after, so line ranges never shift; field
+  values
   are YAML-quoted (colons, control chars, number/bool-looking strings) so a value
   can't break the block; EOL is preserved; `--dry-run` writes nothing anywhere;
   the uncommitted-changes guard runs `git -C <repo>` (correct under `--repo`);

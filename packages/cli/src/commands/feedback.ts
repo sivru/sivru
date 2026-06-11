@@ -26,6 +26,10 @@ const USAGE = [
   "  --dry-run     Show the per-block before/after; write nothing",
   "  --force       Apply even to files with uncommitted changes",
   "  --repo=<dir>  Repo root (default: the patch's repoRoot, else cwd)",
+  "",
+  "  Apply is per-file, not atomic across files: if a later file is refused,",
+  "  earlier ones stay written. Re-running is safe — applied edits are",
+  "  hash-stale-refused — and the summary reports exactly what landed.",
 ].join("\n");
 
 export async function runFeedback(argv: readonly string[]): Promise<number> {

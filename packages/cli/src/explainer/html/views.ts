@@ -244,7 +244,11 @@ function renderSymbol(node: ExplainerNode): string {
     ? `<h2>Collaborators</h2><div class="diagram-wrap">${renderRadial(node.name, d.collaborators)}</div>`
     : "";
 
-  return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial;
+  // Feedback mode: leave a freeform note (recorded to .sivru/feedback-notes.md,
+  // never auto-applied) for anything the structured fields can't capture.
+  const noteBtn = `<button class="fb-note" data-node-id="${esc(node.id)}" data-path="${esc(node.path)}">+ note</button>`;
+
+  return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial + noteBtn;
 }
 
 interface BlockMeta {

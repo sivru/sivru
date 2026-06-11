@@ -53,6 +53,7 @@ export type EditStatus =
   | "dirty" // file has uncommitted changes and no --force
   | "escapes-repo" // sourcePath resolves outside the repo root (rejected)
   | "already-annotated" // create on a symbol that already has a block
+  | "decl-mismatch" // create's declLine no longer holds the symbol (stale)
   | "field-absent" // the field line isn't present (adding fields is deferred)
   | "unsupported-format"; // multi-line value / list form / language (deferred)
 
@@ -250,6 +251,14 @@ export async function applyBlockEdits(
       for (const c of [...fileCreates].sort((a, b) => b.declLine - a.declLine)) {
         if (existing.some((b) => b.symbolName === c.blockSymbolName && b.block !== null)) {
           refuseCreate(c, "already-annotated", `"${c.blockSymbolName}" already has a block — edit it instead`);
+          continue;
+        }
+        // Creates aren't hash-gated like edits, so guard against a stale
+        // declLine: the declaration (± a line for modifiers/decorators) must
+        // still mention the symbol, else the source moved since the explain run.
+        const declWindow = [c.declLine - 2, c.declLine - 1, c.declLine].map((i) => lines[i] ?? "").join("\n");
+        if (!declWindow.includes(c.blockSymbolName)) {
+          refuseCreate(c, "decl-mismatch", `"${c.blockSymbolName}" is no longer at line ${c.declLine} (source changed since the explainer was generated)`);
           continue;
         }
         const ins = buildBlockInsert(sourcePath, c.declLine, c.role, c.responsibility, lines);

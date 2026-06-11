@@ -114,9 +114,9 @@ a:hover{text-decoration:underline}
 body.feedback-on [data-editable]{outline:1px dashed var(--accent);outline-offset:3px;border-radius:3px;cursor:text}
 body.feedback-on [data-editable]:hover{background:rgba(212,160,86,.12)}
 [data-editable].edited{background:rgba(212,160,86,.18)}
-.fb-create,.fb-narrative{display:none;margin-top:10px;background:transparent;color:var(--accent);border:1px dashed var(--accent);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
-body.feedback-on .fb-create,body.feedback-on .fb-narrative{display:inline-block}
-.fb-create.edited,.fb-narrative.edited{border-style:solid;background:rgba(212,160,86,.18)}
+.fb-create,.fb-narrative,.fb-note{display:none;margin-top:10px;background:transparent;color:var(--accent);border:1px dashed var(--accent);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
+body.feedback-on .fb-create,body.feedback-on .fb-narrative,body.feedback-on .fb-note{display:inline-block}
+.fb-create.edited,.fb-narrative.edited,.fb-note.edited{border-style:solid;background:rgba(212,160,86,.18)}
 #main{flex:1;min-width:0;max-width:980px;margin:0 auto;padding:28px 36px}
 .breadcrumb{color:var(--mute);font-size:12px;margin-bottom:14px}
 .breadcrumb .sep{margin:0 6px}
@@ -248,6 +248,14 @@ export const CLIENT_JS = `
       fbStore('narrative',{kind:'narrative',value:nv});
       nb.classList.add('edited');nb.textContent='narrative queued ✓';return;
     }
+    // leave a freeform note (recorded, never auto-applied)
+    var note=t.closest&&t.closest('.fb-note');
+    if(note){e.preventDefault();
+      var nt=window.prompt('Note (recorded for a human — not applied to source):','');
+      if(nt===null||nt==='')return;
+      fbStore(note.getAttribute('data-node-id')+'::note',{kind:'note',targetNodeId:note.getAttribute('data-node-id'),sourcePath:note.getAttribute('data-path'),note:nt});
+      note.classList.add('edited');note.textContent='note queued ✓';return;
+    }
     // edit an existing block field
     var dd=t.closest&&t.closest('[data-editable]');
     if(!dd)return;
@@ -269,7 +277,7 @@ export const CLIENT_JS = `
       edits:all.filter(function(x){return x.kind==='edit';}).map(function(x){return {targetNodeId:x.targetNodeId,sourcePath:x.sourcePath,blockSymbolName:x.blockSymbolName,blockContentHash:x.blockContentHash,edit:x.edit};}),
       creates:all.filter(function(x){return x.kind==='create';}).map(function(x){return {targetNodeId:x.targetNodeId,sourcePath:x.sourcePath,blockSymbolName:x.blockSymbolName,declLine:x.declLine,role:x.role,responsibility:x.responsibility};}),
       narrative:all.filter(function(x){return x.kind==='narrative';}).map(function(x){return {value:x.value};}),
-      notes:[]};
+      notes:all.filter(function(x){return x.kind==='note';}).map(function(x){return {targetNodeId:x.targetNodeId,sourcePath:x.sourcePath,note:x.note};})};
     var blob=new Blob([JSON.stringify(patch,null,2)],{type:'application/json'});
     var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sivru-feedback-patch.json';a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);

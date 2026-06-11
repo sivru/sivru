@@ -55,9 +55,10 @@ describe("renderHtml", () => {
     expect(html).toContain('data-editable data-edit-field="collaborators"');
   });
 
-  it("offers the create-block + narrative affordances (closing the un-annotated path)", () => {
+  it("offers the create-block + narrative + note affordances (closing the un-annotated path)", () => {
     expect(html).toMatch(/class="fb-create"[^>]*data-symbol="helper"[^>]*data-decl="12"/);
     expect(html).toContain('class="fb-narrative"');
+    expect(html).toContain('class="fb-note"');
   });
 
   it("renders the sidebar tree to package level", () => {

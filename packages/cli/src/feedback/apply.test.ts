@@ -249,6 +249,17 @@ describe("applyBlockEdits — create a block (the un-annotated path)", () => {
     expect(r.outcomes[0]!.status).toBe("already-annotated");
   });
 
+  it("refuses a create whose declLine no longer holds the symbol (stale)", async () => {
+    const moved = "// a\n// b\n// c\nexport function foo() {}\n"; // foo is on line 4
+    const { base, written } = deps({ extract: async () => [] }, { "x.ts": moved });
+    const r = await applyBlockEdits(
+      create({ blockSymbolName: "foo", declLine: 1 }),
+      { repoRoot: "/repo", deps: base },
+    );
+    expect(r.outcomes[0]!.status).toBe("decl-mismatch");
+    expect(written["x.ts"]).toBeUndefined();
+  });
+
   it("refuses an unsupported language (Python docstrings deferred)", async () => {
     const { base } = deps({ extract: async () => [] }, { "x.py": "def foo(): pass\n" });
     const r = await applyBlockEdits(
