@@ -23,10 +23,16 @@ Slice 2 (design + eng reviewed).
   the browser ships a ~50-line vanilla nav shim (no bundler, no library, no
   framework). All layout, escaping, and routing logic is typechecked and
   unit-tested.
+- **Architecture-first System page**: a **layered system map** — modules placed
+  in dependency layers (foundation on the left, consumers to the right), boxes
+  sized by symbol count, with the foundation module named in a one-line
+  overview. The repo narrative renders as **Markdown** in a collapsed
+  "About this system" disclosure below the structure, never a raw-text wall.
 - **Three inline-SVG diagrams**, all hand-rolled and deterministic (same model →
-  identical SVG): a layered module **dependency graph** (nodes link to module
-  pages), a sorted **churn bar** per module, and a per-symbol radial
-  **collaborator graph**.
+  identical SVG): the layered architecture map (boxes link to module pages), a
+  sorted **churn bar** per module, and a per-symbol radial **collaborator
+  graph** whose radius grows with neighbour count and whose labels are
+  angle-anchored so they don't collide.
 - **Empty states as authoring prompts** — a symbol with no `@sivru` block shows
   its derived facts plus a paste-able annotation stub ("add intent"); a repo
   with no narrative gets an "add `.sivru/explainer.md`" card. On the sivru repo

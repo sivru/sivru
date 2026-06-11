@@ -60,8 +60,25 @@ describe("module view empty states", () => {
 });
 
 describe("system view", () => {
-  it("renders the narrative when authored", () => {
-    expect(sectionFor("system")).toContain("A small system that does things.");
+  it("leads with structure: overview + architecture map before the narrative", () => {
+    const html = sectionFor("system");
+    expect(html).toContain('class="overview"');
+    expect(html).toContain("2 modules");
+    expect(html).toContain("<h2>Architecture</h2>");
+    expect(html).toContain('class="diagram"'); // the layered system map
+    // The architecture map appears BEFORE the narrative disclosure.
+    expect(html.indexOf("<h2>Architecture</h2>")).toBeLessThan(
+      html.indexOf("About this system"),
+    );
+  });
+
+  it("renders the narrative as markdown inside a collapsed <details>, not raw", () => {
+    const html = sectionFor("system", "# Heading\n\nA small system that does **things**.");
+    expect(html).toContain("<details");
+    expect(html).toContain("About this system");
+    expect(html).toContain("<h3>Heading</h3>"); // rendered, not raw "#"
+    expect(html).toContain("<strong>things</strong>");
+    expect(html).not.toContain("# Heading"); // no raw markdown leaking
   });
 
   it("shows an add-narrative card when the narrative is the stub", () => {
@@ -70,8 +87,9 @@ describe("system view", () => {
     expect(html).toContain(".sivru/explainer.md");
   });
 
-  it("renders the module dependency graph SVG", () => {
-    expect(sectionFor("system")).toContain('class="diagram"');
+  it("names the foundation module(s) in the overview", () => {
+    // @scope/b has no deps → it's the foundation.
+    expect(sectionFor("system")).toMatch(/foundation:.*@scope\/b/);
   });
 });
 

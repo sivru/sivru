@@ -108,7 +108,20 @@ h1{font-size:22px;margin:0 0 10px}
 h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin:26px 0 10px;border-bottom:1px solid var(--border);padding-bottom:6px}
 .meta,.deps{color:var(--mute);font-size:13px;margin:4px 0}
 .deps strong{color:var(--text)}
-.narrative{white-space:pre-wrap;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.overview{color:var(--mute);font-size:13px;margin:2px 0 4px}
+.overview code{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--accent);font-size:12px}
+details.narrative{margin-top:26px;border-top:1px solid var(--border);padding-top:10px}
+details.narrative>summary{cursor:pointer;color:var(--mute);font-size:13px;text-transform:uppercase;letter-spacing:.04em;list-style-position:inside}
+details.narrative>summary:hover{color:var(--text)}
+.md{margin-top:12px;max-width:760px}
+.md h3,.md h4,.md h5,.md h6{margin:18px 0 8px;color:var(--text)}
+.md h3{font-size:16px}.md h4{font-size:14px}
+.md p{margin:8px 0}
+.md ul,.md ol{padding-left:22px;margin:8px 0}
+.md li{margin:3px 0}
+.md pre{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px;overflow:auto;font-size:12px;line-height:1.4}
+.md code{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:0 4px;font-size:12px}
+.md pre code{background:none;border:none;padding:0}
 .diagram-wrap{overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
 table.grid{width:100%;border-collapse:collapse;font-size:13px}
 table.grid th{text-align:left;color:var(--mute);font-weight:500;border-bottom:1px solid var(--border);padding:6px 8px}
@@ -130,8 +143,10 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .empty-head{color:var(--warn);font-weight:600;margin-bottom:6px}
 .stub{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;font-size:12px;color:var(--mute)}
 .diagram{max-width:100%;height:auto}
-.diagram .node{fill:var(--bg);stroke:var(--border)}
-.diagram .node-label{fill:var(--text);font-size:12px;text-anchor:middle;dominant-baseline:middle}
+.diagram .map-box{fill:var(--bg);stroke:var(--border);stroke-width:1.5}
+.diagram a:hover .map-box{stroke:var(--accent)}
+.diagram .map-name{fill:var(--text);font-size:13px;font-weight:600;text-anchor:middle}
+.diagram .map-sub{fill:var(--mute);font-size:11px;text-anchor:middle}
 .diagram .edge{stroke:var(--mute);stroke-width:1.2}
 .diagram .arrow-head{fill:var(--mute)}
 .diagram .bar{fill:var(--accent)}

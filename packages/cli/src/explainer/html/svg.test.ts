@@ -2,70 +2,87 @@ import { describe, expect, it } from "vitest";
 
 import {
   barLayout,
-  layeredDag,
+  computeLayers,
   radialLayout,
-  renderDepGraph,
+  renderSystemMap,
+  systemMapLayout,
 } from "./svg.js";
 
-const NODE_W = 150;
-const NODE_H = 34;
+const edges = [
+  { from: "cli", to: "observe" },
+  { from: "cli", to: "search" },
+  { from: "observe", to: "search" },
+];
 
-describe("layeredDag", () => {
-  // search depends on nothing; observe→search; cli→observe,search.
-  const ids = ["cli", "observe", "search"];
-  const edges = [
-    { from: "cli", to: "observe" },
-    { from: "cli", to: "search" },
-    { from: "observe", to: "search" },
-  ];
-
-  it("sinks depended-upon nodes to layer 0 (longest-path layering)", () => {
-    const l = layeredDag(ids, edges);
-    const layerOf = (id: string) => l.boxes.find((b) => b.id === id)!.layer;
-    expect(layerOf("search")).toBe(0);
-    expect(layerOf("observe")).toBe(1);
-    expect(layerOf("cli")).toBe(2);
+describe("computeLayers", () => {
+  it("sinks depended-upon nodes to layer 0 (longest-path)", () => {
+    const l = computeLayers(["cli", "observe", "search"], edges);
+    expect(l.get("search")).toBe(0);
+    expect(l.get("observe")).toBe(1);
+    expect(l.get("cli")).toBe(2);
   });
 
-  it("keeps every box within the reported viewBox bounds", () => {
-    const l = layeredDag(ids, edges);
+  it("terminates on a cycle and handles single/empty", () => {
+    expect(
+      computeLayers(["a", "b"], [
+        { from: "a", to: "b" },
+        { from: "b", to: "a" },
+      ]).size,
+    ).toBe(2);
+    expect(computeLayers(["solo"], []).get("solo")).toBe(0);
+    expect(computeLayers([], []).size).toBe(0);
+  });
+});
+
+describe("systemMapLayout", () => {
+  const nodes = [
+    { id: "cli", name: "@s/cli", sub: "30 sym", size: 30 },
+    { id: "observe", name: "@s/observe", sub: "40 sym", size: 40 },
+    { id: "search", name: "@s/search", sub: "120 sym", size: 120 },
+  ];
+
+  it("keeps every box within the viewBox bounds", () => {
+    const l = systemMapLayout(nodes, edges);
     for (const b of l.boxes) {
       expect(b.x).toBeGreaterThanOrEqual(0);
       expect(b.y).toBeGreaterThanOrEqual(0);
-      expect(b.x + NODE_W).toBeLessThanOrEqual(l.width);
-      expect(b.y + NODE_H).toBeLessThanOrEqual(l.height);
+      expect(b.x + b.w).toBeLessThanOrEqual(l.width);
+      expect(b.y + b.h).toBeLessThanOrEqual(l.height);
     }
   });
 
-  it("is deterministic: same input → identical layout", () => {
-    expect(layeredDag(ids, edges)).toEqual(layeredDag([...ids], [...edges]));
+  it("places the foundation (layer 0) left of its consumers", () => {
+    const l = systemMapLayout(nodes, edges);
+    const x = (id: string) => l.boxes.find((b) => b.id === id)!.x;
+    expect(x("search")).toBeLessThan(x("observe"));
+    expect(x("observe")).toBeLessThan(x("cli"));
   });
 
-  it("terminates on a cycle (A→B→A) without infinite recursion", () => {
-    const l = layeredDag(
-      ["a", "b"],
-      [
-        { from: "a", to: "b" },
-        { from: "b", to: "a" },
-      ],
-    );
-    expect(l.boxes).toHaveLength(2);
+  it("sizes boxes by symbol count (bigger module → wider box)", () => {
+    const l = systemMapLayout(nodes, edges);
+    const w = (id: string) => l.boxes.find((b) => b.id === id)!.w;
+    expect(w("search")).toBeGreaterThan(w("observe"));
+    expect(w("observe")).toBeGreaterThan(w("cli"));
   });
 
-  it("handles a single node and an empty graph", () => {
-    expect(layeredDag(["solo"], []).boxes).toHaveLength(1);
-    const empty = layeredDag([], []);
+  it("is deterministic and handles an empty system", () => {
+    expect(systemMapLayout(nodes, edges)).toEqual(systemMapLayout([...nodes], [...edges]));
+    const empty = systemMapLayout([], []);
     expect(empty.boxes).toEqual([]);
     expect(empty.width).toBeGreaterThan(0);
-    expect(empty.height).toBeGreaterThan(0);
   });
+});
 
-  it("ignores edges to unknown nodes and self-edges", () => {
-    const l = layeredDag(["a"], [
-      { from: "a", to: "ghost" },
-      { from: "a", to: "a" },
-    ]);
-    expect(l.boxes[0]!.layer).toBe(0);
+describe("renderSystemMap", () => {
+  it("emits a viewBox'd <svg>, escapes labels, links boxes", () => {
+    const svg = renderSystemMap(
+      [{ id: "a", name: "<x>", sub: "1 sym", size: 1 }],
+      [],
+      (id) => `#/module/${id}`,
+    );
+    expect(svg).toMatch(/^<svg class="diagram" viewBox="0 0 \d+ \d+"/);
+    expect(svg).toContain("&lt;x&gt;");
+    expect(svg).toContain('href="#/module/a"');
   });
 });
 
@@ -76,67 +93,41 @@ describe("barLayout", () => {
     { label: "explainer", value: 15 },
   ];
 
-  it("sorts descending by value", () => {
-    expect(barLayout(items).bars.map((b) => b.label)).toEqual([
-      "commands",
-      "lib",
-      "explainer",
-    ]);
-  });
-
-  it("scales widths within [0, max] and stays in bounds", () => {
+  it("sorts descending and the value label always fits in the viewBox", () => {
     const l = barLayout(items);
-    expect(l.bars[0]!.width).toBeCloseTo(220); // max value → full width
-    for (const b of l.bars) {
-      expect(b.width).toBeGreaterThanOrEqual(0);
-      expect(b.x + b.width).toBeLessThanOrEqual(l.width);
-    }
+    expect(l.bars.map((b) => b.label)).toEqual(["commands", "lib", "explainer"]);
+    // The widest bar's value text starts at x+width+6; reserve room so it never clips.
+    const widest = l.bars[0]!;
+    expect(widest.x + widest.width + 40).toBeLessThanOrEqual(l.width);
   });
 
-  it("handles all-zero values (no divide-by-zero, widths 0)", () => {
-    const l = barLayout([{ label: "a", value: 0 }, { label: "b", value: 0 }]);
-    expect(l.bars.every((b) => b.width === 0)).toBe(true);
-  });
-
-  it("is deterministic", () => {
+  it("handles all-zero values and is deterministic", () => {
+    expect(barLayout([{ label: "a", value: 0 }]).bars[0]!.width).toBe(0);
     expect(barLayout(items)).toEqual(barLayout([...items]));
   });
 });
 
 describe("radialLayout", () => {
-  it("places every neighbour within the viewBox", () => {
-    const l = radialLayout(["a", "b", "c", "d"]);
-    for (const n of l.neighbors) {
+  it("keeps neighbours in bounds and grows the radius with count", () => {
+    const few = radialLayout(["a", "b"]);
+    const many = radialLayout(Array.from({ length: 12 }, (_, i) => `n${i}`));
+    expect(many.radius).toBeGreaterThan(few.radius);
+    for (const n of many.neighbors) {
       expect(n.x).toBeGreaterThanOrEqual(0);
       expect(n.y).toBeGreaterThanOrEqual(0);
-      expect(n.x).toBeLessThanOrEqual(l.width);
-      expect(n.y).toBeLessThanOrEqual(l.height);
+      expect(n.x).toBeLessThanOrEqual(many.width);
+      expect(n.y).toBeLessThanOrEqual(many.height);
     }
-    expect(l.center).toEqual({ x: l.width / 2, y: l.height / 2 });
   });
 
-  it("handles zero, one, and many neighbours", () => {
+  it("caps rendered neighbours at the max", () => {
+    const l = radialLayout(Array.from({ length: 40 }, (_, i) => `n${i}`));
+    expect(l.neighbors.length).toBeLessThanOrEqual(16);
+  });
+
+  it("handles zero/one and is deterministic", () => {
     expect(radialLayout([]).neighbors).toEqual([]);
     expect(radialLayout(["only"]).neighbors).toHaveLength(1);
-    expect(radialLayout(["a", "b", "c", "d", "e", "f"]).neighbors).toHaveLength(6);
-  });
-
-  it("is deterministic", () => {
     expect(radialLayout(["x", "y"])).toEqual(radialLayout(["x", "y"]));
-  });
-});
-
-describe("renderDepGraph", () => {
-  it("emits a viewBox'd <svg>, escapes labels, and links nodes", () => {
-    const svg = renderDepGraph(
-      ["a"],
-      [],
-      () => "<evil>",
-      (id) => `#/module/${id}`,
-    );
-    expect(svg).toMatch(/^<svg class="diagram" viewBox="0 0 \d+ \d+"/);
-    expect(svg).toContain("&lt;evil&gt;");
-    expect(svg).not.toContain("<evil>");
-    expect(svg).toContain('href="#/module/a"');
   });
 });

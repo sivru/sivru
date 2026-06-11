@@ -12,8 +12,9 @@
 
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc } from "./escape.js";
+import { mdToHtml } from "./markdown.js";
 import { routeOf } from "./routes.js";
-import { renderBars, renderDepGraph, renderRadial } from "./svg.js";
+import { renderBars, renderRadial, renderSystemMap } from "./svg.js";
 
 /** The narrative stub sentinel prefix from narrative.ts (kept in sync). */
 const STUB_NARRATIVE_PREFIX = "No system narrative yet";
@@ -96,43 +97,68 @@ function breadcrumb(ancestors: ExplainerNode[], node: ExplainerNode): string {
 // ── system ────────────────────────────────────────────────────────────────────
 
 function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
-  const narrative = node.narrative ?? "";
-  const narrativeHtml = narrative.startsWith(STUB_NARRATIVE_PREFIX)
-    ? emptyCard(
-        "No system narrative yet",
-        "Add one in <code>.sivru/explainer.md</code> (or an ARCHITECTURE.md / README.md) and regenerate.",
-      )
-    : `<div class="narrative">${esc(narrative)}</div>`;
-
   const modules = model.root.children;
+  const symbolsOf = (m: ExplainerNode): number =>
+    m.children.reduce((n, p) => n + p.children.length, 0);
+  const totalSymbols = modules.reduce((n, m) => n + symbolsOf(m), 0);
+  const foundation = modules
+    .filter((m) => m.derived.depEdges.length === 0)
+    .map((m) => m.name);
+  const labelOf = (id: string): string =>
+    modules.find((m) => m.id === id)?.name ?? id;
+
+  // Architecture: a layered system map (foundation → consumers), boxes sized by
+  // symbol count. Leads the page; the narrative moves below.
   const edges = modules.flatMap((m) =>
     m.derived.depEdges.map((to) => ({ from: m.id, to })),
   );
-  const labelOf = (id: string): string =>
-    modules.find((m) => m.id === id)?.name ?? id;
-  const graph = modules.length
-    ? renderDepGraph(
-        modules.map((m) => m.id),
+  const map = modules.length
+    ? renderSystemMap(
+        modules.map((m) => ({
+          id: m.id,
+          name: m.name,
+          sub: `${symbolsOf(m)} sym · churn ${m.derived.churn}`,
+          size: symbolsOf(m),
+        })),
         edges,
-        labelOf,
         (id) => routeOf(id),
       )
+    : "";
+
+  const overview = modules.length
+    ? `<p class="overview">${modules.length} modules · ${totalSymbols} load-bearing symbols` +
+      (foundation.length
+        ? ` · foundation: ${foundation.map((f) => `<code>${esc(f)}</code>`).join(" ")}`
+        : "") +
+      `</p>`
     : "";
 
   const rows = modules
     .map(
       (m) =>
         `<tr><td><a href="${routeOf(m.id)}">${esc(m.name)}</a></td>` +
+        `<td class="num">${symbolsOf(m)}</td>` +
         `<td class="num">${m.derived.churn}</td>` +
         `<td class="muted">${m.derived.depEdges.map((d) => esc(labelOf(d))).join(", ") || "—"}</td></tr>`,
     )
     .join("");
 
+  // Narrative LAST, rendered as markdown in a collapsed disclosure — never a
+  // raw-text wall above the structure.
+  const narrative = node.narrative ?? "";
+  const narrativeBlock = narrative.startsWith(STUB_NARRATIVE_PREFIX)
+    ? emptyCard(
+        "No system narrative yet",
+        "Add one in <code>.sivru/explainer.md</code> (or an ARCHITECTURE.md / README.md) and regenerate.",
+      )
+    : `<details class="narrative"><summary>About this system</summary><div class="md">${mdToHtml(narrative)}</div></details>`;
+
   return (
     `<h1>${esc(node.name)}</h1>` +
-    narrativeHtml +
-    (graph ? `<h2>Module dependencies</h2><div class="diagram-wrap">${graph}</div>` : "") +
-    `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>`
+    overview +
+    (map ? `<h2>Architecture</h2><div class="diagram-wrap">${map}</div>` : "") +
+    `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Symbols</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>` +
+    narrativeBlock
   );
 }
 
