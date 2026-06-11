@@ -7,6 +7,7 @@
 // the patch, warns on repo/HEAD drift, orchestrates the three writers, prints a
 // summary, and sets a CI-gateable exit code (nonzero if any edit was refused).
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -68,7 +69,14 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
     return 1;
   }
 
-  const repoRoot = resolve(repoOverride ?? patch.repoRoot ?? process.cwd());
+  // --repo wins; else the patch's repoRoot only if it's a real directory on
+  // THIS machine (the HTML stamps a basename, not the author's absolute path);
+  // else the current working directory.
+  const repoRoot = repoOverride
+    ? resolve(repoOverride)
+    : patch.repoRoot && existsSync(patch.repoRoot)
+      ? resolve(patch.repoRoot)
+      : process.cwd();
 
   // Warn (don't fail) on repo / HEAD drift — the per-block hash gate is the
   // real safety net; this just helps the user understand a wall of refusals.
@@ -91,12 +99,11 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
   const applied = result.outcomes.filter((o) => o.status === "applied");
   const refused = result.outcomes.filter((o) => o.status !== "applied");
   for (const o of applied) {
-    const p = o.preview;
-    process.stdout.write(
-      dryRun
-        ? `  would set ${o.field} in ${o.sourcePath} (line ${p?.line})\n`
-        : `  set ${o.field} in ${o.sourcePath} (line ${p?.line})\n`,
-    );
+    if (o.field === "(create)") {
+      process.stdout.write(`  ${o.detail} in ${o.sourcePath}\n`);
+    } else {
+      process.stdout.write(`  ${dryRun ? "would set" : "set"} ${o.field} in ${o.sourcePath} (line ${o.preview?.line})\n`);
+    }
   }
   for (const o of refused) {
     process.stdout.write(`  REFUSED ${o.field} in ${o.sourcePath} — ${o.status}: ${o.detail ?? ""}\n`);

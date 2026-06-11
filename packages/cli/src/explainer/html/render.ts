@@ -10,6 +10,8 @@
 //   <main>          : all <section data-route> views (one visible)
 //   <script>        : model island · search island · nav shim
 
+import { basename } from "node:path";
+
 import { SivruExplainError } from "@sivru/search";
 
 import type { ExplainerModel, ExplainerNode } from "../types.js";
@@ -50,7 +52,9 @@ export function renderHtml(model: ExplainerModel): string {
     `</div>` +
     `</aside>` +
     `<main id="main">${sections.map((s) => s.html).join("")}</main>` +
-    `<script type="application/json" id="model-island">${jsonIsland(model)}</script>` +
+    // The HTML is shareable, so the island carries the repo BASENAME, not the
+    // author's absolute path. `feedback apply` defaults to the CWD anyway.
+    `<script type="application/json" id="model-island">${jsonIsland({ ...model, repoPath: basename(model.repoPath) })}</script>` +
     `<script type="application/json" id="search-index">${jsonIsland(buildSearchIndex(model))}</script>` +
     `<script>${CLIENT_JS}</script>` +
     `</body></html>\n`;
@@ -110,6 +114,9 @@ a:hover{text-decoration:underline}
 body.feedback-on [data-editable]{outline:1px dashed var(--accent);outline-offset:3px;border-radius:3px;cursor:text}
 body.feedback-on [data-editable]:hover{background:rgba(212,160,86,.12)}
 [data-editable].edited{background:rgba(212,160,86,.18)}
+.fb-create,.fb-narrative{display:none;margin-top:10px;background:transparent;color:var(--accent);border:1px dashed var(--accent);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
+body.feedback-on .fb-create,body.feedback-on .fb-narrative{display:inline-block}
+.fb-create.edited,.fb-narrative.edited{border-style:solid;background:rgba(212,160,86,.18)}
 #main{flex:1;min-width:0;max-width:980px;margin:0 auto;padding:28px 36px}
 .breadcrumb{color:var(--mute);font-size:12px;margin-bottom:14px}
 .breadcrumb .sep{margin:0 6px}
@@ -219,9 +226,30 @@ export const CLIENT_JS = `
   function fbCount(){var s=fbLoad();var n=Object.keys(s).length;var c=document.getElementById('fb-count');if(c)c.textContent=n;var ex=document.getElementById('fb-export');if(ex)ex.hidden=n===0;}
   var fbMode=document.getElementById('fb-mode');
   if(fbMode)fbMode.addEventListener('change',function(){document.body.classList.toggle('feedback-on',fbMode.checked);});
+  function fbStore(key,val){var s=fbLoad();s[key]=val;localStorage.setItem(FB_KEY,JSON.stringify(s));fbCount();}
   document.addEventListener('click',function(e){
     if(!document.body.classList.contains('feedback-on'))return;
-    var dd=e.target.closest&&e.target.closest('[data-editable]');
+    var t=e.target;
+    // author a NEW block on an un-annotated symbol
+    var cb=t.closest&&t.closest('.fb-create');
+    if(cb){e.preventDefault();
+      var role=window.prompt('role — a short kind (e.g. service, parser):',cb.getAttribute('data-symbol'));
+      if(role===null||role==='')return;
+      var resp=window.prompt('responsibility — one line: what it does and why:','');
+      if(resp===null||resp==='')return;
+      fbStore(cb.getAttribute('data-node-id')+'::create',{kind:'create',targetNodeId:cb.getAttribute('data-node-id'),sourcePath:cb.getAttribute('data-path'),blockSymbolName:cb.getAttribute('data-symbol'),declLine:parseInt(cb.getAttribute('data-decl'),10),role:role,responsibility:resp});
+      cb.classList.add('edited');cb.textContent='@sivru block queued ✓';return;
+    }
+    // suggest a system narrative
+    var nb=t.closest&&t.closest('.fb-narrative');
+    if(nb){e.preventDefault();
+      var nv=window.prompt('System narrative — what this system is and how it fits together:','');
+      if(nv===null||nv==='')return;
+      fbStore('narrative',{kind:'narrative',value:nv});
+      nb.classList.add('edited');nb.textContent='narrative queued ✓';return;
+    }
+    // edit an existing block field
+    var dd=t.closest&&t.closest('[data-editable]');
     if(!dd)return;
     e.preventDefault();
     var blk=dd.closest('.block');if(!blk)return;
@@ -230,17 +258,18 @@ export const CLIENT_JS = `
     var cur=isList?Array.prototype.map.call(dd.querySelectorAll('li'),function(li){return li.textContent;}).join(', '):dd.textContent;
     var val=window.prompt('Edit '+field+' (comma-separated for a list):',cur);
     if(val===null||val===cur)return;
-    var store=fbLoad();
-    store[blk.getAttribute('data-node-id')+'::'+field]={targetNodeId:blk.getAttribute('data-node-id'),sourcePath:blk.getAttribute('data-path'),blockSymbolName:blk.getAttribute('data-symbol'),blockContentHash:blk.getAttribute('data-hash'),edit:isList?{field:field,op:'set',value:val.split(',').map(function(s){return s.trim();}).filter(Boolean)}:{field:field,op:'set',value:val}};
-    localStorage.setItem(FB_KEY,JSON.stringify(store));
+    fbStore(blk.getAttribute('data-node-id')+'::'+field,{kind:'edit',targetNodeId:blk.getAttribute('data-node-id'),sourcePath:blk.getAttribute('data-path'),blockSymbolName:blk.getAttribute('data-symbol'),blockContentHash:blk.getAttribute('data-hash'),edit:isList?{field:field,op:'set',value:val.split(',').map(function(s){return s.trim();}).filter(Boolean)}:{field:field,op:'set',value:val}});
     dd.classList.add('edited');
     if(isList){dd.innerHTML='<ul>'+val.split(',').map(function(s){return '<li>'+esc(s.trim())+'</li>';}).join('')+'</ul>';}else{dd.textContent=val;}
-    fbCount();
   });
   var fbExport=document.getElementById('fb-export');
   if(fbExport)fbExport.addEventListener('click',function(){
-    var store=fbLoad();
-    var patch={schema:1,repoRoot:model.repoPath,head:model.head||'',edits:Object.keys(store).map(function(k){return store[k];}),narrative:[],notes:[]};
+    var s=fbLoad();var all=Object.keys(s).map(function(k){return s[k];});
+    var patch={schema:1,repoRoot:model.repoPath,head:model.head||'',
+      edits:all.filter(function(x){return x.kind==='edit';}).map(function(x){return {targetNodeId:x.targetNodeId,sourcePath:x.sourcePath,blockSymbolName:x.blockSymbolName,blockContentHash:x.blockContentHash,edit:x.edit};}),
+      creates:all.filter(function(x){return x.kind==='create';}).map(function(x){return {targetNodeId:x.targetNodeId,sourcePath:x.sourcePath,blockSymbolName:x.blockSymbolName,declLine:x.declLine,role:x.role,responsibility:x.responsibility};}),
+      narrative:all.filter(function(x){return x.kind==='narrative';}).map(function(x){return {value:x.value};}),
+      notes:[]};
     var blob=new Blob([JSON.stringify(patch,null,2)],{type:'application/json'});
     var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sivru-feedback-patch.json';a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);

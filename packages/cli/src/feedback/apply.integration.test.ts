@@ -73,6 +73,29 @@ describe("feedback apply — real round-trip", () => {
     expect(after.split("\n").length).toBe(FILE.split("\n").length);
   });
 
+  it("CREATES a real, re-parseable block on an un-annotated symbol", async () => {
+    const abs = join(dir, "w.ts");
+    writeFileSync(abs, "export function widget() {}\n");
+    const patch: FeedbackPatch = {
+      schema: 1,
+      repoRoot: dir,
+      head: "test",
+      edits: [],
+      creates: [{
+        targetNodeId: "symbol:w.ts#widget", sourcePath: "w.ts", blockSymbolName: "widget",
+        declLine: 1, role: "ui-widget", responsibility: "render the widget",
+      }],
+    };
+    const r = await applyBlockEdits(patch, { repoRoot: dir });
+    expect(r.ok).toBe(true);
+    // the freshly written block re-extracts and parses with the given fields
+    const blocks = await extractBlocks(abs);
+    const blk = blocks.find((b) => b.symbolName === "widget")!.block as { role: string; responsibility: string };
+    expect(blk.role).toBe("ui-widget");
+    expect(blk.responsibility).toBe("render the widget");
+    expect(readFileSync(abs, "utf8")).toContain("export function widget() {}");
+  });
+
   it("refuses a stale patch (block edited after export) — no corruption", async () => {
     const abs = join(dir, "x.ts");
     writeFileSync(abs, FILE);

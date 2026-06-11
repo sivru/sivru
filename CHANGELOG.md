@@ -17,32 +17,42 @@ the next `sivru explain` reflects it everywhere. Completes
 
 ### Added
 
-- **Feedback mode in the HTML explainer** — toggle it on, click a block field
-  (role / responsibility / maturity / collaborators), edit it; annotations
-  accumulate in `localStorage` and **Export** downloads a `patch.json` (stamped
-  with the repo root + git HEAD; each edit carries the block's content hash).
+- **Feedback mode in the HTML explainer** — toggle it on, then:
+  - **edit** an existing block field (role / responsibility / maturity /
+    collaborators) inline;
+  - **author** a new `@sivru` block on an un-annotated symbol (the "add intent"
+    affordance) — apply inserts a minimal block above the declaration;
+  - **suggest** the system narrative.
+  Annotations accumulate in `localStorage`; **Export** downloads a `patch.json`
+  (stamped with git HEAD; each edit carries the block's content hash).
 - **`sivru feedback apply <patch.json>`** — a distinct subcommand (not a flag on
   read-only `explain`). It edits the targeted field's line **in place**,
   preserving the comment prefix and every other byte (no whole-block re-emit, no
   canonicalization, no lost formatting). `--dry-run` shows the per-block diff;
   `--force` overrides the uncommitted-changes guard.
-- **Safety throughout** (`SIVRU-E2012` for a bad patch): each edit is gated by
-  the block's content hash and located by symbol name — a changed block is
-  **refused, never corrupted**; a missing symbol/file is a **reported failure,
-  never a silent drop**; edits batch per block and apply bottom-up so line
-  ranges never shift; EOL is preserved; a nonzero exit if any edit is refused
-  (CI-gateable).
+- **Safety throughout** (`SIVRU-E2012` for a bad patch). The patch is untrusted
+  input, so: each edit is hash-gated and symbol-located — a changed block is
+  **refused, never corrupted**; a `sourcePath` that escapes the repo root (`..`,
+  absolute, or a symlink out) is **rejected** (lexical + realpath); a missing
+  symbol/file is a **reported failure, never a silent drop**; create inserts run
+  bottom-up and edits re-extract after, so line ranges never shift; field values
+  are YAML-quoted (colons, control chars, number/bool-looking strings) so a value
+  can't break the block; EOL is preserved; `--dry-run` writes nothing anywhere;
+  the uncommitted-changes guard runs `git -C <repo>` (correct under `--repo`);
+  nonzero exit if any edit is refused (CI-gateable).
 - **Narrative feedback** → `.sivru/explainer.md` (the source the projection
   prefers); **freeform notes** → `.sivru/feedback-notes.md` (recorded for a
   human, never auto-applied).
-- The `ExplainerModel` now carries a per-node `blockHash` and a top-level `head`
-  (the patch stamp).
+- The `ExplainerModel` carries per-node `blockHash` + `declLine` and a top-level
+  `head` (the patch stamps). The shareable HTML embeds the repo **basename**, not
+  the author's absolute path.
 
 ### Deferred (DESIGN-0018 follow-ups)
 
 - Editing multi-line invariants/decisions and list add/remove (line-count-
-  changing edits); adding a field that isn't present yet. The v1 ops are all
-  single-line replacements, which is why a patch can never shift unrelated lines.
+  changing edits); adding a field that isn't present yet; authoring blocks in
+  Python (docstrings) and other non-C-like languages. The v1 edit ops are all
+  single-line replacements; create inserts a fresh `/** … */` block.
 
 ## [0.12.0] — 2026-06-10
 

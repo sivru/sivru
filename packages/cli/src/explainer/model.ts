@@ -377,6 +377,7 @@ export async function buildExplainerModel(
 
     const addSymbol = (name: string, entry: ExtractedForFile | null, display: string): void => {
       const block = entry?.blockJSON ?? null;
+      const declLine = e.exports.find((x) => x.name === name)?.startLine;
       pkg.children.push({
         id: symbolId(e.filePath, name),
         level: "symbol",
@@ -392,6 +393,7 @@ export async function buildExplainerModel(
         },
         block: block as ExplainerNode["block"],
         ...(entry?.blockHash !== undefined ? { blockHash: entry.blockHash } : {}),
+        ...(declLine !== undefined ? { declLine } : {}),
       });
       symbolCount++;
     };

@@ -93,6 +93,24 @@ describe("applyBlockEdits — happy path + source integrity", () => {
     expect(written["x.ts"]!.split("\n")[4]).toBe(' * responsibility: "does X: then Y"');
   });
 
+  it("quotes number/bool/null-looking values so YAML keeps them strings", async () => {
+    for (const v of ["123", "true", "null", "1.5e3"]) {
+      const { base, written } = deps();
+      await applyBlockEdits(
+        patch([edit({ edit: { field: "role", op: "set", value: v } })]),
+        { repoRoot: "/repo", deps: base },
+      );
+      expect(written["x.ts"]!.split("\n")[3]).toBe(` * role: "${v}"`);
+    }
+    // a normal word stays unquoted
+    const { base, written } = deps();
+    await applyBlockEdits(
+      patch([edit({ edit: { field: "role", op: "set", value: "engine" } })]),
+      { repoRoot: "/repo", deps: base },
+    );
+    expect(written["x.ts"]!.split("\n")[3]).toBe(" * role: engine");
+  });
+
   it("batches two edits to the SAME block into one write (no self-staling)", async () => {
     const { base, written } = deps();
     const r = await applyBlockEdits(
@@ -185,6 +203,67 @@ describe("applyBlockEdits — refusals (never corrupt)", () => {
     const out = written["x.ts"]!.split("\n");
     expect(out).toHaveLength(SRC.split("\n").length); // no extra line
     expect(out[4]).toBe(' * responsibility: "line one\\nline two"'); // \n escaped
+  });
+});
+
+describe("applyBlockEdits — create a block (the un-annotated path)", () => {
+  const NO_BLOCK = "export function foo() {}\n";
+  const create = (over: Partial<import("./patch.js").CreateEdit> = {}) => ({
+    schema: 1 as const,
+    repoRoot: "/repo",
+    head: "h",
+    edits: [],
+    creates: [
+      {
+        targetNodeId: "symbol:x.ts#foo",
+        sourcePath: "x.ts",
+        blockSymbolName: "foo",
+        declLine: 1,
+        role: "worker",
+        responsibility: "do the foo",
+        ...over,
+      },
+    ],
+  });
+
+  it("inserts a minimal @sivru block above the declaration", async () => {
+    const { base, written } = deps({ extract: async () => [] }, { "x.ts": NO_BLOCK });
+    const r = await applyBlockEdits(create(), { repoRoot: "/repo", deps: base });
+    expect(r.ok).toBe(true);
+    const out = written["x.ts"]!;
+    expect(out).toContain("/**");
+    expect(out).toContain(" * @sivru");
+    expect(out).toContain(" * role: worker");
+    expect(out).toContain(" * responsibility: do the foo");
+    // the block is ABOVE the declaration, which is untouched
+    expect(out.indexOf("@sivru")).toBeLessThan(out.indexOf("export function foo"));
+    expect(out).toContain("export function foo() {}");
+  });
+
+  it("refuses creating on a symbol that already has a block", async () => {
+    const { base } = deps(); // default extract returns a block for "doThing"
+    const r = await applyBlockEdits(
+      create({ blockSymbolName: "doThing" }),
+      { repoRoot: "/repo", deps: base },
+    );
+    expect(r.outcomes[0]!.status).toBe("already-annotated");
+  });
+
+  it("refuses an unsupported language (Python docstrings deferred)", async () => {
+    const { base } = deps({ extract: async () => [] }, { "x.py": "def foo(): pass\n" });
+    const r = await applyBlockEdits(
+      create({ sourcePath: "x.py" }),
+      { repoRoot: "/repo", deps: base },
+    );
+    expect(r.outcomes[0]!.status).toBe("unsupported-format");
+  });
+
+  it("dry-run previews the create without writing", async () => {
+    const { base, written } = deps({ extract: async () => [] }, { "x.ts": NO_BLOCK });
+    const r = await applyBlockEdits(create(), { repoRoot: "/repo", deps: base, dryRun: true });
+    expect(r.outcomes[0]!.status).toBe("applied");
+    expect(r.outcomes[0]!.detail).toMatch(/would insert/);
+    expect(written["x.ts"]).toBeUndefined();
   });
 });
 

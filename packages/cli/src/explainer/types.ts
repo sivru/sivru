@@ -57,6 +57,12 @@ export interface ExplainerNode {
    * Present only when `block !== null`.
    */
   blockHash?: string;
+  /**
+   * 1-indexed declaration line of an exported symbol — where the Slice 3
+   * feedback loop inserts a NEW `@sivru` block when authoring intent on an
+   * un-annotated symbol. Absent for module-level / unexported nodes.
+   */
+  declLine?: number;
   /** System level only: the narrative (repo docs / `.sivru/explainer.md` / stub). */
   narrative?: string;
 }

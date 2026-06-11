@@ -14,13 +14,13 @@
 //   - refuse a file with uncommitted changes unless --force;
 //   - preserve the file's EOL.
 
-import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { readFile as fsReadFile, realpath, writeFile as fsWriteFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 import { extractBlocks, hashBlockContent } from "@sivru/search";
 
 import { gitFileDirty } from "../lib/git.js";
-import type { BlockEdit, FeedbackPatch } from "./patch.js";
+import type { BlockEdit, CreateEdit, FeedbackPatch } from "./patch.js";
 
 type ExtractedLike = {
   symbolName?: string;
@@ -52,8 +52,9 @@ export type EditStatus =
   | "ambiguous" // >1 block matches symbol AND hash
   | "dirty" // file has uncommitted changes and no --force
   | "escapes-repo" // sourcePath resolves outside the repo root (rejected)
+  | "already-annotated" // create on a symbol that already has a block
   | "field-absent" // the field line isn't present (adding fields is deferred)
-  | "unsupported-format"; // multi-line value / list form (deferred)
+  | "unsupported-format"; // multi-line value / list form / language (deferred)
 
 export interface EditOutcome {
   targetNodeId: string;
@@ -90,7 +91,12 @@ const stripComment = (l: string): string =>
  *  can never split the single source line. */
 function yamlScalar(v: string): string {
   const hasControl = /[\n\r\t]/.test(v);
-  if (v === "" || hasControl || /^[\s]|[\s]$|[:#]|^["'\[{>|&*!%@`]/.test(v)) {
+  // Quote anything YAML would coerce away from a string: numbers, bool/null
+  // keywords, or the structural / control forms.
+  const looksTyped =
+    /^(true|false|yes|no|on|off|null|~)$/i.test(v) ||
+    /^[-+]?(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(v);
+  if (v === "" || hasControl || looksTyped || /^[\s]|[\s]$|[:#]|^["'\[{>|&*!%@`]/.test(v)) {
     const escaped = v
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')
@@ -135,6 +141,39 @@ function rewriteField(
   return { reason: "field-absent" };
 }
 
+const C_LIKE_EXT = new Set([
+  "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "java", "go", "rs", "c", "cc", "cpp", "h", "hpp",
+]);
+
+/**
+ * Build the lines of a fresh minimal `@sivru` block (role + responsibility) to
+ * insert above a symbol's declaration, matching its indentation and the file's
+ * doc-comment style. v1 supports C-like `/** *​/` languages; Python docstrings
+ * and others are deferred.
+ */
+function buildBlockInsert(
+  sourcePath: string,
+  declLine: number,
+  role: string,
+  responsibility: string,
+  lines: string[],
+): { lines: string[] } | { reason: "unsupported-format"; detail: string } {
+  const ext = sourcePath.split(".").pop()?.toLowerCase() ?? "";
+  if (!C_LIKE_EXT.has(ext)) {
+    return { reason: "unsupported-format", detail: `creating a block is not supported for .${ext} files yet` };
+  }
+  const indent = (lines[declLine - 1] ?? "").match(/^\s*/)?.[0] ?? "";
+  const body = [
+    "@sivru",
+    "schema: 1",
+    `role: ${yamlScalar(role)}`,
+    `responsibility: ${yamlScalar(responsibility)}`,
+    "maturity: experimental",
+    "@end",
+  ];
+  return { lines: [`${indent}/**`, ...body.map((b) => `${indent} * ${b}`), `${indent} */`] };
+}
+
 /**
  * Apply the patch's block edits. Narrative and notes are handled by their own
  * writers (see narrative.ts / notes.ts); this function owns only source-block
@@ -148,85 +187,112 @@ export async function applyBlockEdits(
   const outcomes: EditOutcome[] = [];
   const filesWritten: string[] = [];
 
-  // Group edits by source file.
-  const byFile = new Map<string, BlockEdit[]>();
+  // Group edits AND creates by source file.
+  const editsByFile = new Map<string, BlockEdit[]>();
   for (const e of patch.edits) {
-    (byFile.get(e.sourcePath) ?? byFile.set(e.sourcePath, []).get(e.sourcePath)!).push(e);
+    (editsByFile.get(e.sourcePath) ?? editsByFile.set(e.sourcePath, []).get(e.sourcePath)!).push(e);
+  }
+  const createsByFile = new Map<string, CreateEdit[]>();
+  for (const c of patch.creates ?? []) {
+    (createsByFile.get(c.sourcePath) ?? createsByFile.set(c.sourcePath, []).get(c.sourcePath)!).push(c);
   }
 
   const root = resolve(opts.repoRoot);
-  for (const [sourcePath, fileEdits] of byFile) {
+  const realRoot = await realpath(root).catch(() => root);
+  const refuseEdit = (e: BlockEdit, status: EditStatus, detail: string): void => {
+    outcomes.push({ targetNodeId: e.targetNodeId, sourcePath: e.sourcePath, field: e.edit.field, status, detail });
+  };
+  const refuseCreate = (c: CreateEdit, status: EditStatus, detail: string): void => {
+    outcomes.push({ targetNodeId: c.targetNodeId, sourcePath: c.sourcePath, field: "(create)", status, detail });
+  };
+
+  for (const sourcePath of new Set([...editsByFile.keys(), ...createsByFile.keys()])) {
+    const fileEdits = editsByFile.get(sourcePath) ?? [];
+    const fileCreates = createsByFile.get(sourcePath) ?? [];
     const abs = resolve(root, sourcePath);
-    // The patch is untrusted input: refuse any path that escapes the repo root
-    // (`..` traversal or an absolute path) — never write outside the repo.
-    if (abs !== root && !abs.startsWith(root + sep)) {
-      for (const e of fileEdits) {
-        outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "escapes-repo", detail: "sourcePath resolves outside the repo root" });
-      }
+    // Untrusted input: lexical check (`..` / absolute), then realpath so a
+    // symlink inside the repo pointing out can't smuggle a write past the guard.
+    let real = abs;
+    try {
+      real = await realpath(abs);
+    } catch {
+      // file may not exist yet; lexical containment stands
+    }
+    if (
+      (abs !== root && !abs.startsWith(root + sep)) ||
+      (real !== realRoot && !real.startsWith(realRoot + sep))
+    ) {
+      fileEdits.forEach((e) => refuseEdit(e, "escapes-repo", "sourcePath resolves outside the repo root"));
+      fileCreates.forEach((c) => refuseCreate(c, "escapes-repo", "sourcePath resolves outside the repo root"));
       continue;
     }
     let content: string;
     try {
       content = await deps.readFile(abs);
     } catch {
-      for (const e of fileEdits) {
-        outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "not-found", detail: "file not found" });
-      }
+      fileEdits.forEach((e) => refuseEdit(e, "not-found", "file not found"));
+      fileCreates.forEach((c) => refuseCreate(c, "not-found", "file not found"));
       continue;
     }
     if (opts.force !== true && (await deps.isDirty(abs, root))) {
-      for (const e of fileEdits) {
-        outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "dirty", detail: "uncommitted changes; re-run with --force" });
-      }
+      fileEdits.forEach((e) => refuseEdit(e, "dirty", "uncommitted changes; re-run with --force"));
+      fileCreates.forEach((c) => refuseCreate(c, "dirty", "uncommitted changes; re-run with --force"));
       continue;
     }
 
     const eol = content.includes("\r\n") ? "\r\n" : "\n";
     const lines = content.split(/\r?\n/);
-    const blocks = await deps.extract(abs, content);
-
-    // Resolve the target block per edit (symbolName + hash), batch by block, and
-    // apply bottom-up so a (future, line-count-changing) edit can't shift ranges.
-    type Job = { block: ExtractedLike; edits: BlockEdit[] };
-    const jobs: Job[] = [];
-    const refuse = (e: BlockEdit, status: EditStatus, detail: string): void => {
-      outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status, detail });
-    };
-    for (const e of fileEdits) {
-      const named = blocks.filter((b) => b.symbolName === e.blockSymbolName && b.block !== null);
-      if (named.length === 0) {
-        refuse(e, "not-found", `no @sivru block on "${e.blockSymbolName}"`);
-        continue;
-      }
-      const matched = named.filter((b) => deps.hash(b.block) === e.blockContentHash);
-      if (matched.length === 0) {
-        refuse(e, "stale", "block changed since the explainer was generated");
-        continue;
-      }
-      if (matched.length > 1) {
-        refuse(e, "ambiguous", "more than one identical block with this symbol name");
-        continue;
-      }
-      const block = matched[0]!;
-      const job = jobs.find((j) => j.block === block);
-      if (job) job.edits.push(e);
-      else jobs.push({ block, edits: [e] });
-    }
-
     let mutated = false;
-    for (const job of jobs.sort((a, b) => b.block.range.startLine - a.block.range.startLine)) {
-      for (const e of job.edits) {
-        const res = rewriteField(lines, job.block.range.startLine, job.block.range.endLine, e.edit);
-        if ("reason" in res) {
-          refuse(e, res.reason, res.reason === "field-absent" ? `no "${e.edit.field}:" line in the block (adding fields is not supported yet)` : `"${e.edit.field}" uses a multi-line form (not supported yet)`);
+
+    // CREATES first (bottom-up by declLine so an insert can't shift a lower one).
+    if (fileCreates.length > 0) {
+      const existing = await deps.extract(abs, content);
+      for (const c of [...fileCreates].sort((a, b) => b.declLine - a.declLine)) {
+        if (existing.some((b) => b.symbolName === c.blockSymbolName && b.block !== null)) {
+          refuseCreate(c, "already-annotated", `"${c.blockSymbolName}" already has a block — edit it instead`);
           continue;
         }
-        const prev = lines[res.lineIdx]!;
+        const ins = buildBlockInsert(sourcePath, c.declLine, c.role, c.responsibility, lines);
+        if ("reason" in ins) {
+          refuseCreate(c, ins.reason, ins.detail);
+          continue;
+        }
         if (opts.dryRun === true) {
-          outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "applied", preview: { line: res.lineIdx + 1, before: prev, after: res.next } });
+          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `would insert a block above line ${c.declLine}` });
         } else {
-          lines[res.lineIdx] = res.next;
+          lines.splice(c.declLine - 1, 0, ...ins.lines);
           mutated = true;
+          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `created a block above line ${c.declLine}` });
+        }
+      }
+    }
+
+    // EDITS — re-extract from the (possibly create-mutated) content so block
+    // line ranges are fresh. Apply bottom-up per block; batch per block.
+    if (fileEdits.length > 0) {
+      const blocks = await deps.extract(abs, mutated ? lines.join(eol) : content);
+      type Job = { block: ExtractedLike; edits: BlockEdit[] };
+      const jobs: Job[] = [];
+      for (const e of fileEdits) {
+        const named = blocks.filter((b) => b.symbolName === e.blockSymbolName && b.block !== null);
+        if (named.length === 0) { refuseEdit(e, "not-found", `no @sivru block on "${e.blockSymbolName}"`); continue; }
+        const matched = named.filter((b) => deps.hash(b.block) === e.blockContentHash);
+        if (matched.length === 0) { refuseEdit(e, "stale", "block changed since the explainer was generated"); continue; }
+        if (matched.length > 1) { refuseEdit(e, "ambiguous", "more than one identical block with this symbol name"); continue; }
+        const block = matched[0]!;
+        const job = jobs.find((j) => j.block === block);
+        if (job) job.edits.push(e);
+        else jobs.push({ block, edits: [e] });
+      }
+      for (const job of jobs.sort((a, b) => b.block.range.startLine - a.block.range.startLine)) {
+        for (const e of job.edits) {
+          const res = rewriteField(lines, job.block.range.startLine, job.block.range.endLine, e.edit);
+          if ("reason" in res) {
+            refuseEdit(e, res.reason, res.reason === "field-absent" ? `no "${e.edit.field}:" line in the block (adding fields is not supported yet)` : `"${e.edit.field}" uses a multi-line form (not supported yet)`);
+            continue;
+          }
+          const prev = lines[res.lineIdx]!;
+          if (opts.dryRun !== true) { lines[res.lineIdx] = res.next; mutated = true; }
           outcomes.push({ targetNodeId: e.targetNodeId, sourcePath, field: e.edit.field, status: "applied", preview: { line: res.lineIdx + 1, before: prev, after: res.next } });
         }
       }

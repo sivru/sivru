@@ -23,6 +23,7 @@ export function fixtureModel(over: { narrative?: string } = {}): ExplainerModel 
     children: [],
     derived: derived({ exports: ["helper"], churn: 4 }),
     block: null,
+    declLine: 12,
   };
   const pkg: ExplainerNode = {
     id: "package:packages/a/src",

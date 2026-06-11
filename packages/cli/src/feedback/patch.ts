@@ -33,6 +33,21 @@ export interface BlockEdit {
   edit: FieldOp;
 }
 
+/**
+ * Author a NEW `@sivru` block on an un-annotated symbol — the "add intent"
+ * path. Apply inserts a minimal block (role + responsibility) above the
+ * symbol's declaration; the reader fills the rest later.
+ */
+export interface CreateEdit {
+  targetNodeId: string;
+  sourcePath: string;
+  blockSymbolName: string;
+  /** 1-indexed declaration line to insert the block above. */
+  declLine: number;
+  role: string;
+  responsibility: string;
+}
+
 /** Feedback on the system narrative (no symbol home) → `.sivru/explainer.md`. */
 export interface NarrativeEdit {
   value: string;
@@ -52,6 +67,7 @@ export interface FeedbackPatch {
   /** git HEAD (short) at generation time (apply warns on mismatch). */
   head: string;
   edits: BlockEdit[];
+  creates?: CreateEdit[];
   narrative?: NarrativeEdit[];
   notes?: FeedbackNote[];
 }
@@ -76,6 +92,10 @@ export function parsePatch(raw: string): FeedbackPatch {
     throw new FeedbackPatchError("patch.edits must be an array");
   }
   for (const e of p.edits as unknown[]) validateEdit(e);
+  if (p.creates !== undefined) {
+    if (!Array.isArray(p.creates)) throw new FeedbackPatchError("patch.creates must be an array");
+    for (const c of p.creates as unknown[]) validateCreate(c);
+  }
   if (p.narrative !== undefined) {
     if (!Array.isArray(p.narrative)) throw new FeedbackPatchError("patch.narrative must be an array");
     for (const n of p.narrative as unknown[]) {
@@ -120,6 +140,21 @@ function validateEdit(e: unknown): void {
     }
   } else {
     throw new FeedbackPatchError(`unsupported field: ${String(op.field)}`);
+  }
+}
+
+function validateCreate(c: unknown): void {
+  if (typeof c !== "object" || c === null) {
+    throw new FeedbackPatchError("each create must be an object");
+  }
+  const cr = c as Record<string, unknown>;
+  for (const k of ["targetNodeId", "sourcePath", "blockSymbolName", "role", "responsibility"]) {
+    if (typeof cr[k] !== "string" || (cr[k] as string).length === 0) {
+      throw new FeedbackPatchError(`create.${k} must be a non-empty string`);
+    }
+  }
+  if (typeof cr.declLine !== "number" || !Number.isInteger(cr.declLine) || cr.declLine < 1) {
+    throw new FeedbackPatchError("create.declLine must be a positive integer");
   }
 }
 

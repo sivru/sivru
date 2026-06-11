@@ -153,12 +153,15 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
       )
     : `<details class="narrative"><summary>About this system</summary><div class="md">${mdToHtml(narrative)}</div></details>`;
 
+  // Feedback mode: suggest a system narrative (lands in .sivru/explainer.md).
+  const narrBtn = `<button class="fb-narrative">+ suggest system narrative</button>`;
   return (
     `<h1>${esc(node.name)}</h1>` +
     overview +
     (map ? `<h2>Architecture</h2><div class="diagram-wrap">${map}</div>` : "") +
     `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Symbols</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>` +
-    narrativeBlock
+    narrativeBlock +
+    narrBtn
   );
 }
 
@@ -299,10 +302,18 @@ function addIntentAffordance(node: ExplainerNode): string {
       " */",
     ].join("\n"),
   );
+  // In feedback mode, an un-annotated symbol with a known declaration line can
+  // be authored straight from the explainer (a `create` in the exported patch).
+  const symbol = node.id.split("#").pop() ?? node.name;
+  const createBtn =
+    node.declLine !== undefined
+      ? `<button class="fb-create" data-node-id="${esc(node.id)}" data-path="${esc(node.path)}"` +
+        ` data-symbol="${esc(symbol)}" data-decl="${node.declLine}">+ author @sivru block</button>`
+      : "";
   return (
     `<div class="empty"><div class="empty-head">No @sivru block yet · add intent</div>` +
     `<p class="muted">Document this symbol where the truth lives — paste above its declaration in <code>${esc(node.path)}</code>:</p>` +
-    `<pre class="stub">${stub}</pre></div>`
+    `<pre class="stub">${stub}</pre>${createBtn}</div>`
   );
 }
 

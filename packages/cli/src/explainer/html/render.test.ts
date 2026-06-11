@@ -13,6 +13,12 @@ describe("renderHtml", () => {
     expect(html).toContain('<script type="application/json" id="search-index">');
   });
 
+  it("does not leak the author's absolute repo path (island carries the basename)", () => {
+    const island = JSON.parse(html.match(/id="model-island">([^<]*)</)![1]!.replace(/\\u003c/g, "<"));
+    expect(island.repoPath).toBe("repo"); // basename of the fixture's "/repo"
+    expect(island.repoPath.startsWith("/")).toBe(false);
+  });
+
   it("is offline: no external assets (no fetched src/href, no <link>)", () => {
     expect(html).not.toContain("<link");
     expect(html).not.toContain("<script src=");
@@ -47,6 +53,11 @@ describe("renderHtml", () => {
     expect(html).toMatch(/class="block" data-node-id="[^"]+" data-path="[^"]+" data-symbol="[^"]+" data-hash="[^"]*"/);
     expect(html).toContain('data-editable data-edit-field="responsibility"');
     expect(html).toContain('data-editable data-edit-field="collaborators"');
+  });
+
+  it("offers the create-block + narrative affordances (closing the un-annotated path)", () => {
+    expect(html).toMatch(/class="fb-create"[^>]*data-symbol="helper"[^>]*data-decl="12"/);
+    expect(html).toContain('class="fb-narrative"');
   });
 
   it("renders the sidebar tree to package level", () => {
