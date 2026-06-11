@@ -202,6 +202,172 @@ gives full drill-down without any of the cost.
 - Performance gate: generation completes in under 10 s on a
   2,000-file repo.
 
+## Slice 2 — `--html` UI design (locked in `/plan-design-review`, 2026-06-10)
+
+App-UI posture (calm, dense, utility-first), not a marketing page. Two
+audiences: the engineer onboarding to the codebase, and an agent's human
+operator reviewing structure. Initial design rating 6/10 → 9/10 after these
+decisions.
+
+**Information architecture — locked.** Persistent left sidebar (collapsible
+System → Module → Package tree + a search box pinned at top) + main content
+pane with a breadcrumb trail. Hash-routed: `#/`, `#/module/<id>`,
+`#/package/<id>`, `#/symbol/<id>`. Every route is a real `<a href="#/…">`
+(back-button + keyboard work for free). ASCII wireframes per level:
+
+```
+SYSTEM (#/)                              MODULE (#/module/packages/cli)
+┌──────────┬──────────────────────┐   ┌──────────┬──────────────────────┐
+│ ⌕ search │ sivru-monorepo       │   │ ⌕ search │ system › @sivru/cli   │
+│ ▾ system │ <narrative prose>    │   │  ▾ cli ◄ │ role·churn 86·5 pkgs │
+│  ▸ cli   │ ┌ module dep graph ┐ │   │  commands│ deps→ observe,search │
+│  ▸ search│ │ obs-ui ┐         │ │   │  explainer ┌ churn bar ───────┐ │
+│  ▸ …     │ │ cli ───┼► search │ │   │  lib     │ │ commands ████ 34 │ │
+│          │ └─────────────────┘ │   │          │ │ lib      ███ 29  │ │
+│          │ module table·churn  │   │          │ └─────────────────┘ │
+└──────────┴──────────────────────┘   └──────────┴──────────────────────┘
+PACKAGE (#/package/…/explainer)        SYMBOL (#/symbol/…#buildExplainerModel)
+┌──────────┬──────────────────────┐   ┌──────────┬──────────────────────┐
+│  ▾explain│ … › cli › explainer  │   │          │ … › explainer › buil…│
+│  buildE◄ │ 15 symbols·churn 12  │   │          │ DERIVED exports·imp· │
+│  project │ ┌ symbol list ──────┐│   │          │   churn·collaborators│
+│  levels  │ │ buildExplainer fn ││   │          │ ┌ @sivru block ────┐ │
+│  …       │ │ projectModel   fn ││   │          │ │ role·responsibil.│ │
+│          │ └──────────────────┘│   │          │ └──────────────────┘ │
+│          │                     │   │          │ ┌ collaborator graph┐ │
+└──────────┴──────────────────────┘   └──────────┴──────────────────────┘
+```
+
+**System landing hierarchy — locked.** Narrative prose first (answers the
+onboarding engineer's "what is this?"), then the module dependency graph as
+the visual anchor, then a dense module **table** (name · churn · deps). The
+agent-operator still gets the map + table one scroll down.
+
+**The 3 inline-SVG diagrams — locked.** The doc's earlier "request/flow
+sequence" is **dropped**: the model is structural (no call-order/runtime
+data), so a sequence diagram would be fabricated — it would violate
+"projection, not source." The three, all model-derived and hand-rolled (no
+library):
+
+1. **Module dependency graph** — deterministic **layered** (Sugiyama-lite)
+   or columnar layout, NOT force-directed (force needs iterative simulation
+   and is non-deterministic; a regenerated artifact must be reproducible).
+   Module counts are small (sivru: 5 nodes / 5 edges). Nodes link to module
+   pages.
+2. **Churn/size overview** — a sorted horizontal **bar** (not a treemap):
+   trivial to hand-roll, calmer, clearer for "which packages change most,"
+   and not slop-prone.
+3. **Per-symbol collaborator mini-graph** — a deterministic radial/star
+   ego-graph (the symbol centred, collaborators around).
+
+**Empty states are features — locked.** Most symbol pages have no `@sivru`
+block (~9% annotated), so the un-annotated page is the explainer's biggest
+teaching surface. Each empty is a gentle prompt to author, not "N/A":
+
+- Symbol without a block → derived facts render normally, then a quiet
+  inline affordance: *"No `@sivru` block yet · add intent"* with the exact
+  annotation stub to paste. (The architect-thinking nudge; loops into the
+  Slice 3 feedback flow.)
+- Stub narrative (no `.sivru/explainer.md` / `ARCHITECTURE.md`) → a one-line
+  *"Add a system narrative in `.sivru/explainer.md`"* card on the System page.
+- Module/package with no deps → *"No internal dependencies"* (a calm fact).
+- Zero search results → *"No symbol/module matches — try a package name."*
+
+**Theme — locked (mirror observe-ui as CSS variables in the inline
+`<style>`; no Tailwind in a standalone file):**
+`--bg #0f1115 · --panel #161a21 · --border #262b35 · --text #d6d8dd ·
+--mute #7a8390 · --accent #d4a056 (amber, used sparingly — one accent) ·
+--warn #fbbf24 · --error #f87171`. Prose in a system sans stack; symbols and
+code in monospace; an optional webfont may preload with a system-font
+fallback (keeps the file offline). One strong anchor per screen; module list
+is a dense **table**, never a card mosaic.
+
+**Accessibility & responsive — locked.** WCAG-AA contrast (text on bg ≈13:1,
+mute ≈5.2:1, amber-on-bg ≈8:1 — all pass). `focus-visible` outlines on every
+interactive element; `/` focuses search; the tree is arrow-key navigable.
+Desktop-first; under ~768px the sidebar collapses to a drawer (hamburger),
+44px touch targets.
+
+**Code links — locked.** Symbol pages deep-link to source via
+`vscode://file/<abspath>:<line>` by default, configurable to a GitHub blob
+URL or `none` (see Customization shape).
+
+**NOT in Slice 2 scope (deferred):** the feedback annotate→patch→apply UI
+(Slice 3); a search index beyond client-side name fuzzy-match; collapsing/
+virtualizing the tree for 10k-symbol repos (revisit if the file gets large —
+the load-bearing cap already bounds it).
+
+## Slice 2 — build architecture (locked in `/plan-eng-review`, 2026-06-10)
+
+**Render model — SSR (locked).** The generator (Node/TS) pre-renders every
+route's HTML and every SVG at generation time and bakes them into the single
+file as hidden sections. The client is a ~30-line vanilla nav shim (a
+`hashchange` listener that shows the matching pre-rendered section), authored
+as a template-literal string — **no bundler, no browser-side layout code, no
+library**. All hard logic lives in normal TS modules (typechecked,
+unit-tested, DRY with the Slice-1 model types, deterministic by
+construction). This is the proven single-file-report pattern (c8/istanbul,
+vitest UI). Rejected: a client-side SPA (pushes layout/escape/render into
+untestable vanilla JS or needs a bundler) and a hybrid (pays the SPA
+testability cost for the symbol level only).
+
+```
+projectModel(repo)              ← Slice 1 (the data)
+        │  ExplainerModel
+        ▼
+renderHtml(model): string       ← Slice 2 entry (html/render.ts)
+   ├─ views.ts     node → section HTML (system/module/package/symbol)
+   ├─ svg.ts       layeredDag · barLayout · radial   (coords + viewBox)
+   │               + renderSvg(coords) → <svg> string  (split for testing)
+   ├─ escape.ts    escapeHtml(text) · jsonIsland(model)  (< trick)
+   ├─ routes.ts    buildRouteMap(model) · selfVerify(routeMap)
+   ├─ search.ts    prebuilt name index + the client filter
+   └─ client shim  template-literal vanilla JS string (hashchange → show section)
+        │  one <!DOCTYPE html>, JSON island inlined+escaped, zero external assets
+        ▼
+   selfVerify ASSERTS (fail loud) ──► write ./sivru-explainer.html (--out to override)
+```
+
+**Module structure — locked (~7 files under `packages/cli/src/explainer/html/`):**
+`render.ts`, `views.ts`, `svg.ts` (the 3 layouts grouped), `escape.ts`,
+`routes.ts` (route map + self-verify), `search.ts`, and the client shim as a
+string constant. Functional, no classes. Reuses `ExplainerModel` /
+`ExplainerNode` from Slice 1 (same package).
+
+**SVG — locked.** Each diagram splits **layout** (pure fn → coordinates +
+viewBox) from **render** (coords → SVG string), so geometry is unit-testable
+without parsing strings. The module dep graph uses a deterministic layered
+(longest-path layering + crossing-reduced ordering) layout, NOT
+force-directed. All three are deterministic: same model → identical SVG.
+
+**Escaping / XSS — locked.** `escapeHtml` for all text + attribute content;
+the JSON island via `JSON.stringify(model).replace(/</g, "\\u003c")` so a
+repo string containing `</script>` (a symbol name, a file path, `@sivru`
+block prose) cannot break out of the script tag or inject. Reuse an existing
+repo escaper if one exists rather than adding a duplicate.
+
+**Self-verify — locked, runs twice.** (1) At generation time the generator
+walks the route map, collects every emitted `#/…` link, and asserts zero
+broken internal links / zero not-found views — **fail loud, never write a
+broken file**. (2) A vitest test over a fixture model asserts the same and
+that a deliberately-broken link is caught.
+
+**Output — locked.** `--html` writes `./sivru-explainer.html` by default
+(`.gitignore`d), `--out <path>` to override, and prints the path. Never
+stdout (the file is multi-hundred-KB to low-MB).
+
+**Size / perf — locked.** Generation is one-shot. Pre-render-all is bounded
+by the load-bearing-symbol cap; the inlined model JSON is ~287 KB / ~36 KB
+gzipped on the sivru repo (412 symbols). A generation-time **size warning**
+fires if output exceeds a threshold; lazy symbol-detail client rendering is a
+deferred optimization, taken only if field data shows oversized files.
+
+**Test plan — locked.** SVG layout (bounds + determinism + degenerate
+inputs), views (each empty-state affordance), escaping (the `</script>`
+case), route map + self-verify (catches a broken link), search (fuzzy +
+zero-results), `renderHtml` (offline: no external `src`/`href`), and a
+real-`sivru`-model integration test whose self-verify passes.
+
 ## Customization shape
 
 Per the CONTRIBUTING.md three-layer rule:

@@ -7,6 +7,50 @@ Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-06-10
+
+**Codebase explainer — `sivru explain --html` (Slice 2: the UI).** Renders the
+Slice-1 model into a single self-contained HTML file you can open offline,
+email, or commit to a wiki — hash-routed drill-down across System → Module →
+Package → Symbol, three inline-SVG diagrams, and client-side search, with
+**zero external assets**. Implements [DESIGN-0018](docs/design/0018-codebase-explainer.md),
+Slice 2 (design + eng reviewed).
+
+### Added
+
+- **`sivru explain --html [--out <path>]`** — writes `./sivru-explainer.html`
+  (gitignored) by default. The whole UI is **pre-rendered in TypeScript** (SSR);
+  the browser ships a ~50-line vanilla nav shim (no bundler, no library, no
+  framework). All layout, escaping, and routing logic is typechecked and
+  unit-tested.
+- **Architecture-first System page**: a **layered system map** — modules placed
+  in dependency layers (foundation on the left, consumers to the right), boxes
+  sized by symbol count, with the foundation module named in a one-line
+  overview. The repo narrative renders as **Markdown** in a collapsed
+  "About this system" disclosure below the structure, never a raw-text wall.
+- **Three inline-SVG diagrams**, all hand-rolled and deterministic (same model →
+  identical SVG): the layered architecture map (boxes link to module pages), a
+  sorted **churn bar** per module, and a per-symbol radial **collaborator
+  graph** whose radius grows with neighbour count and whose labels are
+  angle-anchored so they don't collide.
+- **Empty states as authoring prompts** — a symbol with no `@sivru` block shows
+  its derived facts plus a paste-able annotation stub ("add intent"); a repo
+  with no narrative gets an "add `.sivru/explainer.md`" card. On the sivru repo
+  that surfaces 400 gentle nudges toward authored context.
+- **Post-build self-verify** (`SIVRU-E2011`): the generator walks every route,
+  asserts zero dead internal links and zero missing views, and **refuses to
+  write a broken file**. Also runs as a vitest test.
+- **XSS-safe**: every repo-derived string is HTML-escaped; the inlined model
+  JSON island escapes `<` so a symbol or block-prose containing `</script>`
+  cannot break out.
+- Dark theme mirroring the `observe-ui` tokens; keyboard-navigable
+  (`/` focuses search); mobile sidebar drawer.
+
+### Deferred (Slice 3, tracked in DESIGN-0018)
+
+- The feedback loop — annotate a section in place → export a patch → apply it to
+  the `@sivru` block / `.sivru/explainer.md` the section was projected from.
+
 ## [0.11.0] — 2026-06-10
 
 **Codebase explainer — `sivru explain --project` (Slice 1: the model).**

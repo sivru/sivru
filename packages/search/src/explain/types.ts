@@ -18,7 +18,8 @@ export type ExplainErrorCode =
   | "SIVRU-E2007" // diff parse failure
   | "SIVRU-E2008" // invalid mcpCap config value
   | "SIVRU-E2009" // file not in repo (relative path resolves outside)
-  | "SIVRU-E2010"; // index build failure
+  | "SIVRU-E2010" // index build failure
+  | "SIVRU-E2011"; // explainer --html self-verify failure (dead link / missing view)
 
 export class SivruExplainError extends Error {
   readonly code: ExplainErrorCode;

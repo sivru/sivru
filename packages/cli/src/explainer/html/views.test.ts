@@ -1,0 +1,104 @@
+import { describe, expect, it } from "vitest";
+
+import { fixtureModel } from "./fixture.js";
+import { renderSections } from "./views.js";
+
+const sectionFor = (id: string, narrative?: string): string =>
+  renderSections(fixtureModel(narrative !== undefined ? { narrative } : {})).find(
+    (s) => s.id === id,
+  )!.html;
+
+describe("renderSections", () => {
+  it("emits exactly one section per model node", () => {
+    expect(renderSections(fixtureModel())).toHaveLength(6);
+  });
+
+  it("only the system section is visible by default", () => {
+    const sections = renderSections(fixtureModel());
+    const system = sections.find((s) => s.id === "system")!.html;
+    const other = sections.find((s) => s.id !== "system")!.html;
+    expect(system).not.toContain("hidden");
+    expect(other).toContain('class="view" data-route');
+    expect(other).toContain("hidden");
+  });
+});
+
+describe("symbol view", () => {
+  it("renders the @sivru block when present", () => {
+    const html = sectionFor("symbol:packages/a/src/x.ts#doThing");
+    expect(html).toContain("@sivru block");
+    expect(html).toContain("worker"); // role
+    expect(html).toContain("do the thing"); // responsibility
+  });
+
+  it("shows an add-intent affordance with a paste-able stub when no block", () => {
+    const html = sectionFor("symbol:packages/a/src/x.ts#helper");
+    expect(html).toContain("No @sivru block yet");
+    expect(html).toContain("role: helper");
+    expect(html).toContain("@end");
+  });
+
+  it("renders a collaborator radial only when collaborators exist", () => {
+    expect(sectionFor("symbol:packages/a/src/x.ts#doThing")).toContain("Collaborators");
+    expect(sectionFor("symbol:packages/a/src/x.ts#helper")).not.toContain("class=\"diagram\"");
+  });
+});
+
+describe("module view empty states", () => {
+  it("says 'no internal dependencies' for a module with none", () => {
+    expect(sectionFor("module:packages/b")).toContain("no internal dependencies");
+  });
+
+  it("links out-deps and computes in-deps (reverse edges)", () => {
+    const a = sectionFor("module:packages/a");
+    expect(a).toContain("Depends on:");
+    expect(a).toContain("@scope/b");
+    const b = sectionFor("module:packages/b");
+    expect(b).toContain("Depended on by:");
+    expect(b).toContain("@scope/a");
+  });
+});
+
+describe("system view", () => {
+  it("leads with structure: overview + architecture map before the narrative", () => {
+    const html = sectionFor("system");
+    expect(html).toContain('class="overview"');
+    expect(html).toContain("2 modules");
+    expect(html).toContain("<h2>Architecture</h2>");
+    expect(html).toContain('class="diagram"'); // the layered system map
+    // The architecture map appears BEFORE the narrative disclosure.
+    expect(html.indexOf("<h2>Architecture</h2>")).toBeLessThan(
+      html.indexOf("About this system"),
+    );
+  });
+
+  it("renders the narrative as markdown inside a collapsed <details>, not raw", () => {
+    const html = sectionFor("system", "# Heading\n\nA small system that does **things**.");
+    expect(html).toContain("<details");
+    expect(html).toContain("About this system");
+    expect(html).toContain("<h3>Heading</h3>"); // rendered, not raw "#"
+    expect(html).toContain("<strong>things</strong>");
+    expect(html).not.toContain("# Heading"); // no raw markdown leaking
+  });
+
+  it("shows an add-narrative card when the narrative is the stub", () => {
+    const html = sectionFor("system", "No system narrative yet. Add one ...");
+    expect(html).toContain("No system narrative yet");
+    expect(html).toContain(".sivru/explainer.md");
+  });
+
+  it("names the foundation module(s) in the overview", () => {
+    // @scope/b has no deps → it's the foundation.
+    expect(sectionFor("system")).toMatch(/foundation:.*@scope\/b/);
+  });
+});
+
+describe("escaping", () => {
+  it("escapes a hostile symbol name in the rendered section", () => {
+    const model = fixtureModel();
+    model.root.children[0]!.name = "<script>x</script>";
+    const html = renderSections(model).find((s) => s.id === "module:packages/a")!.html;
+    expect(html).not.toContain("<script>x");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});
