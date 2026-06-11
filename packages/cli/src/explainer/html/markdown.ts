@@ -7,18 +7,30 @@
 // paragraphs — and HTML-escapes everything first so it is injection-safe. Not a
 // full CommonMark implementation; the explainer narrative does not need one.
 
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) =>
-    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;",
-  );
+import { escapeHtml } from "./escape.js";
+
+/**
+ * Allow only safe link targets. A `javascript:` / `data:` / `vbscript:` URL in
+ * a repo doc would otherwise become clickable script in the generated HTML
+ * (the explainer may be run on untrusted code). Absolute links must be
+ * http(s)/mailto; anything with no scheme is relative and safe. Returns null
+ * to reject — the link then renders as plain text.
+ */
+function safeHref(url: string): string | null {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url);
+  if (scheme) return /^(https?|mailto)$/i.test(scheme[1]!) ? url : null;
+  return url; // no scheme → relative → safe
 }
 
 /** Inline formatting on an already-trusted line: escape, then code/bold/links. */
 function inline(s: string): string {
-  return esc(s)
+  return escapeHtml(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text: string, url: string) => {
+      const href = safeHref(url);
+      return href !== null ? `<a href="${href}" rel="noopener">${text}</a>` : text;
+    });
 }
 
 export function mdToHtml(md: string): string {
@@ -44,7 +56,7 @@ export function mdToHtml(md: string): string {
   for (const line of lines) {
     if (line.trim().startsWith("```")) {
       if (fence !== null) {
-        out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
+        out.push(`<pre>${escapeHtml(fence.join("\n"))}</pre>`);
         fence = null;
       } else {
         flushPara();
@@ -85,7 +97,7 @@ export function mdToHtml(md: string): string {
     }
     para.push(line.trim());
   }
-  if (fence !== null) out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
+  if (fence !== null) out.push(`<pre>${escapeHtml(fence.join("\n"))}</pre>`);
   flushPara();
   flushList();
   return out.join("\n");

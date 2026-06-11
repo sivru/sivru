@@ -33,6 +33,24 @@ describe("mdToHtml", () => {
     expect(out).toContain("&lt;script&gt;");
   });
 
+  it("rejects javascript:/data: link schemes (renders as plain text, no href)", () => {
+    const js = mdToHtml("[click](javascript:alert(1))");
+    expect(js).not.toContain("href");
+    expect(js).not.toContain("javascript:");
+    expect(js).toContain("click");
+
+    const data = mdToHtml("[x](data:text/html,abc)");
+    expect(data).not.toContain("href");
+    expect(data).toContain(">x"); // text preserved
+  });
+
+  it("keeps http(s), mailto, and relative links", () => {
+    expect(mdToHtml("[a](https://x.test)")).toContain('href="https://x.test"');
+    expect(mdToHtml("[m](mailto:a@x.test)")).toContain('href="mailto:a@x.test"');
+    expect(mdToHtml("[r](./docs.md)")).toContain('href="./docs.md"');
+    expect(mdToHtml("[s](#section)")).toContain('href="#section"');
+  });
+
   it("does not treat fenced content as markdown", () => {
     const out = mdToHtml("```\n# not a heading\n- not a list\n```");
     expect(out).toContain("# not a heading");

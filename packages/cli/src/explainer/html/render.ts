@@ -147,7 +147,7 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .diagram a:hover .map-box{stroke:var(--accent)}
 .diagram .map-name{fill:var(--text);font-size:13px;font-weight:600;text-anchor:middle}
 .diagram .map-sub{fill:var(--mute);font-size:11px;text-anchor:middle}
-.diagram .edge{stroke:var(--mute);stroke-width:1.2}
+.diagram .edge{stroke:var(--mute);stroke-width:1.2;fill:none}
 .diagram .arrow-head{fill:var(--mute)}
 .diagram .bar{fill:var(--accent)}
 .diagram .bar-label{fill:var(--text);font-size:12px;text-anchor:end;dominant-baseline:middle}

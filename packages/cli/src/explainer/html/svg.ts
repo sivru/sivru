@@ -143,7 +143,7 @@ export function systemMapLayout(
   return {
     boxes,
     edges: edges.map((e) => ({ ...e })),
-    width: cols.length === 0 ? MAP_MIN_W + PAD * 2 : x - MAP_COL_GAP + PAD,
+    width: x - MAP_COL_GAP + PAD,
     height: maxColH + PAD * 2,
   };
 }
@@ -156,14 +156,23 @@ export function renderSystemMap(
   const layout = systemMapLayout(nodes, edges);
   const byId = new Map(layout.boxes.map((b) => [b.id, b]));
   const parts: string[] = [];
-  // Edges: dependent's left edge → dependency's right edge (arrow into the dep).
+  // Edges: a smooth connector from the dependent's left edge into the
+  // dependency's right edge (arrow points at the dependency). Boxes are drawn
+  // after, with an opaque fill, so a skip-layer edge passes cleanly BEHIND any
+  // intermediate box rather than cutting a visible line through it.
   for (const e of layout.edges) {
     const a = byId.get(e.from);
     const b = byId.get(e.to);
     if (a === undefined || b === undefined) continue;
+    const x1 = a.x;
+    const y1 = a.y + a.h / 2;
+    const x2 = b.x + b.w;
+    const y2 = b.y + b.h / 2;
+    const mx = ((x1 + x2) / 2).toFixed(1);
     parts.push(
-      `<line class="edge" x1="${a.x.toFixed(1)}" y1="${(a.y + a.h / 2).toFixed(1)}" ` +
-        `x2="${(b.x + b.w).toFixed(1)}" y2="${(b.y + b.h / 2).toFixed(1)}" marker-end="url(#arrow)" />`,
+      `<path class="edge" d="M${x1.toFixed(1)} ${y1.toFixed(1)} ` +
+        `C ${mx} ${y1.toFixed(1)} ${mx} ${y2.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}" ` +
+        `marker-end="url(#arrow)" />`,
     );
   }
   for (const b of layout.boxes) {
