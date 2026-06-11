@@ -14,6 +14,7 @@ export function fixtureModel(over: { narrative?: string } = {}): ExplainerModel 
     children: [],
     derived: derived({ exports: ["doThing"], churn: 4, collaborators: ["helper", "parse"] }),
     block: { role: "worker", responsibility: "do the thing", maturity: "stable", collaborators: ["helper"] } as ExplainerNode["block"],
+    blockHash: "h1deadbeef",
   };
   const symNoBlock: ExplainerNode = {
     id: "symbol:packages/a/src/x.ts#helper",

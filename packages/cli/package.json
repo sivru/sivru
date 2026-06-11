@@ -33,5 +33,8 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sivru/observe": "workspace:*",
     "@sivru/search": "workspace:*"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.10.2"
   }
 }
