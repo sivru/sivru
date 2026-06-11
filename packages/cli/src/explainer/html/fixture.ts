@@ -55,6 +55,7 @@ export function fixtureModel(over: { narrative?: string } = {}): ExplainerModel 
     schema: 1,
     repoPath: "/repo",
     stateId: "state-1",
+    head: "test",
     root: {
       id: "system",
       level: "system",

@@ -227,7 +227,15 @@ function renderSymbol(node: ExplainerNode): string {
     `<dt>Collaborators</dt><dd>${d.collaborators.map((c) => `<code>${esc(c)}</code>`).join(" ") || "—"}</dd>` +
     `</dl>`;
 
-  const block = node.block !== null ? renderBlock(node.block) : addIntentAffordance(node);
+  const block =
+    node.block !== null
+      ? renderBlock(node.block, {
+          nodeId: node.id,
+          path: node.path,
+          symbol: node.id.split("#").pop() ?? node.name,
+          hash: node.blockHash ?? "",
+        })
+      : addIntentAffordance(node);
 
   const radial = d.collaborators.length
     ? `<h2>Collaborators</h2><div class="diagram-wrap">${renderRadial(node.name, d.collaborators)}</div>`
@@ -236,27 +244,44 @@ function renderSymbol(node: ExplainerNode): string {
   return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial;
 }
 
-function renderBlock(block: NonNullable<ExplainerNode["block"]>): string {
+interface BlockMeta {
+  nodeId: string;
+  path: string;
+  symbol: string;
+  hash: string;
+}
+
+function renderBlock(
+  block: NonNullable<ExplainerNode["block"]>,
+  meta: BlockMeta,
+): string {
   const b = block as Record<string, unknown>;
-  const line = (key: string, val: unknown): string =>
+  // `data-editable` marks the fields the feedback mode (Slice 3) can edit:
+  // scalars (set the value) and collaborators (set the array). Multi-line
+  // invariants/decisions are not editable in v1 (the apply engine defers them).
+  const ed = (key: string): string => ` data-editable data-edit-field="${key}"`;
+  const scalar = (key: string, val: unknown, editable: boolean): string =>
     typeof val === "string" && val.length > 0
-      ? `<dt>${esc(key)}</dt><dd>${esc(val)}</dd>`
+      ? `<dt>${esc(key)}</dt><dd${editable ? ed(key) : ""}>${esc(val)}</dd>`
       : "";
-  const list = (key: string, val: unknown): string => {
+  const list = (key: string, val: unknown, editable: boolean): string => {
     if (!Array.isArray(val) || val.length === 0) return "";
     const items = val
       .map((v) => `<li>${esc(typeof v === "string" ? v : JSON.stringify(v))}</li>`)
       .join("");
-    return `<dt>${esc(key)}</dt><dd><ul>${items}</ul></dd>`;
+    return `<dt>${esc(key)}</dt><dd${editable ? ed(key) : ""}><ul>${items}</ul></dd>`;
   };
+  const attrs =
+    ` data-node-id="${esc(meta.nodeId)}" data-path="${esc(meta.path)}"` +
+    ` data-symbol="${esc(meta.symbol)}" data-hash="${esc(meta.hash)}"`;
   return (
-    `<div class="block"><div class="block-head">@sivru block</div><dl>` +
-    line("role", b.role) +
-    line("responsibility", b.responsibility) +
-    line("maturity", b.maturity) +
-    list("invariants", b.invariants) +
-    list("decisions", b.decisions) +
-    list("collaborators", b.collaborators) +
+    `<div class="block"${attrs}><div class="block-head">@sivru block</div><dl>` +
+    scalar("role", b.role, true) +
+    scalar("responsibility", b.responsibility, true) +
+    scalar("maturity", b.maturity, true) +
+    list("invariants", b.invariants, false) +
+    list("decisions", b.decisions, false) +
+    list("collaborators", b.collaborators, true) +
     `</dl></div>`
   );
 }

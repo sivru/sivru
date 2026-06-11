@@ -41,6 +41,14 @@ describe("renderHtml", () => {
     expect(() => new Function(CLIENT_JS)).not.toThrow();
   });
 
+  it("ships the Slice 3 feedback scaffolding (toggle, export, editable fields)", () => {
+    expect(html).toContain('id="fb-mode"');
+    expect(html).toContain('id="fb-export"');
+    expect(html).toMatch(/class="block" data-node-id="[^"]+" data-path="[^"]+" data-symbol="[^"]+" data-hash="[^"]*"/);
+    expect(html).toContain('data-editable data-edit-field="responsibility"');
+    expect(html).toContain('data-editable data-edit-field="collaborators"');
+  });
+
   it("renders the sidebar tree to package level", () => {
     expect(html).toContain('class="tree"');
     expect(html).toContain("@scope/a"); // module

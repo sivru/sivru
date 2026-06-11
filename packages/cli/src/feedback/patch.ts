@@ -1,0 +1,116 @@
+// The feedback patch — the contract between the explainer's in-browser annotate
+// mode (export) and `sivru feedback apply` (DESIGN-0018 Slice 3).
+//
+// Structured field edits ONLY: every change names the exact block field and the
+// new value, so apply is deterministic (no LLM, per DESIGN-0022). Freeform
+// notes are recorded to `.sivru/feedback-notes.md`, never auto-written to
+// source. Each edit carries the block's content hash at export time so apply
+// can refuse a stale edit instead of corrupting a changed block.
+//
+// v1 field ops are all SINGLE-LINE value replacements (scalar set + the inline
+// collaborators array), so applying one never shifts another block's line
+// range. Editing multi-line invariants/decisions and list add/remove are
+// deferred (they change line counts and want a structural splice).
+
+/** A single-line, value-replacing edit to one @sivru block field. */
+export type FieldOp =
+  | { field: "role" | "responsibility" | "maturity"; op: "set"; value: string }
+  | { field: "collaborators"; op: "set"; value: string[] };
+
+/** The set of fields the v1 annotate UI may edit and apply can write. */
+export const EDITABLE_FIELDS = ["role", "responsibility", "maturity", "collaborators"] as const;
+
+export interface BlockEdit {
+  /** Explainer node id the section was projected from (traceability only). */
+  targetNodeId: string;
+  /** Repo-relative POSIX path of the source file holding the block. */
+  sourcePath: string;
+  /** Symbol the block annotates; the module-block sentinel for top-of-file blocks. */
+  blockSymbolName: string;
+  /** `hashBlockContent` of the block at export — the staleness gate. */
+  blockContentHash: string;
+  /** The structured change. */
+  edit: FieldOp;
+}
+
+/** Feedback on the system narrative (no symbol home) → `.sivru/explainer.md`. */
+export interface NarrativeEdit {
+  value: string;
+}
+
+/** Freeform feedback — recorded, never applied to source. */
+export interface FeedbackNote {
+  targetNodeId: string;
+  sourcePath?: string;
+  note: string;
+}
+
+export interface FeedbackPatch {
+  schema: 1;
+  /** Absolute repo root the patch was generated against (apply warns on mismatch). */
+  repoRoot: string;
+  /** git HEAD (short) at generation time (apply warns on mismatch). */
+  head: string;
+  edits: BlockEdit[];
+  narrative?: NarrativeEdit[];
+  notes?: FeedbackNote[];
+}
+
+/** Parse + validate an exported patch. Throws a coded error on a bad shape. */
+export function parsePatch(raw: string): FeedbackPatch {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new FeedbackPatchError(`patch is not valid JSON: ${msg}`);
+  }
+  if (typeof value !== "object" || value === null) {
+    throw new FeedbackPatchError("patch must be a JSON object");
+  }
+  const p = value as Record<string, unknown>;
+  if (p.schema !== 1) {
+    throw new FeedbackPatchError(`unsupported patch schema: ${String(p.schema)} (expected 1)`);
+  }
+  if (!Array.isArray(p.edits)) {
+    throw new FeedbackPatchError("patch.edits must be an array");
+  }
+  for (const e of p.edits as unknown[]) validateEdit(e);
+  return value as FeedbackPatch;
+}
+
+function validateEdit(e: unknown): void {
+  if (typeof e !== "object" || e === null) {
+    throw new FeedbackPatchError("each edit must be an object");
+  }
+  const edit = e as Record<string, unknown>;
+  for (const k of ["targetNodeId", "sourcePath", "blockSymbolName", "blockContentHash"]) {
+    if (typeof edit[k] !== "string" || (edit[k] as string).length === 0) {
+      throw new FeedbackPatchError(`edit.${k} must be a non-empty string`);
+    }
+  }
+  const op = edit.edit as Record<string, unknown> | undefined;
+  if (op === undefined || op.op !== "set") {
+    throw new FeedbackPatchError("edit.edit.op must be \"set\"");
+  }
+  if (op.field === "collaborators") {
+    if (!Array.isArray(op.value) || !op.value.every((v) => typeof v === "string")) {
+      throw new FeedbackPatchError("collaborators value must be a string[]");
+    }
+  } else if (op.field === "role" || op.field === "responsibility" || op.field === "maturity") {
+    if (typeof op.value !== "string") {
+      throw new FeedbackPatchError(`${op.field} value must be a string`);
+    }
+  } else {
+    throw new FeedbackPatchError(`unsupported field: ${String(op.field)}`);
+  }
+}
+
+/** SIVRU-E2012 — malformed / unsupported feedback patch. */
+export class FeedbackPatchError extends Error {
+  readonly code = "SIVRU-E2012";
+  constructor(message: string) {
+    super(`SIVRU-E2012: ${message}`);
+    this.name = "FeedbackPatchError";
+  }
+}

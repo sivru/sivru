@@ -20,6 +20,7 @@ function model(over: Partial<ExplainerModel> = {}): ExplainerModel {
     schema: 1,
     repoPath: "/repo",
     stateId: "state-abc",
+    head: "test",
     root: {
       id: "system",
       level: "system",

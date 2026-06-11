@@ -5,7 +5,44 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: pre-1.0 semver. Any breaking change in 0.x.y bumps `x`. Patches `y` are bug-fix only.
 Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
-## [Unreleased]
+## [0.13.0] — 2026-06-11
+
+**Codebase explainer — the feedback loop (Slice 3: closing the loop).** The
+explainer stops being read-only. A reader corrects authored intent right in the
+HTML, exports a structured patch, and `sivru feedback apply` writes it back to
+the `@sivru` block in source — so the correction lands where the truth lives and
+the next `sivru explain` reflects it everywhere. Completes
+[DESIGN-0018](docs/design/0018-codebase-explainer.md). Deterministic, no LLM
+(per [DESIGN-0022](docs/design/0022-explainer-reasoning-surface.md)).
+
+### Added
+
+- **Feedback mode in the HTML explainer** — toggle it on, click a block field
+  (role / responsibility / maturity / collaborators), edit it; annotations
+  accumulate in `localStorage` and **Export** downloads a `patch.json` (stamped
+  with the repo root + git HEAD; each edit carries the block's content hash).
+- **`sivru feedback apply <patch.json>`** — a distinct subcommand (not a flag on
+  read-only `explain`). It edits the targeted field's line **in place**,
+  preserving the comment prefix and every other byte (no whole-block re-emit, no
+  canonicalization, no lost formatting). `--dry-run` shows the per-block diff;
+  `--force` overrides the uncommitted-changes guard.
+- **Safety throughout** (`SIVRU-E2012` for a bad patch): each edit is gated by
+  the block's content hash and located by symbol name — a changed block is
+  **refused, never corrupted**; a missing symbol/file is a **reported failure,
+  never a silent drop**; edits batch per block and apply bottom-up so line
+  ranges never shift; EOL is preserved; a nonzero exit if any edit is refused
+  (CI-gateable).
+- **Narrative feedback** → `.sivru/explainer.md` (the source the projection
+  prefers); **freeform notes** → `.sivru/feedback-notes.md` (recorded for a
+  human, never auto-applied).
+- The `ExplainerModel` now carries a per-node `blockHash` and a top-level `head`
+  (the patch stamp).
+
+### Deferred (DESIGN-0018 follow-ups)
+
+- Editing multi-line invariants/decisions and list add/remove (line-count-
+  changing edits); adding a field that isn't present yet. The v1 ops are all
+  single-line replacements, which is why a patch can never shift unrelated lines.
 
 ## [0.12.0] — 2026-06-10
 

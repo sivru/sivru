@@ -11,6 +11,7 @@ import {
   runConfig,
   runDoctor,
   runExplain,
+  runFeedback,
   runFromGit,
   runHelp,
   runIndex,
@@ -73,6 +74,9 @@ async function main(): Promise<number> {
 
     case "explain":
       return runExplain(argv.slice(1));
+
+    case "feedback":
+      return runFeedback(argv.slice(1));
 
     case "block":
       return runBlock(argv.slice(1));
