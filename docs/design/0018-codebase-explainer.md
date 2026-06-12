@@ -368,6 +368,87 @@ case), route map + self-verify (catches a broken link), search (fuzzy +
 zero-results), `renderHtml` (offline: no external `src`/`href`), and a
 real-`sivru`-model integration test whose self-verify passes.
 
+## Slice 3 — feedback loop build architecture (locked in `/plan-eng-review` + outside voice, 2026-06-11)
+
+Closes the loop: the reader corrects authored intent in the HTML, exports a
+structured patch, and a CLI command writes it back to the `@sivru` block /
+`.sivru/explainer.md` the section was projected from. Deterministic, no LLM
+(per DESIGN-0022). The scary part — editing source safely — reuses the
+DESIGN-0019 block machinery.
+
+```
+HTML feedback mode (browser, in the nav shim)
+  reader inline-edits a rendered block field → annotation in localStorage
+        │  EXPORT → download patch.json
+        ▼
+sivru feedback apply <patch.json> [--dry-run] [--force]
+  group edits BY BLOCK → for each (bottom-up by startLine):
+    extractBlocks(file) → locate block by symbolName, disambiguate by hash
+    re-extract hash != patch hash → refuse THIS block (apply the rest)
+    apply all field ops to the block's lines IN PLACE (autofix-style,
+      prefix-preserving) → writeFile once per block
+  narrative edits → .sivru/explainer.md (marked region, idempotent)
+  freeform notes → .sivru/feedback-notes.md (recorded, never auto-applied)
+```
+
+**Patch format — locked.** Structured field edits only. Each edit:
+`{ targetNodeId, sourcePath, blockSymbolName, blockContentHash, field, op,
+value }` + an optional freeform `note`. The patch is stamped with the repo
+root + git HEAD it was generated against. No prose-to-block interpretation
+(that would need an LLM — deferred to DESIGN-0022).
+
+**Apply strategy — locked (reversed from re-serialize after the outside
+voice).** Edit the targeted field's line(s) **in place**, preserving each
+line's comment prefix and everything else byte-for-byte — the autofix.ts
+prefix-preserving line-rewrite approach, NOT `serializeBlock` re-emit.
+Rationale: `serializeBlock` emits a *bare* `@sivru…@end` with no comment
+prefix (splicing it into a TS/Java doc-comment corrupts the file), and a
+whole-block re-emit canonicalizes — dropping the user's inline comments /
+blank lines / non-schema fields and reordering, a lossy surprise. Minimal
+per-field edits avoid both. A prefix-aware structural insert handles
+list add/remove (a new invariant/collaborator).
+
+**Per-block batching + ordering — locked.** Group all edits for one block,
+apply them in one read-modify-write (extract once, edit the in-memory lines,
+write once, hash-check once) — otherwise the first write changes the block
+and stale-refuses the rest. Apply blocks **bottom-up** (descending
+`startLine`) so an earlier block's line-count change can't shift a later
+block's stored range.
+
+**Staleness + safety — locked.** Per-block content hash (`hash.ts`) gates
+each edit: re-extract, locate by `symbolName` disambiguated by hash, compare
+— mismatch refuses that block with a clear message and a **nonzero exit** if
+any edit is refused (CI-gateable). A vanished symbol or missing file is a
+**reported failure, never a silent drop**. Reuse autofix's dirty-file guard
+(refuse uncommitted files unless `--force`). Preserve the file's EOL on
+write (don't silently CRLF→LF). `--dry-run` shows the real before/after diff
+per block and writes nothing.
+
+**Command — locked.** A distinct `sivru feedback apply` subcommand, NOT a
+flag on `explain` — `explain` stays a read-only projection; the
+source-mutating action gets its own verb.
+
+**Reuses:** `serialize.ts` types, `extract.ts` (line ranges + symbolName +
+comment prefix), `hash.ts` (content hash), `autofix.ts` (prefix-preserving
+line rewrite + dirty guard), the `ExplainerModel` (node→source), the Slice 2
+client-shim pattern.
+
+**Test plan — locked.** Patch round-trip (annotate→apply→re-extract shows the
+change); staleness refuses a changed block while applying the rest;
+locate-by-symbolName survives line shifts; vanished symbol reported, no
+write; **idempotency** (re-apply → stale-refused, no double-write); **source
+integrity** (only the target field's lines change, other blocks + code
+byte-identical); each field op (responsibility / invariant edit / list
+add-remove / maturity); multi-edit-same-block batched correctly; multi-block
+file bottom-up ordering; freeform note written to the notes file not source;
+narrative write + idempotency; dirty-file guard; CRLF preserved; malformed
+patch → clean coded error, no write; the annotate shim parses as valid JS;
+real-model integration (annotate → apply → re-explain reflects it).
+
+**Design surface:** the annotate UX (inline edit on already-rendered block
+fields) is contained — folded a light pass into the build, no separate
+`/plan-design-review`.
+
 ## Customization shape
 
 Per the CONTRIBUTING.md three-layer rule:

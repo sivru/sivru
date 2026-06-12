@@ -5,7 +5,58 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: pre-1.0 semver. Any breaking change in 0.x.y bumps `x`. Patches `y` are bug-fix only.
 Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
-## [Unreleased]
+## [0.13.0] — 2026-06-11
+
+**Codebase explainer — the feedback loop (Slice 3: closing the loop).** The
+explainer stops being read-only. A reader corrects authored intent right in the
+HTML, exports a structured patch, and `sivru feedback apply` writes it back to
+the `@sivru` block in source — so the correction lands where the truth lives and
+the next `sivru explain` reflects it everywhere. Completes
+[DESIGN-0018](docs/design/0018-codebase-explainer.md). Deterministic, no LLM
+(per [DESIGN-0022](docs/design/0022-explainer-reasoning-surface.md)).
+
+### Added
+
+- **Feedback mode in the HTML explainer** — toggle it on, then:
+  - **edit** an existing block field (role / responsibility / maturity /
+    collaborators) inline;
+  - **author** a new `@sivru` block on an un-annotated symbol (the "add intent"
+    affordance) — apply inserts a minimal block above the declaration;
+  - **suggest** the system narrative;
+  - leave a **freeform note** (recorded to `.sivru/feedback-notes.md`).
+  Annotations accumulate in `localStorage`; **Export** downloads a `patch.json`
+  (stamped with git HEAD; each edit carries the block's content hash).
+- **`sivru feedback apply <patch.json>`** — a distinct subcommand (not a flag on
+  read-only `explain`). It edits the targeted field's line **in place**,
+  preserving the comment prefix and every other byte (no whole-block re-emit, no
+  canonicalization, no lost formatting). `--dry-run` shows the per-block diff;
+  `--force` overrides the uncommitted-changes guard.
+- **Safety throughout** (`SIVRU-E2012` for a bad patch). The patch is untrusted
+  input, so: each edit is hash-gated and symbol-located — a changed block is
+  **refused, never corrupted**; a `sourcePath` that escapes the repo root (`..`,
+  absolute, or a symlink out) is **rejected** (lexical + realpath); a missing
+  symbol/file is a **reported failure, never a silent drop**; a create whose
+  `declLine` no longer holds the symbol is **refused** (creates aren't
+  hash-gated, so they're guarded against a moved declaration); create inserts
+  run bottom-up and edits re-extract after, so line ranges never shift; field
+  values
+  are YAML-quoted (colons, control chars, number/bool-looking strings) so a value
+  can't break the block; EOL is preserved; `--dry-run` writes nothing anywhere;
+  the uncommitted-changes guard runs `git -C <repo>` (correct under `--repo`);
+  nonzero exit if any edit is refused (CI-gateable).
+- **Narrative feedback** → `.sivru/explainer.md` (the source the projection
+  prefers); **freeform notes** → `.sivru/feedback-notes.md` (recorded for a
+  human, never auto-applied).
+- The `ExplainerModel` carries per-node `blockHash` + `declLine` and a top-level
+  `head` (the patch stamps). The shareable HTML embeds the repo **basename**, not
+  the author's absolute path.
+
+### Deferred (DESIGN-0018 follow-ups)
+
+- Editing multi-line invariants/decisions and list add/remove (line-count-
+  changing edits); adding a field that isn't present yet; authoring blocks in
+  Python (docstrings) and other non-C-like languages. The v1 edit ops are all
+  single-line replacements; create inserts a fresh `/** … */` block.
 
 ## [0.12.0] — 2026-06-10
 

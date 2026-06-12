@@ -51,6 +51,18 @@ export interface ExplainerNode {
   derived: ExplainerDerived;
   /** The fused `@sivru` block, when the projected source carries one. */
   block: SivruBlockJSON | null;
+  /**
+   * `hashBlockContent` of the block — the staleness key the Slice 3 feedback
+   * loop stamps into an exported patch so apply can refuse a changed block.
+   * Present only when `block !== null`.
+   */
+  blockHash?: string;
+  /**
+   * 1-indexed declaration line of an exported symbol — where the Slice 3
+   * feedback loop inserts a NEW `@sivru` block when authoring intent on an
+   * un-annotated symbol. Absent for module-level / unexported nodes.
+   */
+  declLine?: number;
   /** System level only: the narrative (repo docs / `.sivru/explainer.md` / stub). */
   narrative?: string;
 }
@@ -62,6 +74,8 @@ export interface ExplainerModel {
   repoPath: string;
   /** state_id the model was built under (drives the model cache). */
   stateId: string;
+  /** Short git HEAD at build time (stamped into feedback patches), or "" if not a git repo. */
+  head: string;
   /** The root system node; its children are the modules. */
   root: ExplainerNode;
   /** Build provenance, for the `--project` consumer and the perf gate. */

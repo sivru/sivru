@@ -26,11 +26,13 @@ import {
   extractBlocks,
   extractImportSpecifier,
   blockToJSON,
+  hashBlockContent,
   loadOrBuildSymbolIndex,
   type SymbolIndex,
 } from "@sivru/search";
 
 import { mapWithConcurrency } from "../lib/concurrency.js";
+import { gitHeadShort } from "../lib/git.js";
 import { moduleDirOf, packageSegOf } from "./levels.js";
 import { loadModelCache, saveModelCache } from "./model-cache.js";
 import { resolveNarrative, type NarrativeDeps } from "./narrative.js";
@@ -45,6 +47,8 @@ export interface ExtractedForFile {
   kind: string;
   symbolName?: string;
   blockJSON: object | null;
+  /** hashBlockContent of the parsed block (staleness key for Slice 3). */
+  blockHash?: string;
 }
 
 export interface BuildModelDeps {
@@ -52,6 +56,8 @@ export interface BuildModelDeps {
   index?: SymbolIndex;
   /** state_id to stamp the model with when an index is injected. */
   stateId?: string;
+  /** Short git HEAD to stamp (tests); default reads `git rev-parse --short HEAD`. */
+  head?: string;
   /** Repo-relative POSIX dirs that contain a package.json (the module roots). */
   packageDirs?: string[];
   /** Display name for a module dir (default: read package.json "name"). */
@@ -121,6 +127,7 @@ async function defaultExtractFor(
       kind: eb.kind,
       ...(eb.symbolName !== undefined ? { symbolName: eb.symbolName } : {}),
       blockJSON: eb.block === null ? null : blockToJSON(eb.block),
+      ...(eb.block === null ? {} : { blockHash: hashBlockContent(eb.block) }),
     }));
   } catch {
     return [];
@@ -340,12 +347,12 @@ export async function buildExplainerModel(
 
   for (const e of entries) {
     const blocks = blocksByFile.get(e.filePath)!;
-    const symbolBlock = new Map<string, object>();
-    let moduleBlock: object | null = null;
+    const symbolBlock = new Map<string, ExtractedForFile>();
+    let moduleBlock: ExtractedForFile | null = null;
     for (const blk of blocks) {
       if (blk.blockJSON === null) continue;
-      if (blk.kind === "module") moduleBlock = blk.blockJSON;
-      else if (blk.symbolName !== undefined) symbolBlock.set(blk.symbolName, blk.blockJSON);
+      if (blk.kind === "module") moduleBlock = blk;
+      else if (blk.symbolName !== undefined) symbolBlock.set(blk.symbolName, blk);
     }
 
     const names = new Set<string>(e.exports.map((x) => x.name));
@@ -368,7 +375,9 @@ export async function buildExplainerModel(
     const importCallees = uniq(e.imports.flatMap((imp) => imp.identifiers));
     const imports = resolvedImports(e);
 
-    const addSymbol = (name: string, block: object | null, display: string): void => {
+    const addSymbol = (name: string, entry: ExtractedForFile | null, display: string): void => {
+      const block = entry?.blockJSON ?? null;
+      const declLine = e.exports.find((x) => x.name === name)?.startLine;
       pkg.children.push({
         id: symbolId(e.filePath, name),
         level: "symbol",
@@ -383,6 +392,8 @@ export async function buildExplainerModel(
           collaborators: uniq([...importCallees, ...blockCollaborators(block)]),
         },
         block: block as ExplainerNode["block"],
+        ...(entry?.blockHash !== undefined ? { blockHash: entry.blockHash } : {}),
+        ...(declLine !== undefined ? { declLine } : {}),
       });
       symbolCount++;
     };
@@ -451,6 +462,7 @@ export async function buildExplainerModel(
     schema: 1,
     repoPath: abs,
     stateId,
+    head: deps.head ?? (await gitHeadShort(abs)),
     root,
     stats: { files: entries.length, symbols: symbolCount, modules: modules.length },
   };

@@ -153,12 +153,15 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
       )
     : `<details class="narrative"><summary>About this system</summary><div class="md">${mdToHtml(narrative)}</div></details>`;
 
+  // Feedback mode: suggest a system narrative (lands in .sivru/explainer.md).
+  const narrBtn = `<button class="fb-narrative">+ suggest system narrative</button>`;
   return (
     `<h1>${esc(node.name)}</h1>` +
     overview +
     (map ? `<h2>Architecture</h2><div class="diagram-wrap">${map}</div>` : "") +
     `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Symbols</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>` +
-    narrativeBlock
+    narrativeBlock +
+    narrBtn
   );
 }
 
@@ -227,36 +230,65 @@ function renderSymbol(node: ExplainerNode): string {
     `<dt>Collaborators</dt><dd>${d.collaborators.map((c) => `<code>${esc(c)}</code>`).join(" ") || "—"}</dd>` +
     `</dl>`;
 
-  const block = node.block !== null ? renderBlock(node.block) : addIntentAffordance(node);
+  const block =
+    node.block !== null
+      ? renderBlock(node.block, {
+          nodeId: node.id,
+          path: node.path,
+          symbol: node.id.split("#").pop() ?? node.name,
+          hash: node.blockHash ?? "",
+        })
+      : addIntentAffordance(node);
 
   const radial = d.collaborators.length
     ? `<h2>Collaborators</h2><div class="diagram-wrap">${renderRadial(node.name, d.collaborators)}</div>`
     : "";
 
-  return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial;
+  // Feedback mode: leave a freeform note (recorded to .sivru/feedback-notes.md,
+  // never auto-applied) for anything the structured fields can't capture.
+  const noteBtn = `<button class="fb-note" data-node-id="${esc(node.id)}" data-path="${esc(node.path)}">+ note</button>`;
+
+  return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial + noteBtn;
 }
 
-function renderBlock(block: NonNullable<ExplainerNode["block"]>): string {
+interface BlockMeta {
+  nodeId: string;
+  path: string;
+  symbol: string;
+  hash: string;
+}
+
+function renderBlock(
+  block: NonNullable<ExplainerNode["block"]>,
+  meta: BlockMeta,
+): string {
   const b = block as Record<string, unknown>;
-  const line = (key: string, val: unknown): string =>
+  // `data-editable` marks the fields the feedback mode (Slice 3) can edit:
+  // scalars (set the value) and collaborators (set the array). Multi-line
+  // invariants/decisions are not editable in v1 (the apply engine defers them).
+  const ed = (key: string): string => ` data-editable data-edit-field="${key}"`;
+  const scalar = (key: string, val: unknown, editable: boolean): string =>
     typeof val === "string" && val.length > 0
-      ? `<dt>${esc(key)}</dt><dd>${esc(val)}</dd>`
+      ? `<dt>${esc(key)}</dt><dd${editable ? ed(key) : ""}>${esc(val)}</dd>`
       : "";
-  const list = (key: string, val: unknown): string => {
+  const list = (key: string, val: unknown, editable: boolean): string => {
     if (!Array.isArray(val) || val.length === 0) return "";
     const items = val
       .map((v) => `<li>${esc(typeof v === "string" ? v : JSON.stringify(v))}</li>`)
       .join("");
-    return `<dt>${esc(key)}</dt><dd><ul>${items}</ul></dd>`;
+    return `<dt>${esc(key)}</dt><dd${editable ? ed(key) : ""}><ul>${items}</ul></dd>`;
   };
+  const attrs =
+    ` data-node-id="${esc(meta.nodeId)}" data-path="${esc(meta.path)}"` +
+    ` data-symbol="${esc(meta.symbol)}" data-hash="${esc(meta.hash)}"`;
   return (
-    `<div class="block"><div class="block-head">@sivru block</div><dl>` +
-    line("role", b.role) +
-    line("responsibility", b.responsibility) +
-    line("maturity", b.maturity) +
-    list("invariants", b.invariants) +
-    list("decisions", b.decisions) +
-    list("collaborators", b.collaborators) +
+    `<div class="block"${attrs}><div class="block-head">@sivru block</div><dl>` +
+    scalar("role", b.role, true) +
+    scalar("responsibility", b.responsibility, true) +
+    scalar("maturity", b.maturity, true) +
+    list("invariants", b.invariants, false) +
+    list("decisions", b.decisions, false) +
+    list("collaborators", b.collaborators, true) +
     `</dl></div>`
   );
 }
@@ -274,10 +306,18 @@ function addIntentAffordance(node: ExplainerNode): string {
       " */",
     ].join("\n"),
   );
+  // In feedback mode, an un-annotated symbol with a known declaration line can
+  // be authored straight from the explainer (a `create` in the exported patch).
+  const symbol = node.id.split("#").pop() ?? node.name;
+  const createBtn =
+    node.declLine !== undefined
+      ? `<button class="fb-create" data-node-id="${esc(node.id)}" data-path="${esc(node.path)}"` +
+        ` data-symbol="${esc(symbol)}" data-decl="${node.declLine}">+ author @sivru block</button>`
+      : "";
   return (
     `<div class="empty"><div class="empty-head">No @sivru block yet · add intent</div>` +
     `<p class="muted">Document this symbol where the truth lives — paste above its declaration in <code>${esc(node.path)}</code>:</p>` +
-    `<pre class="stub">${stub}</pre></div>`
+    `<pre class="stub">${stub}</pre>${createBtn}</div>`
   );
 }
 

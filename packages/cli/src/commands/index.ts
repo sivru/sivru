@@ -16,6 +16,7 @@ export { runBenchModels } from "./bench-models.js";
 export { runConfig } from "./config.js";
 export { runSkill } from "./skill.js";
 export { runExplain } from "./explain.js";
+export { runFeedback } from "./feedback.js";
 export { runBlock } from "./block.js";
 export { runCheckupCmd } from "./checkup.js";
 
