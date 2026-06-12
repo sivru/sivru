@@ -31,12 +31,12 @@ sivru explain --project --diff [<base>] [--gate] [--json]
 ```
 
 Build the `ExplainerModel` at `base` and at `HEAD`, diff the two, and emit the
-**architectural delta** of the change. `--gate` exits non-zero on a structural
-regression or a violated authored invariant. Three deterministic capabilities,
-all computed on the existing model — no network, no LLM:
+**architectural delta** of the change. Three deterministic capabilities, all
+computed on the existing model — no network, no LLM:
 
 1. **The diff (M-B).** Added / removed / changed nodes; new and removed
-   dependency edges; **a dependency cycle that did not exist on base**; `@sivru`
+   dependency edges; **a dependency cycle that did not exist on base** (in the
+   *parsed-import* graph — see the honesty caveat in Architecture); `@sivru`
    blocks added / removed / field-changed.
 2. **Hot spots (M-A).** A `churn × coupling` score per symbol/module, surfaced
    as a ranked "Attention" panel on the static System page and as context in
@@ -48,6 +48,42 @@ all computed on the existing model — no network, no LLM:
 The static explainer is opened at onboarding; **the diff explainer runs on
 every PR.** That is the habit change.
 
+## Eng-review revisions (2026-06-12, `/plan-eng-review` + outside voice)
+
+The review reshaped the gate posture and several mechanics. Locked decisions:
+
+- **Slice 1 ships the diff as a REPORT, not a gate.** `--diff` emits the
+  architectural delta (text + JSON) on every PR as a review aid. `--gate`
+  does **not** ship in v0.14. Rationale (outside voice C2/M2/M3): a
+  module-level new-cycle gate is the *weakest* signal — it is a no-op on a
+  single-package repo (one module can't form a module cycle), commodity
+  (madge / dependency-cruiser do it finer), and has no suppression, so gating
+  it *before* the differentiated drift signal risks teams deleting `--gate`
+  from CI on the first false fail. The diff is valuable informational on every
+  PR; the **gate waits for the signal worth gating on**.
+- **`--gate` lands in v0.15 with the drift signal AND a suppression baseline.**
+  It gates on a broken `@sivru` invariant→test linkage (the moat) and a new
+  cycle, and a `.sivru/gate-allowlist` (or a baseline file) ships in the same
+  release so a known-accepted finding is suppressible without disabling the
+  gate.
+- **Drift = linkage integrity only (v1).** DESIGN-0019's `enforced-by` check
+  verifies the linkage *resolves*; it does not run the test or judge the code
+  semantically. So the drift gate fails only when the diff **deletes/renames
+  the `enforced-by` test or breaks the linkage** for an invariant on a touched
+  symbol. It does NOT execute tests (that would duplicate CI's test job) or
+  claim to detect semantic violation (undecidable). Invariants with
+  `enforced-by: null` are **unguardable** and are reported as such, never
+  silently "passed".
+- **"Changed node" compares structural fields only** (`exports`, `depEdges`,
+  `collaborators`, `block`) — never `churn`, which shifts on nearly every node
+  between base and head and would flood the diff. Churn delta is reported
+  separately.
+- **Exit-code contract:** `0` = clean/no gate, `1` = gate fired (a named
+  regression), `2` = could-not-evaluate (base unfetchable, worktree failed —
+  `SIVRU-E2013`). A could-not-evaluate is **loud** (exit 2 + a CI annotation),
+  never a silent exit 0 — a gate that silently turns itself off is worse than
+  no gate.
+
 ## Architecture
 
 ### Base model via a temporary git worktree
@@ -57,17 +93,40 @@ is materialized by checking it out — reusing `buildExplainerModel` verbatim,
 correct by construction, zero new plumbing in `packages/search`.
 
 ```
-resolve baseRef          # default: merge-base(HEAD, origin/<default>); override via <base>
-git worktree add <tmp> <baseRef>
-modelBase = projectModel(<tmp>)     # DESIGN-0018 builder; stateId-keyed cache → cheap on re-run
-modelHead = projectModel(.)         # already cached at HEAD
+resolve baseRef          # default: merge-base(HEAD, origin/<default>); override via --base
+worktreePath = <cacheDir>/base-worktrees/<sha(baseRef)>   # STABLE per ref (see cost note)
+flock(worktreePath):                                       # serialize concurrent gate runs
+  git worktree prune                                       # clear a crashed run's stale entry
+  git worktree add --force <worktreePath> <baseRef>        # idempotent re-add
+  modelBase = projectModel(<worktreePath>)
+modelHead = projectModel(.)
 delta     = diffModels(modelBase, modelHead)
-git worktree remove <tmp>           # always, even on error (finally)
+# worktree is reused across runs (not removed); `git worktree prune` collects orphans
 ```
 
-The model cache (keyed by `stateId`, DESIGN-0018) means the base model is built
-once per base commit and reused across re-runs — a CI gate on a stable base is
-near-free after the first run.
+**Cost, honestly (review C3).** The model cache is keyed by
+`sha256(repoPath)/stateId` — *path-dependent*. The **stable** worktree path
+per base ref is what lets the base model cache-hit across runs; a temp path per
+run would miss every time. But the **HEAD** model is the expensive one and is a
+**cold build every PR** in CI — CI's HEAD is a synthetic merge commit with a
+unique sha, so a fresh `stateId` → a full symbol-index build + churn walk each
+run. So the real per-PR cost is ~one cold model build (seconds on a few-k-file
+repo), not "free". This goes behind the perf gate; the base-cache only saves the
+*second* model.
+
+**Concurrency + shallow clones (review M1, A4).** The stable per-ref path is
+shared, so two PRs on the same base race — serialize with a file lock and
+`prune` + `add --force` to survive a killed run that left a registered
+worktree. The gate's home is CI, which often shallow-clones (`fetch-depth: 1`);
+`merge-base` and `worktree add <base>` need history, so the design **requires
+`fetch-depth: 0`** and, when the base commit is genuinely absent, exits `2`
+(could-not-evaluate) loudly — never a silent pass.
+
+**Version skew (review M4).** The base model is built by *whichever sivru is
+installed now* (the worktree rebuilds, it does not reuse a stale cache across
+builder versions). The model is stamped with a builder/grammar version; a diff
+across mismatched builder versions is refused (the edge-derivation logic must
+match or phantom edges/cycles appear).
 
 ### `diffModels(base, head) → ArchDelta`
 
@@ -76,22 +135,37 @@ All of these read fields the model **already carries** (`derived.depEdges`,
 `derived.churn`, `block`, `blockHash`):
 
 - **nodes** — `added` (in head, not base), `removed` (in base, not head),
-  `changed` (same id, different `derived`/`block`). Grouped by level.
+  `changed` (same id, different **structural** fields: `exports`, `depEdges`,
+  `collaborators`, `block`). **`churn` is excluded** from the change test — it
+  shifts on nearly every node between base and head (the diff adds a commit) and
+  would flood the result; churn delta is reported separately (review A2).
 - **edges** — `head.depEdges − base.depEdges` = **new coupling**;
-  `base − head` = removed. Module/package granularity (the model's edge
-  granularity).
+  `base − head` = removed. Module/package granularity.
 - **cycles** — build the module dependency graph at base and head; find
   strongly-connected components (Tarjan) of size > 1 plus self-loops;
-  `cyclesHead − cyclesBase` = **new cycles**. The headline gate signal: a
-  back-edge that made the layering circular.
+  `cyclesHead − cyclesBase` = **new cycles**. Rendered as a **canonicalized**
+  string (lexicographically smallest rotation) so the same diff prints the same
+  cycle across runs (review m1), and **naming the specific edge that closed it**
+  so a human can judge (review A5).
+  - **Honesty caveat (review C1/C2).** `depEdges` is the *parsed-import* graph —
+    edges come only from files the symbol index parsed (no JSON/generated/`.d.ts`,
+    no dynamic `import()` the parser misses), so a cycle through those is
+    invisible. And module granularity is coarse: a single-package repo has one
+    module and **cannot** form a module cycle. This is why Slice 1 ships the
+    cycles **informational, not gated** — the report says "new cycle in the
+    parsed-import module graph", not "your architecture got worse". Finer
+    granularity (package, then symbol) and edge-coverage measurement precede any
+    gate on this signal.
 - **blocks** — `@sivru` blocks `added` / `removed` / `changed` (compare
   `blockHash`, already on each node). The authored-intent delta of the PR.
-- **drift** — for each changed symbol carrying an `@sivru` block, run the
-  DESIGN-0019 invariant→test check: a block claims `enforced-by: X.test.ts`
-  and this diff removed that test, or the linked invariant's test now fails →
-  `violatedInvariants`.
-- **hotspots** — changed symbols ranked by `hotScore` (below); flag those in
-  the repo's top-N.
+- **drift** (v0.15) — for each touched symbol carrying an `@sivru` block, check
+  the DESIGN-0019 invariant→test **linkage**: did this diff delete/rename the
+  `enforced-by` test, or does the linkage no longer resolve? → `brokenLinkages`.
+  Invariants with `enforced-by: null` are reported as **unguardable** (review
+  m2), never counted as passing. The check does **not** run tests or judge
+  semantics (see Eng-review revisions).
+- **hotspots** (v0.15) — touched symbols ranked by `hotScore` (below); flag
+  those in the repo's top-N.
 
 ### Hot-spot score (M-A) — a model field, not a new input
 
@@ -106,18 +180,20 @@ counted from `depEdges`). The static System page renders a ranked **Attention**
 panel; the diff reuses the score for "you touched a hot spot" context. No new
 data, deterministic, on-thesis.
 
-### `--gate`
+### `--gate` (v0.15, NOT Slice 1)
 
-Exit non-zero (a distinct code) when the delta contains **either**:
+`--gate` does not ship in v0.14 (see Eng-review revisions). When it lands in
+v0.15 it exits with the codes above (`1` = fired, `2` = could-not-evaluate) when
+the delta contains **either**:
 
-- **(a)** a new dependency cycle, **or**
-- **(b)** a new invariant violation (a block whose invariant→test linkage broke
-  in this diff).
+- **(a)** a new dependency cycle (once the signal is finer than module-level and
+  edge-coverage is measured), **or**
+- **(b)** a broken `@sivru` invariant→test linkage (the moat — the diff
+  deleted/renamed an `enforced-by` test on a touched symbol).
 
-Both mean "the change made the structure or the authored intent worse." The
-text/JSON output names exactly what failed and where. v1 gates on these two;
-the set is configurable later (e.g. a new cross-layer edge) once we have field
-evidence on false-positive rates.
+It ships with a `.sivru/gate-allowlist` (baseline) so a known-accepted finding
+is suppressible without disabling the gate — a gate with no escape hatch gets
+deleted from CI on the first false fail.
 
 ### Outputs
 
@@ -125,27 +201,28 @@ evidence on false-positive rates.
   ```
   Architectural delta vs <base> (3 files):
     edges     +2  -0
-    CYCLE     NEW: auth → session → auth            ← gate
+    cycle     NEW (parsed-import, module): auth → session → auth
+              closed by new edge: session → auth   (report-only in v0.14)
     blocks    1 changed (rankResults: responsibility), 1 added
-    invariant VIOLATED: ChurnAgg — enforced-by churn.test.ts was deleted  ← gate
-    hot spot  touched model.ts (rank #2 by churn×coupling)
-  GATE: FAIL (1 new cycle, 1 violated invariant)
+    linkage   BROKEN: ChurnAgg — enforced-by churn.test.ts was deleted   (gate: v0.15)
+    hot spot  touched model.ts (rank #2 by churn×coupling)               (v0.15)
   ```
-- **`--json`** — the full `ArchDelta` for PR bots / tooling.
+- **`--json`** — the full `ArchDelta` (its schema is the tooling contract; locked
+  in the Slice 1 implementation).
 - **HTML diff view** (`--diff --html`) — the changed slice of the map,
-  highlighted. **Deferred** to a follow-up slice; v1 is text + JSON, because
-  the gate lives in CI and CI consumes text/JSON.
+  highlighted. **Deferred**; v0.14 is text + JSON (CI-first).
 
 ## Slicing (build order)
 
-The doc covers all of Move 1, but the build ships in three releases so the
-deterministic structural core lands first:
+The doc covers all of Move 1; the build ships in three releases. Per the eng
+review, the **diff is a report in v0.14**; the **gate** waits for v0.15 so it
+gates on the differentiated signal with an escape hatch.
 
 | Slice | Ships | Scope |
 |------:|-------|-------|
-| 1 | v0.14.0 | The diff + structural gate: `--diff` model diff (nodes/edges/cycles/blocks) + `--gate` on new cycles. Text + JSON. The deterministic M-B core. |
+| 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
 | 2 | v0.15.0 | Hot spots: `hotScore` on the model + the ranked **Attention** panel on the static System page + hot-spot context in the diff. (M-A hot-spots.) |
-| 3 | v0.15.0 | Drift gate: the `@sivru` invariant-drift check wired into the diff; `--gate` also fails on a violated invariant. (M-A drift, reuses the coach loop.) |
+| 3 | v0.15.0 | **The gate + drift:** `--gate` (exit codes + `.sivru/gate-allowlist` baseline) firing on a broken invariant→test linkage and a new cycle; the `@sivru` linkage check wired into the diff. (M-A drift — the moat.) |
 
 Deferred: the HTML diff view; gating on new cross-layer edges (needs FP data).
 
@@ -158,18 +235,42 @@ Deferred: the HTML diff view; gating on new cross-layer edges (needs FP data).
 - DESIGN-0019 invariant→test linkage (E230/E231/E232) for the drift check.
 - `git worktree` — already part of the project's own workflow.
 
-## Open questions
+## Resolved questions (eng review)
 
-- **Gate home.** `explain --project --diff --gate` vs the coach `checkup`
-  surface, or both? (DESIGN-0022 open Q.) Lean: the gate is `--diff --gate`
-  (it is about a *change*); `checkup` stays about the static repo state.
-- **Cycle granularity.** Module-level (clean; matches the model's edge
-  granularity) vs symbol-level (finer, noisier). v1: module-level.
-- **Base ref default.** `merge-base(HEAD, origin/<default>)` is the correct PR
-  base; allow `<base>` override and a `--base=<ref>` flag.
-- **Worktree cost on huge repos.** A base build on a 3k-file repo is seconds +
-  one index; acceptable for a per-PR gate, and cached. If it proves too slow,
-  revisit the git-read strategy (rejected here as invasive — see below).
+- **Gate home** → `--diff --gate` (it is about a *change*); `checkup` stays
+  about the static repo state. Resolved.
+- **Cycle granularity** → module-level for the v0.14 **report** (the cycle is
+  informational, so coarseness is disclosed, not gated). Before any **gate** on
+  cycles, move to package- then symbol-level and measure edge coverage (review
+  C2). Resolved for v0.14; revisited before the cycle gate.
+- **Base ref default** → `merge-base(HEAD, origin/<default>)`, override via
+  `--base=<ref>`. Requires `fetch-depth: 0` in CI; absent base → exit 2.
+  Resolved.
+- **Worktree cost** → one cold HEAD build per PR (the base caches via the stable
+  path); behind the perf gate. Resolved (review C3).
+
+## Test plan
+
+```
+diffModels(base, head)                          unit, pure — the core
+  ├── added / removed nodes per level            [★★★] node-set diff
+  ├── changed node = STRUCTURAL only             [★★★] churn-only change → NOT flagged (review A2)
+  ├── new / removed edges                        [★★★] edge-set diff
+  ├── new cycle (Tarjan SCC)                     [★★★] base has cycle → not re-reported; new back-edge → reported
+  │                                              [★★★] canonical render: same diff → same string (review m1)
+  │                                              [★★]  single-module repo → no cycle possible (review C2, documented)
+  ├── block added/removed/changed (blockHash)    [★★★]
+  └── (v0.15) broken invariant linkage           [★★★] enforced-by test deleted → flagged; enforced-by:null → unguardable, not passed
+worktree orchestration (injected git)            [★★] add/prune/lock/remove; stale worktree → prune+force recovers
+  └── base ref absent (shallow clone)            [★★★] → exit 2, loud, NOT exit 0 (review M5)
+exit codes                                       [★★★] 0 clean · 1 gate-fired · 2 could-not-evaluate
+output: text + JSON ArchDelta schema             [★★] snapshot the JSON contract
+integration (real worktree on a temp repo)       [★★★] introduce a real back-edge across two modules → appears in delta
+```
+`diffModels` is a pure function over two `ExplainerModel`s, so the algorithm is
+fully unit-testable with constructed models; the worktree/git layer is injected
+(like the DESIGN-0018 `feedback/apply` deps) so the orchestration tests need no
+real checkout.
 
 ## Alternatives considered
 
@@ -187,22 +288,28 @@ Deferred: the HTML diff view; gating on new cross-layer edges (needs FP data).
 
 ## Acceptance criteria
 
-- **Slice 1:** `sivru explain --project --diff <base>` emits the architectural
-  delta (added/removed/changed nodes, new/removed edges, new cycles, block
-  changes) as text and `--json`; `--gate` exits non-zero on a new dependency
-  cycle and names it. Base model built via a temporary worktree, cleaned up on
-  every path. Deterministic; no network.
-- **Slice 2:** the model carries `hotScore`; the static System page ranks an
-  Attention panel; the diff flags changes touching top-N hot spots.
-- **Slice 3:** the diff detects `@sivru` invariant violations via the
-  DESIGN-0019 linkage; `--gate` also fails on one, naming the block + the
-  broken linkage.
+- **Slice 1 (v0.14, report — NO gate):** `sivru explain --project --diff
+  [<base>]` emits the architectural delta (structural added/removed/changed
+  nodes, new/removed edges, new cycles in the parsed-import module graph
+  labelled informational, `@sivru` block changes) as text and `--json`. Base
+  model built via a stable per-ref worktree (locked, prune-recovered); HEAD
+  cold-build behind the perf gate. Absent base → exit 2, loud. Deterministic;
+  no network; no `--gate`.
+- **Slice 2 (v0.15):** the model carries `hotScore`; the static System page
+  ranks an Attention panel; the diff flags changes touching top-N hot spots.
+- **Slice 3 (v0.15, the gate):** `--gate` with the exit-code contract + a
+  `.sivru/gate-allowlist` baseline, firing on a broken `@sivru` invariant→test
+  linkage (naming the block + the broken `enforced-by`) and a new cycle;
+  `enforced-by: null` invariants reported unguardable.
 
-## Error codes
+## Error codes + exit contract
 
-- New `SIVRU-E2013` — base ref not found / worktree setup failed.
-- The gate failure is a process exit code (non-zero) + a named-reason message,
-  not a thrown error (it is an expected CI outcome, not a fault).
+- New `SIVRU-E2013` — base ref not found / worktree setup failed → process
+  **exit 2** (could-not-evaluate), loud.
+- Exit codes: **0** = clean / no gate, **1** = gate fired (named regression),
+  **2** = could-not-evaluate. A gate failure is an exit code + named-reason
+  message, not a thrown error (expected CI outcome, not a fault). Exit 2 is
+  never silently swallowed to 0.
 
 ## Relationship to existing designs
 
@@ -210,3 +317,41 @@ Deferred: the HTML diff view; gating on new cross-layer edges (needs FP data).
 - **DESIGN-0018** — the model this diffs.
 - **DESIGN-0019 / DESIGN-0005** — the invariant→test linkage and coach loop the
   drift check reuses.
+
+## What already exists (reused, not rebuilt)
+
+- `buildExplainerModel` / `projectModel` / the model cache (DESIGN-0018) — the
+  base + head models, verbatim.
+- `derived.depEdges`, `blockHash`, `churn` on the model (DESIGN-0018 Slice 1) —
+  the diff reads them; no new extraction.
+- DESIGN-0019 `enforced-by` invariant→test linkage — the drift check (v0.15).
+- The injected-deps test pattern (DESIGN-0018 `feedback/apply`) — the worktree
+  orchestration tests reuse it.
+- `git worktree` — already in the project's own dev flow.
+
+## NOT in scope
+
+- **`--gate` in v0.14** — deferred to v0.15 (ships with drift + a baseline; a
+  gate on the weak module-cycle signal alone burns adoption).
+- **Running tests for semantic invariant violation** — the drift gate is
+  linkage-integrity only; executing `enforced-by` tests duplicates CI's test job
+  and is a scope balloon.
+- **Symbol-level cycle detection** — v0.14 reports module-level; finer
+  granularity precedes the cycle *gate*, not the report.
+- **HTML diff view** (`--diff --html`) — text + JSON first (CI-first).
+- **Gating on new cross-layer edges** — needs field FP data first.
+- **The agent map (M-C)** and **authored-story (M-D)** — separate DESIGN-0022
+  moves.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 (DESIGN-0022) | CLEAR | spine accepted; Move 1 sequenced |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 6 findings (1 fork resolved, 5 folded); + outside voice |
+| Outside Voice | Claude subagent (codex account-blocked) | Independent challenge | 1 | issues_found | 3 CRITICAL / 5 MAJOR / 3 MINOR — 1 strategic fork resolved, rest folded |
+
+- **OUTSIDE VOICE:** read `model.ts` and found the signal-quality + adoption gaps the review missed (parsed-import edge graph C1, module-cycle no-op C2, cold HEAD build C3, concurrency M1, no escape-hatch M3, version skew M4, exit codes M5). Reshaped the gate posture.
+- **CROSS-MODEL TENSION (resolved):** Review shipped a cycle gate in Slice 1; outside voice argued the gate is premature on a weak commodity signal. **User chose: Slice 1 = diff report only; `--gate` waits for v0.15 with drift + a baseline.** Granularity/honesty findings folded.
+- **UNRESOLVED:** none.
+- **VERDICT:** ENG CLEARED — design revised, sliced (v0.14 report → v0.15 gate+drift), ready to implement Slice 1.
