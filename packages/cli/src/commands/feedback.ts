@@ -114,6 +114,9 @@ export async function runFeedback(argv: readonly string[]): Promise<number> {
   }
   if (narrative.written) process.stdout.write(`  narrative → ${narrative.path}\n`);
   if (notes.added > 0) process.stdout.write(`  ${notes.added} note(s) → ${notes.path}\n`);
+  // Dry-run doesn't write narrative/notes, so surface what it WOULD write.
+  if (dryRun && (patch.narrative?.length ?? 0) > 0) process.stdout.write(`  would write narrative → .sivru/explainer.md\n`);
+  if (dryRun && (patch.notes?.length ?? 0) > 0) process.stdout.write(`  would write ${patch.notes!.length} note(s) → .sivru/feedback-notes.md\n`);
   process.stdout.write(
     `${dryRun ? "[dry-run] " : ""}${applied.length} applied, ${refused.length} refused` +
       `${result.filesWritten.length ? `, ${result.filesWritten.length} file(s) written` : ""}.\n`,

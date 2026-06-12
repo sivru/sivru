@@ -240,6 +240,19 @@ describe("applyBlockEdits — create a block (the un-annotated path)", () => {
     expect(out).toContain("export function foo() {}");
   });
 
+  it("inserts ABOVE decorators, not between them and the symbol", async () => {
+    const decorated = "@Component\nexport class Widget {}\n"; // Widget on line 2
+    const { base, written } = deps({ extract: async () => [] }, { "x.ts": decorated });
+    const r = await applyBlockEdits(
+      create({ blockSymbolName: "Widget", declLine: 2 }),
+      { repoRoot: "/repo", deps: base },
+    );
+    expect(r.ok).toBe(true);
+    const out = written["x.ts"]!.split("\n");
+    expect(out[0]).toBe("/**"); // block is first
+    expect(out.indexOf("@Component")).toBeGreaterThan(out.indexOf(" * @end")); // decorator is below the block
+  });
+
   it("refuses creating on a symbol that already has a block", async () => {
     const { base } = deps(); // default extract returns a block for "doThing"
     const r = await applyBlockEdits(

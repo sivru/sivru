@@ -146,6 +146,23 @@ const C_LIKE_EXT = new Set([
   "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "java", "go", "rs", "c", "cc", "cpp", "h", "hpp",
 ]);
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 0-indexed splice position for a new block: the declaration line, walked up
+ * past any contiguous decorator / annotation lines (`@Component`, `@Override`)
+ * so the doc-comment lands above them, not between the decorator and its symbol.
+ */
+function lineAboveDecorators(lines: string[], declLine: number): number {
+  let idx = declLine - 1; // 0-indexed declaration line
+  while (idx > 0 && /^\s*@\w/.test(lines[idx - 1] ?? "")) {
+    idx -= 1;
+  }
+  return idx;
+}
+
 /**
  * Build the lines of a fresh minimal `@sivru` block (role + responsibility) to
  * insert above a symbol's declaration, matching its indentation and the file's
@@ -255,9 +272,10 @@ export async function applyBlockEdits(
         }
         // Creates aren't hash-gated like edits, so guard against a stale
         // declLine: the declaration (± a line for modifiers/decorators) must
-        // still mention the symbol, else the source moved since the explain run.
+        // still mention the symbol as a whole word — a substring match would
+        // false-accept `foo` inside `foobar` or a nearby comment.
         const declWindow = [c.declLine - 2, c.declLine - 1, c.declLine].map((i) => lines[i] ?? "").join("\n");
-        if (!declWindow.includes(c.blockSymbolName)) {
+        if (!new RegExp(`\\b${escapeRegExp(c.blockSymbolName)}\\b`).test(declWindow)) {
           refuseCreate(c, "decl-mismatch", `"${c.blockSymbolName}" is no longer at line ${c.declLine} (source changed since the explainer was generated)`);
           continue;
         }
@@ -266,12 +284,16 @@ export async function applyBlockEdits(
           refuseCreate(c, ins.reason, ins.detail);
           continue;
         }
+        // Insert ABOVE any decorators/annotations attached to the declaration —
+        // a doc-comment belongs above `@Component` / `@Override`, not between it
+        // and the symbol.
+        const insertAt = lineAboveDecorators(lines, c.declLine);
         if (opts.dryRun === true) {
-          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `would insert a block above line ${c.declLine}` });
+          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `would insert a block above line ${insertAt + 1}` });
         } else {
-          lines.splice(c.declLine - 1, 0, ...ins.lines);
+          lines.splice(insertAt, 0, ...ins.lines);
           mutated = true;
-          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `created a block above line ${c.declLine}` });
+          outcomes.push({ targetNodeId: c.targetNodeId, sourcePath, field: "(create)", status: "applied", detail: `created a block above line ${insertAt + 1}` });
         }
       }
     }
