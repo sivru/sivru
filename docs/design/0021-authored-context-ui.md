@@ -1,6 +1,6 @@
 # DESIGN-0021: Authored-context UI — block lifecycle as first-class in observe-ui
 
-**Status:** Accepted (promoted from Draft on 2026-05-29 by `/plan-ceo-review` HOLD SCOPE iter-1 + `/plan-eng-review` iter-1 + `/plan-design-review` iter-1 all PASS) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
+**Status:** Implemented at v0.9.0 (both slots) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Class:** Spine (per [GOALS.md](../../GOALS.md) — promotes authored
 context from a CLI-only surface to a first-class lifecycle in the
 UI sivru ships AND in the MCP surface agents drive, and closes the

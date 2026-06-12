@@ -103,12 +103,32 @@ Nine of eighteen versions are Spine. The Supporting and Proof items
 are honest — none fails the goal test — but they serve the goal, they
 are not it.
 
-## What shipped — 0.1.0
+## What shipped — through v0.13.0
 
-Search engine, CLI, MCP server, observe layer, observe-ui, hybrid
-retrieval with optional cross-encoder rerank, asymmetric query
-encoding, mid-session refresh, self-bench on your own data. Full
-delta in [CHANGELOG `[0.1.0]`](CHANGELOG.md).
+[CHANGELOG.md](CHANGELOG.md) is the authoritative per-version delta. The
+**planned-version** headers in the phases below predate the actual ship
+sequence (see the note in Phase 2) — the slots moved as work landed. The
+spine, as shipped:
+
+- **v0.1** — search engine, CLI, MCP server, observe layer + observe-ui,
+  hybrid retrieval + optional cross-encoder rerank, asymmetric query
+  encoding, mid-session refresh, self-bench on your own data.
+- **v0.2–0.4** — tree-sitter chunker; per-model chunk-windowing; the
+  routing skill.
+- **v0.5–0.7** — `sivru explain` (file/region + `--diff`, DESIGN-0004);
+  `@sivru` annotation blocks (DESIGN-0016); coach loop v1 / `sivru checkup`
+  (DESIGN-0005).
+- **v0.8** — block reliability slots 1–4 (DESIGN-0019): invariant→test
+  linkage, staleness, cross-block graph, scaffolding (Rust deferred).
+- **v0.9** — authored-context UI: Blocks tab + writable surface + agent
+  MCP tools (DESIGN-0021).
+- **v0.10** — serving authored context through `sivru explain` (DESIGN-0017).
+- **v0.11–0.13** — the codebase explainer (DESIGN-0018): `explain --project`
+  model, `explain --html` map, and the `feedback apply` write-back loop;
+  governed by DESIGN-0022.
+
+**Next:** drift + hot spots + a PR-diff CI gate, then an agent map over MCP
+(DESIGN-0022).
 
 ---
 

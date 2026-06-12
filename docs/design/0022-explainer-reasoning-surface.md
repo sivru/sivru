@@ -1,6 +1,6 @@
 # DESIGN-0022: Explainer — from projection to reasoning surface
 
-**Status:** Draft <!-- Draft → Accepted → Implemented → Superseded -->
+**Status:** Accepted (CEO-reviewed 2026-06-11; governs the shipped DESIGN-0018 Slice 3 feedback loop and the next move, M-A∪M-B drift + diff + gate) <!-- Draft → Accepted → Implemented → Superseded -->
 **Targets:** after DESIGN-0018 Slice 3 (sequences over several releases)
 **Issue:** filed when the first move is scheduled
 **Created:** 2026-06-11

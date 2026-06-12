@@ -84,7 +84,7 @@ known answer; sivru implements them:
 | Vector noise on exact identifiers | **Hybrid retrieval** — BM25 lexical + cosine semantic, fused via RRF. Exact identifiers still rank correctly via the BM25 side. |
 | Stale indexes | `refreshStale()` re-walks the corpus and re-embeds only modified files. The MCP server calls it before every search. |
 | Privacy / data leaves machine | All local. Default embedder is Model2Vec (a static lookup table, no inference). Transformer embedders run locally via `@huggingface/transformers`. `packages/observe/` is statically banned from network calls. |
-| Naive chunk boundaries lose context | 50-line line-fallback today; tree-sitter function-boundary chunks queued for v0.2. |
+| Naive chunk boundaries lose context | Tree-sitter function-boundary chunks (16 grammars, shipped v0.2), with a 50-line fallback for unparsed files. |
 | Conceptual-adjacency noise | Optional cross-encoder reranker scores the top-50 candidates with a model that sees query + document jointly, not via independent embedding. |
 | Mis-tuned embedders | Asymmetric query encoding for BGE / Nomic / E5. Without the right prompt prefix those models retrieve at sub-optimal capacity (5–15% recall hit). |
 | "We don't know if it's actually worth it" | `sivru bench personal` runs the IR-correct comparison on YOUR sessions and YOUR repos. Recall@5 / MRR / tokens-saved with bootstrap 90% CIs. |
