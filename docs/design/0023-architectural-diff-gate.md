@@ -212,6 +212,26 @@ deleted from CI on the first false fail.
 - **HTML diff view** (`--diff --html`) — the changed slice of the map,
   highlighted. **Deferred**; v0.14 is text + JSON (CI-first).
 
+## CEO-review decisions (2026-06-12, `/plan-ceo-review`, SELECTIVE EXPANSION)
+
+- **Strategy confirmed: ship as planned** (v0.14 diff report → v0.15 gate +
+  drift), over folding into one release or pivoting Move 1 to the agent map
+  (M-C). The worktree/diff plumbing de-risks the gate and works on any repo day
+  one; the diff core is already built.
+- **Accepted expansion — `--format=github` in v0.14.** A PR-surfaced output (a
+  GitHub check-run annotation / markdown comment) so the architectural delta
+  appears INLINE on the PR, not buried in a CI log. This is what makes
+  "report-first" land — a logs-only report is the thing engineers ignore.
+  sivru **emits** the markdown/annotation to stdout and the CI workflow posts
+  it (gh CLI / Actions) — sivru never handles a GitHub token, staying
+  credential-free and on the privacy thesis; if posting context is absent it
+  degrades to plain stdout, exit code unaffected.
+- **Folded UX:** an explicit "no architectural change" green signal when a PR is
+  structurally inert (builds trust), and impact-ordering so the report leads
+  with cycles > new cross-module edges > block changes.
+- **Deferred:** the HTML diff view (`--diff --html`) — its own later move, not a
+  v0.14 lean-foundation fit.
+
 ## Slicing (build order)
 
 The doc covers all of Move 1; the build ships in three releases. Per the eng
@@ -220,7 +240,7 @@ gates on the differentiated signal with an escape hatch.
 
 | Slice | Ships | Scope |
 |------:|-------|-------|
-| 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
+| 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON + `--format=github` PR-surfaced markdown/annotation, emitted to stdout for CI to post): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes; impact-ordered, with a clear "no architectural change" signal. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
 | 2 | v0.15.0 | Hot spots: `hotScore` on the model + the ranked **Attention** panel on the static System page + hot-spot context in the diff. (M-A hot-spots.) |
 | 3 | v0.15.0 | **The gate + drift:** `--gate` (exit codes + `.sivru/gate-allowlist` baseline) firing on a broken invariant→test linkage and a new cycle; the `@sivru` linkage check wired into the diff. (M-A drift — the moat.) |
 
@@ -347,11 +367,12 @@ real checkout.
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 (DESIGN-0022) | CLEAR | spine accepted; Move 1 sequenced |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR | SELECTIVE EXPANSION: strategy confirmed (ship as planned); 1 expansion accepted (`--format=github`), 2 UX folded, 1 deferred (HTML diff) |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 6 findings (1 fork resolved, 5 folded); + outside voice |
 | Outside Voice | Claude subagent (codex account-blocked) | Independent challenge | 1 | issues_found | 3 CRITICAL / 5 MAJOR / 3 MINOR — 1 strategic fork resolved, rest folded |
 
-- **OUTSIDE VOICE:** read `model.ts` and found the signal-quality + adoption gaps the review missed (parsed-import edge graph C1, module-cycle no-op C2, cold HEAD build C3, concurrency M1, no escape-hatch M3, version skew M4, exit codes M5). Reshaped the gate posture.
-- **CROSS-MODEL TENSION (resolved):** Review shipped a cycle gate in Slice 1; outside voice argued the gate is premature on a weak commodity signal. **User chose: Slice 1 = diff report only; `--gate` waits for v0.15 with drift + a baseline.** Granularity/honesty findings folded.
+- **OUTSIDE VOICE (eng review):** read `model.ts` and found the signal-quality + adoption gaps the review missed (parsed-import edge graph C1, module-cycle no-op C2, cold HEAD build C3, concurrency M1, no escape-hatch M3, version skew M4, exit codes M5). Reshaped the gate posture.
+- **CROSS-MODEL TENSION (resolved):** Eng review shipped a cycle gate in Slice 1; outside voice argued the gate is premature on a weak commodity signal. **Chose: Slice 1 = diff report only; `--gate` waits for v0.15 with drift + a baseline.** Granularity/honesty findings folded.
+- **CEO DECISIONS:** ship as planned (over fold-into-one-release / pivot-to-agent-map); **accepted** `--format=github` PR-surfaced output in v0.14 (the report appears on the PR, not just CI logs; sivru emits, CI posts — credential-free); folded the "no architectural change" signal + impact-ordering; deferred the HTML diff view.
 - **UNRESOLVED:** none.
-- **VERDICT:** ENG CLEARED — design revised, sliced (v0.14 report → v0.15 gate+drift), ready to implement Slice 1.
+- **VERDICT:** CEO + ENG CLEARED — design settled (v0.14 diff report incl. `--format=github` → v0.15 gate+drift), ready to implement Slice 1.
