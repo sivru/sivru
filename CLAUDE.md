@@ -76,7 +76,10 @@ in one npm package; one MCP server. Public pitch in
 - **CLI + MCP entry:** `packages/cli/` — `sivru` binary + MCP server
   via `@modelcontextprotocol/sdk`. Subcommands in `src/commands/`;
   shared helpers (model catalog, config, ground-truth, metrics,
-  prompt, progress) in `src/lib/`.
+  prompt, progress) in `src/lib/`. The codebase explainer
+  (DESIGN-0018) lives in `src/explainer/` (model + `html/` SSR
+  renderer) and the write-back loop in `src/feedback/`
+  (`feedback apply` → `@sivru` block in source).
 - **Observe:** `packages/observe/` — session readers (jsonl), event
   normalizer, cost / savings estimator, counterfactual replay,
   Hono HTTP server. Hosts the v0.7 coach loop at
@@ -85,7 +88,7 @@ in one npm package; one MCP server. Public pitch in
   via the `sivru checkup` CLI command, `mcp__sivru__checkup` MCP
   tool, or `GET /api/checkup` HTTP route.
 - **Observe UI:** `packages/observe-ui/` — Vite/React/Tailwind,
-  dark-only. Tabs: Sessions / Checkup / Replay / Costs / Bench.
+  dark-only. Tabs: Sessions / Checkup / Blocks / Replay / Costs / Bench.
 - **Benchmarks:** `benchmarks/` — NDCG@10 corpus + agent-task suite +
   perf gate.
 
@@ -96,9 +99,11 @@ See [`ROADMAP.md`](ROADMAP.md) for direction.
 - Embed code only; BM25-only-index docs and configs
 - Real-agent replay via the Anthropic SDK (opt-in)
 - `sivru completion` + `sivru bench tthw`
-- Serving authored context — surface `@sivru` blocks through
-  `sivru explain` (DESIGN-0017; next planned release).
-- Codebase explainer (DESIGN-0018).
+- Drift + hot spots + PR-diff gate — `explain --project --diff` +
+  `--gate` (DESIGN-0022 M-A∪M-B; next planned release).
+- Agent map over MCP — task/symbol-scoped model slice (DESIGN-0022 M-C).
+- Authored-story — deterministic system narrative from `@sivru` intent
+  (DESIGN-0022 M-D).
 - Coach loop v2 — looped-on-error (DESIGN-0006).
 - Coach loop v3 — low-context-edit (DESIGN-0007).
 - Block reliability follow-on (DESIGN-002X TBD) — watchable
@@ -122,7 +127,14 @@ staleness (E233), cross-block graph (E234/E235/E236),
 scaffolding + annotation bridges (E239/E260),
 Java records/enums/package-info/sealed/inner, TS records/enums,
 per-language `maxLines`, Python/Go per-symbol audits. Rust
-deferred.)
+deferred. Authored-context UI — Blocks tab + writable write surface +
+agent MCP tools — v0.9 [DESIGN-0021](docs/design/0021-authored-context-ui.md);
+serving authored context through `sivru explain` — v0.10
+[DESIGN-0017](docs/design/0017-serving-authored-context.md); the codebase
+explainer — Slice 1 model `explain --project` v0.11, Slice 2 `explain --html`
+v0.12, Slice 3 feedback loop `feedback apply` v0.13
+[DESIGN-0018](docs/design/0018-codebase-explainer.md), governed by
+[DESIGN-0022](docs/design/0022-explainer-reasoning-surface.md).)
 
 ## Don't do without asking
 

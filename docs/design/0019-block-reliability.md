@@ -1,6 +1,6 @@
 # DESIGN-0019: Block reliability — provable claims, drift surfaces, broader coverage
 
-**Status:** Accepted (promoted from Draft on 2026-05-26 by `/plan-ceo-review` iter-1 + `/plan-eng-review` iter-1 PASS) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
+**Status:** Implemented at v0.8.0 (slots 1–4; Rust deferred) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Class:** Spine (per [GOALS.md](../../GOALS.md) — directly hardens the
 authored-comprehension layer)
 **Targets:** multi-release plan (see "Release plan" below). First slot

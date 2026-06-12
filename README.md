@@ -12,8 +12,7 @@ the humans accountable for it — by making comprehension a durable,
 queryable asset of the repo itself. The goal, the uniqueness, and the
 test every release must pass: [`GOALS.md`](GOALS.md).
 
-**Today (0.1.0)** that starts with two instruments, both shipping
-end-to-end:
+**Today** the comprehension layer ships end-to-end, on four legs:
 
 - **Search** — agents call sivru via MCP and get ranked code chunks
   back in milliseconds instead of looping through `ripgrep + Read`.
@@ -21,16 +20,28 @@ end-to-end:
   squares with Anthropic's "agentic search wins for code" —
   [`WHY-SIVRU.md`](WHY-SIVRU.md), the honest defense of one
   instrument.
+- **Authored context** — `@sivru` blocks record a symbol's role,
+  responsibility, invariants, and decisions *in the source*, with a
+  lifetime and reliability checks (drift, staleness, invariant→test
+  linkage, a cross-block graph). `sivru explain` serves that intent at
+  the file/region level; `sivru checkup` coaches against drift in
+  CLAUDE.md / SKILL.md / agent files.
+- **The codebase explainer** — `sivru explain --project` projects the
+  whole repo into a System → Module → Package → Symbol model;
+  `sivru explain --html` renders it as one self-contained, offline HTML
+  map. Its **feedback loop** (`sivru feedback apply`) writes a reader's
+  corrections straight back to the `@sivru` block in source, so
+  understanding compounds in the repo instead of evaporating in a chat.
 - **Observe + self-benchmark** — reads your Claude Code session
-  history, shows what the agent is actually doing, and benchmarks
-  embedders + rerankers on YOUR repos.
+  history, shows what the agent is actually doing, surfaces authored
+  blocks in a Blocks tab, and benchmarks embedders + rerankers on YOUR
+  repos.
 
-**Next**, the roadmap builds the comprehension layer proper: authored
-`@sivru` context blocks (decisions recorded with a lifetime), the
-`sivru explain` primitive, an interactive codebase explainer, and a
-coaching loop that catches low-context edits. See [`ROADMAP.md`](ROADMAP.md).
+What's next builds on this spine: drift + hot spots + a CI gate on the
+architectural delta of a PR, and an agent-facing model slice over MCP.
+See [`ROADMAP.md`](ROADMAP.md) and [`docs/design/`](docs/design/).
 
-> **Status: 0.1.0.** Engine, CLI, MCP server, and observe-ui ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
+> **Status: 0.13.0.** Engine, CLI, MCP server (8 tools), and observe-ui ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
 
 ---
 
@@ -39,9 +50,9 @@ coaching loop that catches low-context edits. See [`ROADMAP.md`](ROADMAP.md).
 | Package | What it does |
 |---|---|
 | `@sivru/search` | Engine. Walker → chunker → BM25 + cosine + RRF → optional cross-encoder rerank. Pluggable embedders (Model2Vec, Transformers.js, OpenAI-compatible HTTP) with asymmetric query encoding for BGE / Nomic / E5. On-disk cache + mid-session `refreshStale()`. |
-| `sivru` (CLI) | `search`, `index`, `from-git`, `mcp`, `observe`, `session`, `bench personal`, `bench models`, `config`, `doctor`, `explain`, `block`, `skill`, `checkup`. Persistent embedder + reranker via `sivru config`. |
-| `@sivru/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. Also hosts the coach loop (`@sivru/observe/coach`) that surfaces drift in CLAUDE.md / SKILL.md / agent files. No network egress, ever — enforced by lint rule + runtime fetch spy. |
-| `@sivru/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Checkup / Replay / Costs / Bench. Dark-only. |
+| `sivru` (CLI) | `search`, `index`, `from-git`, `mcp`, `observe`, `session`, `bench personal`, `bench models`, `config`, `doctor`, `skill`; `explain` (file/region, `--project`, `--html`, `--diff`); `feedback apply` (write authored-intent corrections back to source); `block` (validate / extract / staleness / graph / check-enforcement / init); `checkup` (coach-loop drift). Persistent embedder + reranker via `sivru config`. |
+| `@sivru/observe` | Reads Claude Code's `~/.claude/projects/*.jsonl`, normalizes events, runs a localhost Hono HTTP server. Ships token + dollar savings estimator and offline counterfactual replay. Hosts the coach loop (`@sivru/observe/coach`) that surfaces drift in CLAUDE.md / SKILL.md / agent files, plus the authored-context read/write surface (`sivru mcp --writable`). No network egress, ever — enforced by lint rule + runtime fetch spy. |
+| `@sivru/observe-ui` | React + Tailwind dashboard. Tabs: Sessions / Checkup / Blocks / Replay / Costs / Bench. Dark-only. |
 | `benchmarks/` | NDCG@10, agent-task token economy, perf gate. Raw data committed; see [BENCHMARKS.md](BENCHMARKS.md). |
 
 ## Numbers
@@ -100,7 +111,7 @@ custom queries, and what to do when ground truth is sparse:
 ```bash
 # Install the CLI globally:
 npm install -g @sivru/cli
-sivru version    # → sivru 0.1.0
+sivru version    # → sivru 0.13.0
 
 # Or run without installing:
 npx -y @sivru/cli help
@@ -116,8 +127,11 @@ The package on npm is `@sivru/cli`; the binary it installs is
 claude mcp add sivru -s user -- npx -y @sivru/cli mcp
 ```
 
-Restart Claude Code. The agent now has `mcp__sivru__search` and
-`mcp__sivru__find_related` tools available alongside `Grep` / `Read`.
+Restart Claude Code. The agent now has eight `mcp__sivru__*` tools
+alongside `Grep` / `Read`: `search`, `find_related`, `explain`, and
+`checkup` (read-only). Four more — `block_autofix`, `block_acknowledge`,
+`feedback_read`, `feedback_append` — let the agent maintain authored
+context and are gated behind `sivru mcp --writable`.
 
 ### Install the routing skill
 
@@ -237,6 +251,37 @@ sivru observe costs --since=7 --json     # same, machine-readable
 
 → The web UI: sessions sidebar / event timeline / inspector pane. Estimated tokens **and dollars** saved per session, derived from your live Claude Code session log via the same counterfactual engine the `costs` CLI uses. Strictly local — no telemetry, no network egress, ever.
 
+## Explain a codebase (and correct it)
+
+```bash
+# Authored intent for one file or symbol — role, public API, callers,
+# callees, churn, ownership, attached @sivru blocks. --diff scopes it
+# to what changed.
+sivru explain packages/search/src/rank.ts
+sivru explain "packages/search/src/rank.ts::rankResults"
+
+# Project the WHOLE repo into a System → Module → Package → Symbol model,
+# then render it as one self-contained, offline HTML file you can open or
+# email — no server, no build step.
+sivru explain --project --repo=/path/to/repo            # the model as JSON
+sivru explain --html --repo=/path/to/repo --out=map.html
+```
+
+The HTML map has a **feedback mode**: toggle it on, then edit a block's
+role/responsibility/collaborators, author a new `@sivru` block on an
+un-annotated symbol, suggest the system narrative, or leave a note.
+Export downloads a `patch.json`; `sivru feedback apply` writes it back to
+the `@sivru` block in source — deterministically, never corrupting it.
+
+```bash
+sivru feedback apply patch.json --dry-run    # preview the per-block diff
+sivru feedback apply patch.json              # write it back to source
+```
+
+A correction made while reading the map lands where the truth lives, so
+the next `sivru explain` reflects it for everyone. See
+[DESIGN-0018](docs/design/0018-codebase-explainer.md).
+
 ## Pluggable embedding providers
 
 ```ts
@@ -269,9 +314,11 @@ createHttpEmbeddingProvider({
 
 ## Roadmap
 
-**0.1.0** ships today. **v0.2** is on the [milestone](https://github.com/sivru/sivru/milestone/2).
-Long-term direction (coaching + platform), v0.3+ themes, and what's
-explicitly out of scope: [ROADMAP.md](ROADMAP.md).
+**v0.13.0** ships the codebase explainer + feedback loop. Next up: drift +
+hot spots + a PR-diff CI gate, and an agent-facing model slice over MCP
+([DESIGN-0022](docs/design/0022-explainer-reasoning-surface.md)).
+Long-term direction (coaching + platform) and what's explicitly out of
+scope: [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 

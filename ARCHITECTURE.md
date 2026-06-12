@@ -2,27 +2,28 @@
 
 One-page system map. Code paths, package boundaries, data flow.
 
-## Two products, one binary
+## Two products + a comprehension layer, one binary
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              sivru CLI / MCP                │
-                    │                                             │
-   coding agent ─►  │  search · index · from-git · mcp · session  │  ◄─ developer
-   (Claude Code)    │             observe · doctor                │     (terminal)
-                    └────────────┬────────────────────┬───────────┘
-                                 │                    │
-                          ┌──────▼──────┐      ┌──────▼──────┐
-                          │   search    │      │   observe   │
-                          │  (engine)   │      │ (sessions + │
-                          │             │      │   savings)  │
-                          └─────────────┘      └──────┬──────┘
-                                                      │
-                                              ┌───────▼───────┐
-                                              │  observe-ui   │
-                                              │  (dark, 3-pane│
-                                              │   localhost)  │
-                                              └───────────────┘
+                    ┌─────────────────────────────────────────────────┐
+                    │                 sivru CLI / MCP                  │
+                    │  search · index · from-git · mcp · session ·     │
+   coding agent ─►  │  observe · doctor · explain · feedback · block · │  ◄─ developer
+   (Claude Code)    │  checkup                                         │     (terminal)
+                    └──────┬───────────────┬───────────────┬──────────┘
+                           │               │               │
+                    ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
+                    │   search    │ │ explainer + │ │   observe   │
+                    │  (engine)   │ │  @sivru     │ │ (sessions + │
+                    │  + symbol   │─▶│  blocks +   │ │   savings + │
+                    │   index     │ │  feedback   │ │   coach)    │
+                    └─────────────┘ └─────────────┘ └──────┬──────┘
+                                                           │
+                                                   ┌───────▼───────┐
+                                                   │  observe-ui   │
+                                                   │  (dark, 6-tab │
+                                                   │   localhost)  │
+                                                   └───────────────┘
 ```
 
 **Product 1 — Code search for agents.** A coding agent (Claude Code, via the
@@ -31,12 +32,22 @@ chunks with `(file_path, start_line, end_line, score)`. Cheaper and more
 precise than `ripgrep` + multiple `Read` calls (the path Claude Code's
 `Grep` tool actually takes today).
 
+**Comprehension layer — authored context + the explainer.** `@sivru` blocks
+record a symbol's role/responsibility/invariants/decisions in source, with
+reliability checks (drift, staleness, invariant→test linkage, a cross-block
+graph) under `sivru block`. `sivru explain` serves that intent per file/region;
+`sivru explain --project`/`--html` projects the whole repo into the
+System→Module→Package→Symbol model and renders an offline HTML map; and
+`sivru feedback apply` writes a reader's corrections back to the block in
+source. Built on the search engine's symbol index. (DESIGN-0016/0018/0019.)
+
 **Product 2 — Agent session observability.** Reads the JSONL session files
 that Claude Code already writes to `~/.claude/projects/<cwd>/<uuid>.jsonl`,
 normalizes them to a stable `SivruEvent` shape, exposes a localhost-only
-HTTP API, and ships a five-tab web UI (Sessions / Checkup / Replay / Costs / Bench).
-Counterfactual savings analysis (`sivru observe replay`/`costs`) is
-offline and zero-API-cost.
+HTTP API, and ships a six-tab web UI (Sessions / Checkup / Blocks / Replay /
+Costs / Bench). The coach loop (`@sivru/observe/coach`, `sivru checkup`)
+surfaces drift in CLAUDE.md / SKILL.md / agent files. Counterfactual savings
+analysis (`sivru observe replay`/`costs`) is offline and zero-API-cost.
 
 Strict privacy boundary: `packages/observe/` makes no network calls,
 ever. Enforced by a static lint rule and a runtime `fetch` spy.
@@ -68,9 +79,11 @@ walk → chunk → tokenize → BM25 index ┐
 
 - **Walker** (`src/walker/`) — async; respects nested `.gitignore` with
   negations; bounded against symlink loops; emits files in a stable order.
-- **Chunker** (`src/chunker/`) — line-fallback today (50-line windows,
-  5-line overlap). Tree-sitter for 16 grammars is queued for v0.2 behind
-  the same `chunkFile()` facade.
+- **Chunker** (`src/chunker/`) — tree-sitter function-boundary chunks for
+  16 grammars (shipped v0.2), with per-model chunk-windowing (v0.3); falls
+  back to 50-line windows / 5-line overlap for unparsed files, all behind the
+  same `chunkFile()` facade. Also hosts the `@sivru` block extractor + symbol
+  index that the explainer and `sivru explain` build on.
 - **Tokenizer** (`src/bm25/tokenize.ts`) — splits on whitespace + punct,
   preserves dotted names (`requests.get`), splits camelCase + snake_case +
   kebab-case.
@@ -107,6 +120,14 @@ src/
 │   ├── metrics.ts            → recall@k, MRR, median, bootstrap CI
 │   ├── progress.ts           → BuildIndexProgress reporter w/ cold-start heartbeat
 │   └── prompt.ts             → raw-mode TTY checkbox prompt
+├── explainer/               → the codebase explainer (DESIGN-0018)
+│   ├── model.ts             → buildExplainerModel: System→Module→Package→Symbol
+│   ├── levels.ts            → dir→level mapping; model-cache.ts; narrative.ts
+│   └── html/                → SSR renderer (views, svg, routes, search, render + the client shim)
+├── feedback/                → the write-back loop (DESIGN-0018 Slice 3)
+│   ├── apply.ts             → patch → @sivru block in source (hash-gated, never corrupts)
+│   ├── patch.ts             → the patch contract + parse/validate (SIVRU-E2012)
+│   └── narrative.ts, notes.ts → .sivru/explainer.md + .sivru/feedback-notes.md writers
 └── commands/
     ├── search.ts
     ├── index-cmd.ts
@@ -118,6 +139,10 @@ src/
     ├── config.ts             (sivru config get/set/unset/list/path)
     ├── doctor.ts
     ├── skill.ts               (skill install/uninstall — writes the bundled SKILL.md)
+    ├── explain.ts            (file/region · --project · --html · --diff)
+    ├── feedback.ts           (feedback apply <patch.json>)
+    ├── block.ts              (validate / extract / staleness / graph / check-enforcement / init)
+    ├── checkup.ts            (coach-loop drift report)
     ├── version.ts
     └── help.ts
 ```
@@ -127,9 +152,12 @@ under `src/` — `sivru skill install` writes it into a Claude Code
 skills directory; `skill-asset.ts` resolves and reads it.
 
 The CLI is a thin dispatcher. Each subcommand exports `run<Name>(argv): Promise<number>`
-returning the exit code. The MCP server (`mcp-entry.ts`) wraps the same
-search functions and exposes them to Claude Code as `mcp__sivru__search`
-and `mcp__sivru__find_related`. The MCP search response is a JSON
+returning the exit code. The MCP server (`mcp-entry.ts`) exposes eight tools
+to Claude Code: read-only `mcp__sivru__search`, `find_related`, `explain`,
+`checkup`; and four writable ones gated behind `--writable` —
+`block_autofix`, `block_acknowledge`, `feedback_read`, `feedback_append` (so
+an agent can maintain authored context, not just read it). The MCP search
+response is a JSON
 envelope with measured `latencyMs` / `refreshMs` / per-result `score` /
 line range; the index is refreshed on every search via `refreshStale()`.
 Since v0.4 the two tool `description` strings also carry a one-line
@@ -159,6 +187,13 @@ GET /api/sessions/:id/replay                   # Layer 2 counterfactual
 GET /api/savings?since=N                       # rollup across sessions
 GET /api/bench-history                         # past `sivru bench personal` runs
 GET /api/bench-history/:id                     # one run, full detail
+GET /api/checkup                               # coach-loop drift report (v0.7)
+GET /api/blocks                                # @sivru blocks across the repo (v0.9)
+GET /api/blocks/:filePath/:symbol              # one block + diagnostics
+GET /api/blocks/stream                         # SSE re-scan on file change
+POST /api/blocks/autofix | /edit | /acknowledge  # writable surface (--writable)
+GET|POST /api/feedback                          # read / append .sivru feedback records
+GET /api/metrics                               # block-reliability rollup
 ```
 
 When mounted with `uiDistDir`, the server also serves the observe-ui
@@ -169,6 +204,9 @@ SPA with a path-traversal guard.
 Vite + React 18 + Tailwind v3. Dark-only; soft-amber accent. Tabs:
 
 - **Sessions** — sessions sidebar / event timeline / inspector. Keyboard-first.
+- **Checkup** — coach-loop drift across CLAUDE.md / SKILL.md / agent files.
+- **Blocks** — `@sivru` authored-context blocks across the repo, with the
+  writable surface (autofix / edit / acknowledge) and reliability diagnostics.
 - **Replay** — turn-by-turn counterfactual scoreboard.
 - **Costs** — token + $ rollup over a configurable window.
 - **Bench** — past `sivru bench personal` runs with recall@5 / MRR /
@@ -223,6 +261,12 @@ file format Claude Code already produces.
 | Hybrid (RRF) | `packages/search/src/search.ts` |
 | Cross-encoder rerank | `packages/search/src/rerank/` |
 | Embedding providers + asymmetric query encoding | `packages/search/src/embed/` |
+| `@sivru` block extract / serialize / hash / autofix | `packages/search/src/block/` |
+| Symbol index (drives explain + the explainer) | `packages/search/src/explain/` |
+| Codebase explainer (model + HTML) | `packages/cli/src/explainer/` |
+| Feedback write-back loop | `packages/cli/src/feedback/` |
+| Coach loop (drift checks) | `packages/observe/src/coach/` |
+| Blocks UI + writable API | `packages/observe-ui/` + `packages/observe/src/server/` |
 | Privacy boundary | `packages/observe/src/server/` + lint rule |
 | Observe sources (jsonl) | `packages/observe/src/sources/` |
 | Cost / savings estimator | `packages/observe/src/cost/` |

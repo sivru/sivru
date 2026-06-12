@@ -1,8 +1,8 @@
 # DESIGN-0018: Codebase explainer — the interactive projection
 
-**Status:** Accepted (promoted from Draft on 2026-06-10 by
-`/plan-eng-review` iter-1 PASS; sliced into 3 shippable releases — Slice 1
-in flight) <!-- Draft → Accepted → Implemented → Superseded -->
+**Status:** Implemented at v0.13.0 (all 3 slices shipped: Slice 1 model
+v0.11.0, Slice 2 `--html` v0.12.0, Slice 3 feedback loop v0.13.0)
+<!-- Draft → Accepted → Implemented → Superseded -->
 **Targets:** Slice 1 → v0.11.0 (planned v0.8.0; the slot moved as the
 v0.8–v0.10 sequence diverged — see ROADMAP "shipped sequence" note)
 **Issue:** filed when v0.8 becomes next release
