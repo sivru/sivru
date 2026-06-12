@@ -13,7 +13,7 @@ describe("applyNarrative", () => {
       { write: async (p, c) => { path = p; content = c; } },
     );
     expect(r.written).toBe(true);
-    expect(path.endsWith("/.sivru/explainer.md")).toBe(true);
+    expect(path.replace(/\\/g, "/").endsWith("/.sivru/explainer.md")).toBe(true);
     expect(content).toBe("A system that does things.\n\nIt has five modules.\n");
   });
 

@@ -1,7 +1,14 @@
+import { relative, resolve, sep } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { applyBlockEdits, type ApplyDeps } from "./apply.js";
 import type { BlockEdit, FeedbackPatch } from "./patch.js";
+
+// applyBlockEdits resolves sourcePath against the repo root, so the injected
+// deps must key files the same way — and cross-platform (Windows uses `\`).
+const ROOT = resolve("/repo");
+const keyOf = (p: string): string => relative(ROOT, p).split(sep).join("/");
 
 // A fixture source file with one @sivru block on `doThing`.
 const SRC = [
@@ -30,12 +37,12 @@ function deps(over: Partial<ApplyDeps> = {}, files: Record<string, string> = { "
   const written: Record<string, string> = {};
   const base: ApplyDeps = {
     readFile: async (p) => {
-      const rel = p.replace(/^\/repo\//, "");
+      const rel = keyOf(p);
       if (!(rel in files)) throw new Error("ENOENT");
       return files[rel]!;
     },
     writeFile: async (p, c) => {
-      written[p.replace(/^\/repo\//, "")] = c;
+      written[keyOf(p)] = c;
     },
     extract: async () => [
       { symbolName: "doThing", block: BLOCK, range: { startLine: 2, endLine: 8 } },
