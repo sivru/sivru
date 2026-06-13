@@ -1,7 +1,13 @@
 # DESIGN-0023: Architectural diff + drift gate (the PR surface)
 
-**Status:** Draft <!-- Stub → Draft → Accepted → Implemented → Superseded -->
+**Status:** Implemented <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Targets:** v0.14.0 (Slice 1); M-A signals fold into v0.15.0 (Slices 2–3).
+**Implementation:** all three slices landed on `design-0023-arch-diff-gate`
+(Slice 1 `8b403fe`, Slice 2 `8583d0a`, Slice 3 `669d9a9`). `sivru explain
+--project --diff [--base] [--format=text|json|github] [--html] [--gate]` ships
+the report, the visual delta + Attention panel, and the cycle/linkage gate with
+a `.sivru/gate-allowlist` escape hatch. Release sequencing (one cut vs.
+v0.14 report → v0.15 gate) is left to `/ship`.
 **Implements:** [DESIGN-0022](0022-explainer-reasoning-surface.md) **Move 1**
 (M-A core ∪ M-B) — the differentiated 10x the CEO review named: *"where did
 the code diverge from intent, and block the PR that breaks an invariant."*

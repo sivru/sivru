@@ -5,6 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: pre-1.0 semver. Any breaking change in 0.x.y bumps `x`. Patches `y` are bug-fix only.
 Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
+## [Unreleased]
+
+**Architectural diff + drift gate — the PR surface.** `sivru explain --project
+--diff` builds the [`ExplainerModel`](docs/design/0018-codebase-explainer.md) at
+a base ref and at HEAD, diffs them, and reports what the change did to the
+architecture: new cross-module edges, new dependency cycles, and `@sivru`
+authored-intent changes. With `--gate` it blocks the PR on the one signal worth
+gating — a broken invariant→test linkage, the differentiated 10x from
+[DESIGN-0022](docs/design/0022-explainer-reasoning-surface.md) Move 1.
+Implements [DESIGN-0023](docs/design/0023-architectural-diff-gate.md);
+deterministic, no LLM.
+
+### Added
+
+- **`sivru explain --project --diff [--base=<ref>] [--format=text|json|github]`**
+  — the architectural delta of a change. The base model is built in a stable
+  per-ref git worktree (advisory-locked, reuse-if-at-sha, prune-recovered) so it
+  works on any repo — including a shallow CI clone. Impact-ordered output
+  (cycles > new edges > block changes > nodes); an explicit "no architectural
+  change" signal when the PR is structurally inert. `--format=github` emits a
+  markdown PR-comment body with a hidden marker so CI updates one comment instead
+  of spamming one per push (sivru emits; the workflow posts — credential-free).
+  Exit `0` report / `2` could-not-evaluate (an unfetchable base is never a silent
+  pass).
+- **`--diff --html`** — the delta as a standalone, shareable page: the HEAD
+  architecture map with the change overlaid (added/changed module boxes, new
+  edges, the cycle's closing edge) plus a "What changed" digest. Every change is
+  named with a text tag (NEW / CHG / DEL / ⟳ CYCLE) and a distinct border stroke,
+  so color is never the only signal (WCAG 1.4.1).
+- **Attention panel** on the HTML System page — modules and symbols ranked by
+  `hotScore` (churn × coupling), the first place to read in an unfamiliar repo.
+  `hotScore` is a new derived field on the model (pure computation, no new input).
+- **`--gate`** — exit `1` on a gateable regression: a new dependency cycle, or a
+  broken `@sivru` invariant→test linkage on a symbol the diff touched (reusing
+  the [DESIGN-0019](docs/design/0019-block-reliability.md) enforcement resolver).
+  Invariants with `enforced-by: null` are reported as **unguardable**, never
+  silently passing and never gated. Ships with a `.sivru/gate-allowlist` escape
+  hatch (one canonical, rotation-independent key per line); a suppressed finding
+  is still reported. Exit `0` clean / all-suppressed, `1` fired, `2`
+  could-not-evaluate — never a silent off.
+
 ## [0.13.0] — 2026-06-11
 
 **Codebase explainer — the feedback loop (Slice 3: closing the loop).** The
