@@ -218,14 +218,18 @@ deleted from CI on the first false fail.
   drift), over folding into one release or pivoting Move 1 to the agent map
   (M-C). The worktree/diff plumbing de-risks the gate and works on any repo day
   one; the diff core is already built.
-- **Accepted expansion — `--format=github` in v0.14.** A PR-surfaced output (a
-  GitHub check-run annotation / markdown comment) so the architectural delta
-  appears INLINE on the PR, not buried in a CI log. This is what makes
-  "report-first" land — a logs-only report is the thing engineers ignore.
-  sivru **emits** the markdown/annotation to stdout and the CI workflow posts
-  it (gh CLI / Actions) — sivru never handles a GitHub token, staying
-  credential-free and on the privacy thesis; if posting context is absent it
-  degrades to plain stdout, exit code unaffected.
+- **Accepted expansion — `--format=github` in v0.14** (eng-review-2: pinned to a
+  **markdown PR comment body**, NOT inline annotations). The arch delta is a
+  repo-level summary (cycles/edges between modules), not anchored to a changed
+  line, so a single PR comment is its natural home; GitHub Actions inline
+  annotations (`::warning file,line::`) are deferred to the v0.15 gate when
+  findings are line-specific (the closing edge's file:line). sivru **emits** the
+  markdown to stdout and the CI workflow posts it — `gh pr comment`, finding +
+  replacing one comment by a hidden marker so it never spams a comment per push.
+  sivru never handles a GitHub token (credential-free, on the privacy thesis);
+  if posting context is absent it degrades to plain stdout, exit unaffected.
+  The formatter escapes node/module names (a name with backticks or `|` can't
+  break the markdown).
 - **Folded UX:** an explicit "no architectural change" green signal when a PR is
   structurally inert (builds trust), and impact-ordering so the report leads
   with cycles > new cross-module edges > block changes.
@@ -240,7 +244,7 @@ gates on the differentiated signal with an escape hatch.
 
 | Slice | Ships | Scope |
 |------:|-------|-------|
-| 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON + `--format=github` PR-surfaced markdown/annotation, emitted to stdout for CI to post): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes; impact-ordered, with a clear "no architectural change" signal. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
+| 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON + `--format=github` markdown PR-comment body, emitted to stdout for the CI workflow to post/update by a marker): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes; impact-ordered, with a clear "no architectural change" signal. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
 | 2 | v0.15.0 | Hot spots: `hotScore` on the model + the ranked **Attention** panel on the static System page + hot-spot context in the diff. (M-A hot-spots.) |
 | 3 | v0.15.0 | **The gate + drift:** `--gate` (exit codes + `.sivru/gate-allowlist` baseline) firing on a broken invariant→test linkage and a new cycle; the `@sivru` linkage check wired into the diff. (M-A drift — the moat.) |
 
@@ -368,7 +372,7 @@ real checkout.
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR | SELECTIVE EXPANSION: strategy confirmed (ship as planned); 1 expansion accepted (`--format=github`), 2 UX folded, 1 deferred (HTML diff) |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 6 findings (1 fork resolved, 5 folded); + outside voice |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | run 1: 6 findings (1 fork, 5 folded) + outside voice; run 2 (post-CEO expansion): pinned `--format=github` to a markdown PR comment (annotations deferred to the gate), escaping + update-in-place folded |
 | Outside Voice | Claude subagent (codex account-blocked) | Independent challenge | 1 | issues_found | 3 CRITICAL / 5 MAJOR / 3 MINOR — 1 strategic fork resolved, rest folded |
 
 - **OUTSIDE VOICE (eng review):** read `model.ts` and found the signal-quality + adoption gaps the review missed (parsed-import edge graph C1, module-cycle no-op C2, cold HEAD build C3, concurrency M1, no escape-hatch M3, version skew M4, exit codes M5). Reshaped the gate posture.
