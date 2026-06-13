@@ -210,7 +210,8 @@ deleted from CI on the first false fail.
 - **`--json`** — the full `ArchDelta` (its schema is the tooling contract; locked
   in the Slice 1 implementation).
 - **HTML diff view** (`--diff --html`) — the changed slice of the map,
-  highlighted. **Deferred**; v0.14 is text + JSON (CI-first).
+  highlighted. **Slice 2** (designed under "UI surfaces"); v0.14 ships text +
+  JSON + the github markdown comment (CI-first).
 
 ## CEO-review decisions (2026-06-12, `/plan-ceo-review`, SELECTIVE EXPANSION)
 
@@ -233,8 +234,81 @@ deleted from CI on the first false fail.
 - **Folded UX:** an explicit "no architectural change" green signal when a PR is
   structurally inert (builds trust), and impact-ordering so the report leads
   with cycles > new cross-module edges > block changes.
-- **Deferred:** the HTML diff view (`--diff --html`) — its own later move, not a
-  v0.14 lean-foundation fit.
+- **Design-fully revision (2026-06-13):** the HTML diff view is **no longer
+  deferred** — it is fully designed (see "UI surfaces") and built in Slice 2
+  alongside the Attention panel. Both visual surfaces are `/plan-design-review`'d
+  before any phase execution.
+
+## UI surfaces (the visual layer — Slice 2)
+
+Two visual surfaces on the existing DESIGN-0018 HTML explainer. Both reuse its
+renderer verbatim: `renderSystemMap` / `systemMapLayout` (the layered SVG),
+`THEME_CSS` (dark; tokens `--accent #d4a056`, `--warn #fbbf24`, `--error
+#f87171`, `--mute #7a8390`), `escapeHtml`, and the self-contained / offline
+pattern (no server, no external assets). To be `/plan-design-review`'d before
+build.
+
+### A. The "Attention" panel (static System page)
+
+The "where to look first" surface — `churn × coupling` ranked. It **leads** the
+System page (above the Architecture map; hierarchy-as-service — the ranked list
+is the most actionable thing). A `.panel` card:
+
+```
+┌─ Attention · where bugs come from ───────────────────────┐
+│  churn × coupling, ranked                                 │
+│                                                           │
+│  1  model.ts            ███████████░░  42   ⚠ drift       │
+│  2  apply.ts            ███████░░░░░░  28                  │
+│  3  search.ts           █████░░░░░░░░  21   ↻ in a cycle   │
+│  4  render.ts           ████░░░░░░░░░  18                  │
+│  … 4 more                                                 │
+└───────────────────────────────────────────────────────────┘
+```
+
+- Each row links to the node page. The bar uses `--accent`; the breakdown
+  (`churn × coupling = score`) shows on hover/inline.
+- **Chips:** `⚠ drift` (`--warn`) when a symbol's `@sivru` invariant→test linkage
+  is broken (Slice 3); `↻ in a cycle` (`--error`) for a cycle member. Small,
+  not noisy.
+- **Badges** echo on module/symbol tree entries + page headers (a hot-spot dot
+  `--accent` for top-N, a drift dot `--warn`) so the signal follows you as you
+  navigate.
+- **Empty state** (a feature, not a blank): "Churn and coupling are evenly
+  spread — no stand-out hot spots." If not a git repo: "No churn data — run in a
+  git repo."
+
+### B. The HTML diff view (`sivru explain --project --diff --html`)
+
+A self-contained, offline page showing the architectural delta **visually** —
+the same `ArchDelta` the markdown comment carries, but on the map. Opened
+locally or attached to a PR.
+
+```
+Architectural delta vs main · 3 files · 1 NEW CYCLE
+┌─ map (changed slice highlighted) ─────────────────────────┐
+│                                                           │
+│     [search] ──new──▶ [model]        (changed: amber)     │
+│        ▲                  │ new                            │
+│        └──────────────────┘   ← NEW CYCLE (red)           │
+│     [observe] (NEW, accent outline)                       │
+│     [legacy]  (removed, ghosted/dashed)                   │
+└───────────────────────────────────────────────────────────┘
+NEW CYCLE   search → model → search   (closed by model→search)
++2 edges · 1 block changed (rankResults) · touched hot spot model.ts
+```
+
+- **Color semantics** (existing tokens): added → `--accent`; changed → `--warn`;
+  removed → `--mute` (dashed/ghost, strikethrough label); a new cycle's edges +
+  members → `--error`.
+- The map is the existing layered SVG with delta classes overlaid
+  (`.map-box-new` / `-changed` / `-removed`, `.edge-new` / `.edge-cycle`).
+- Below the map: the delta as collapsible sections (added/removed/changed nodes,
+  new/removed edges, new cycles with the closing edge, block changes, hot-spot
+  context), each linking to the node — the digest a human reads, the map the
+  picture they grok.
+- **Empty state:** a clean "No architectural change — this PR is structurally
+  inert" with a green check (the reassuring signal that builds trust).
 
 ## Slicing (build order)
 
@@ -245,10 +319,11 @@ gates on the differentiated signal with an escape hatch.
 | Slice | Ships | Scope |
 |------:|-------|-------|
 | 1 | v0.14.0 | `sivru explain --project --diff` as a **report** (text + JSON + `--format=github` markdown PR-comment body, emitted to stdout for the CI workflow to post/update by a marker): the model diff — added/removed/changed nodes (structural), new/removed edges, new cycles (parsed-import, module-level, informational), `@sivru` block changes; impact-ordered, with a clear "no architectural change" signal. No `--gate`. The deterministic M-B core + the worktree/diff/exit-code plumbing. |
-| 2 | v0.15.0 | Hot spots: `hotScore` on the model + the ranked **Attention** panel on the static System page + hot-spot context in the diff. (M-A hot-spots.) |
+| 2 | v0.15.0 | **The visual layer** (design-reviewed before build): `hotScore` on the model + the ranked **Attention** panel + hot-spot badges on the System page; the **`--diff --html`** view (delta-highlighted map + collapsible digest); hot-spot context in the text/markdown diff. (M-A hot-spots + the two UI surfaces.) |
 | 3 | v0.15.0 | **The gate + drift:** `--gate` (exit codes + `.sivru/gate-allowlist` baseline) firing on a broken invariant→test linkage and a new cycle; the `@sivru` linkage check wired into the diff. (M-A drift — the moat.) |
 
-Deferred: the HTML diff view; gating on new cross-layer edges (needs FP data).
+Deferred: gating on new cross-layer edges (needs FP data). (The HTML diff view
+is no longer deferred — it is designed above and built in Slice 2.)
 
 ## Reuses (no new machinery for the core)
 
@@ -362,7 +437,8 @@ real checkout.
   and is a scope balloon.
 - **Symbol-level cycle detection** — v0.14 reports module-level; finer
   granularity precedes the cycle *gate*, not the report.
-- **HTML diff view** (`--diff --html`) — text + JSON first (CI-first).
+- **HTML diff view in v0.14** — designed (UI surfaces) but built in Slice 2
+  (v0.15) with the Attention panel; v0.14 stays CI-first (text + JSON + github).
 - **Gating on new cross-layer edges** — needs field FP data first.
 - **The agent map (M-C)** and **authored-story (M-D)** — separate DESIGN-0022
   moves.
