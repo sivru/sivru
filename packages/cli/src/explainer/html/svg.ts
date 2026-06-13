@@ -148,10 +148,22 @@ export function systemMapLayout(
   };
 }
 
+/**
+ * Optional delta overlay (DESIGN-0023 Slice 2). Returns an extra CSS class for a
+ * box (a changed/added module) or an edge (a newly-introduced dependency / a
+ * cycle's closing edge). Color is never the only signal — the classes pair with
+ * text tags in the legend + distinct stroke styles (WCAG 1.4.1).
+ */
+export interface MapDecorate {
+  box?: (id: string) => string | null;
+  edge?: (from: string, to: string) => string | null;
+}
+
 export function renderSystemMap(
   nodes: readonly MapNodeInput[],
   edges: readonly { from: string; to: string }[],
   href: (id: string) => string,
+  decorate?: MapDecorate,
 ): string {
   const layout = systemMapLayout(nodes, edges);
   const byId = new Map(layout.boxes.map((b) => [b.id, b]));
@@ -169,17 +181,19 @@ export function renderSystemMap(
     const x2 = b.x + b.w;
     const y2 = b.y + b.h / 2;
     const mx = ((x1 + x2) / 2).toFixed(1);
+    const eClass = decorate?.edge?.(e.from, e.to);
     parts.push(
-      `<path class="edge" d="M${x1.toFixed(1)} ${y1.toFixed(1)} ` +
+      `<path class="edge${eClass ? ` ${eClass}` : ""}" d="M${x1.toFixed(1)} ${y1.toFixed(1)} ` +
         `C ${mx} ${y1.toFixed(1)} ${mx} ${y2.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}" ` +
         `marker-end="url(#arrow)" />`,
     );
   }
   for (const b of layout.boxes) {
     const cx = (b.x + b.w / 2).toFixed(1);
+    const bClass = decorate?.box?.(b.id);
     parts.push(
       `<a href="${escapeHtml(href(b.id))}"><g>` +
-        `<rect class="map-box" x="${b.x.toFixed(1)}" y="${b.y.toFixed(1)}" width="${b.w}" height="${b.h}" rx="6" />` +
+        `<rect class="map-box${bClass ? ` ${bClass}` : ""}" x="${b.x.toFixed(1)}" y="${b.y.toFixed(1)}" width="${b.w}" height="${b.h}" rx="6" />` +
         `<text class="map-name" x="${cx}" y="${b.y + 22}">${escapeHtml(b.name)}</text>` +
         `<text class="map-sub" x="${cx}" y="${b.y + 39}">${escapeHtml(b.sub)}</text>` +
         `</g></a>`,

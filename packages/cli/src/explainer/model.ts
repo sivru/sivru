@@ -457,6 +457,7 @@ export async function buildExplainerModel(
   };
   root.derived.churn = sumValues(sysFileChurn);
   rollUpExports(root);
+  computeHotScores(root);
 
   return {
     schema: 1,
@@ -466,6 +467,32 @@ export async function buildExplainerModel(
     root,
     stats: { files: entries.length, symbols: symbolCount, modules: modules.length },
   };
+}
+
+/**
+ * DESIGN-0023 Slice 2: stamp `derived.hotScore = churn × coupling` on every
+ * node — the Attention panel ranks by it. Coupling at module/package level is
+ * in-degree + out-degree over that level's dep graph (so a heavily-depended-on
+ * package scores even if it imports little); at symbol level it's the
+ * collaborator count. A post-pass because in-degree needs the whole tree.
+ */
+function computeHotScores(root: ExplainerNode): void {
+  // In-degree over depEdges, summed across all levels (ids are globally unique).
+  const inDegree = new Map<string, number>();
+  const walk = (n: ExplainerNode, visit: (n: ExplainerNode) => void): void => {
+    visit(n);
+    for (const c of n.children) walk(c, visit);
+  };
+  walk(root, (n) => {
+    for (const to of n.derived.depEdges) inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+  });
+  walk(root, (n) => {
+    const coupling =
+      n.level === "symbol"
+        ? n.derived.collaborators.length
+        : n.derived.depEdges.length + (inDegree.get(n.id) ?? 0);
+    n.derived.hotScore = n.derived.churn * coupling;
+  });
 }
 
 function setFileChurn(

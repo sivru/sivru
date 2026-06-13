@@ -10,6 +10,7 @@
 //   package → symbol list
 //   symbol  → derived facts + @sivru block (or add-intent affordance) + radial
 
+import { topHotNodes } from "../attention.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc } from "./escape.js";
 import { mdToHtml } from "./markdown.js";
@@ -125,6 +126,23 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
       )
     : "";
 
+  // Attention: where change meets coupling. A short ranked list — the first
+  // place to read in an unfamiliar repo (and the spots a PR most wants review).
+  const hot = topHotNodes(model, 8);
+  const attention = hot.length
+    ? `<h2>Attention <span class="muted">— churn × coupling</span></h2>` +
+      `<ol class="attention">` +
+      hot
+        .map(
+          (h) =>
+            `<li><a href="${routeOf(h.ref.id)}">${esc(h.ref.name)}</a>` +
+            `<span class="hot-meta">${h.churn} churn · ${h.coupling} links</span>` +
+            `<span class="hot-score" title="churn × coupling">${h.hotScore}</span></li>`,
+        )
+        .join("") +
+      `</ol>`
+    : "";
+
   const overview = modules.length
     ? `<p class="overview">${modules.length} modules · ${totalSymbols} load-bearing symbols` +
       (foundation.length
@@ -159,6 +177,7 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
     `<h1>${esc(node.name)}</h1>` +
     overview +
     (map ? `<h2>Architecture</h2><div class="diagram-wrap">${map}</div>` : "") +
+    attention +
     `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Symbols</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>` +
     narrativeBlock +
     narrBtn

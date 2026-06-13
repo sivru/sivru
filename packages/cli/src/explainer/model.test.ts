@@ -110,6 +110,14 @@ describe("buildExplainerModel — monorepo shape", () => {
     expect(findChild(m.root, "@sivru/search").derived.depEdges).toEqual([]);
   });
 
+  it("stamps hotScore = churn × coupling (in+out degree at module level)", async () => {
+    const m = await build(entries, opts);
+    const cli = findChild(m.root, "@sivru/cli"); // out-degree 1 (→ search), in 0
+    const search = findChild(m.root, "@sivru/search"); // out 0, in 1 (← cli)
+    expect(cli.derived.hotScore).toBe(cli.derived.churn * 1);
+    expect(search.derived.hotScore).toBe(search.derived.churn * 1);
+  });
+
   it("derives a package dep-edge from a resolved relative import (no self-edges)", async () => {
     const m = await build(entries, opts);
     const commands = findChild(findChild(m.root, "@sivru/cli"), "commands");

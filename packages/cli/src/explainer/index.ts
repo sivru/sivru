@@ -4,7 +4,9 @@
 // projection). Slice 3 (feedback) adds without reshaping the model contract.
 
 export { buildExplainerModel, projectModel } from "./model.js";
-export { renderHtml } from "./html/render.js";
+export { renderHtml, renderDiffHtml } from "./html/render.js";
+export { topHotNodes } from "./attention.js";
+export type { HotNode } from "./attention.js";
 export { selfVerify } from "./html/routes.js";
 export type {
   BuildModelDeps,

@@ -28,11 +28,12 @@ import {
 import { formatDiagnostic } from "../lib/diagnostics.js";
 import { writeFile } from "node:fs/promises";
 
-import { buildBaseModel, diffModels, formatDelta, projectModel, renderHtml } from "../explainer/index.js";
+import { buildBaseModel, diffModels, formatDelta, projectModel, renderDiffHtml, renderHtml } from "../explainer/index.js";
 
 /** Warn (not fail) when the generated HTML exceeds this size. */
 const HTML_SIZE_WARN_BYTES = 5 * 1024 * 1024;
 const DEFAULT_HTML_OUT = "sivru-explainer.html";
+const DEFAULT_DIFF_HTML_OUT = "sivru-arch-delta.html";
 
 /**
  * Max block-health diagnostics rendered inline in the markdown BLOCKS HEALTH
@@ -209,6 +210,7 @@ const USAGE = [
   "                    no gate); 2 if the base can't be evaluated.",
   "  --base=<ref>      (--project --diff) base ref (default: merge-base w/ default branch)",
   "  --format=<f>      (--project --diff) text (default) | json | github (PR-comment markdown)",
+  "                    With --html, writes the delta as a standalone visual page instead.",
   "  --html            Render the projection as one self-contained HTML file",
   "                    (implies --project). Default ./sivru-explainer.html.",
   "  --out=<path>      Output path for --html",
@@ -259,6 +261,15 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
         }
         const head = await projectModel(args.repoRoot);
         const delta = diffModels(base.model, head, base.baseRef);
+        if (args.html) {
+          // The delta as a standalone, shareable visual: HEAD architecture map
+          // with the change overlaid + a text digest (WCAG: tags, not color alone).
+          const html = renderDiffHtml(head, delta);
+          const outPath = resolvePath(args.out ?? DEFAULT_DIFF_HTML_OUT);
+          await writeFile(outPath, html, "utf8");
+          process.stdout.write(`Wrote ${outPath} (${Math.round(html.length / 1024)} KB)\n`);
+          return 0;
+        }
         process.stdout.write(formatDelta(delta, args.json ? "json" : args.format) + "\n");
         return 0;
       }
