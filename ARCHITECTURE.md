@@ -37,9 +37,12 @@ record a symbol's role/responsibility/invariants/decisions in source, with
 reliability checks (drift, staleness, invariant→test linkage, a cross-block
 graph) under `sivru block`. `sivru explain` serves that intent per file/region;
 `sivru explain --project`/`--html` projects the whole repo into the
-System→Module→Package→Symbol model and renders an offline HTML map; and
-`sivru feedback apply` writes a reader's corrections back to the block in
-source. Built on the search engine's symbol index. (DESIGN-0016/0018/0019.)
+System→Module→Package→Symbol model and renders an offline HTML map;
+`sivru explain --project --diff [--gate]` diffs that model across a change and
+reports (or gates on) the architectural delta — new cycles, new coupling, and
+broken `@sivru` invariant→test linkages; and `sivru feedback apply` writes a
+reader's corrections back to the block in source. Built on the search engine's
+symbol index. (DESIGN-0016/0018/0019/0023.)
 
 **Product 2 — Agent session observability.** Reads the JSONL session files
 that Claude Code already writes to `~/.claude/projects/<cwd>/<uuid>.jsonl`,
@@ -120,7 +123,7 @@ src/
 │   ├── metrics.ts            → recall@k, MRR, median, bootstrap CI
 │   ├── progress.ts           → BuildIndexProgress reporter w/ cold-start heartbeat
 │   └── prompt.ts             → raw-mode TTY checkbox prompt
-├── explainer/               → the codebase explainer (DESIGN-0018)
+├── explainer/               → the codebase explainer (DESIGN-0018) + diff/gate (DESIGN-0023)
 │   ├── model.ts             → buildExplainerModel: System→Module→Package→Symbol
 │   ├── levels.ts            → dir→level mapping; model-cache.ts; narrative.ts
 │   └── html/                → SSR renderer (views, svg, routes, search, render + the client shim)
