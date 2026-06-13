@@ -94,4 +94,24 @@ describe("renderDiffHtml", () => {
     const html = renderDiffHtml(head, d);
     expect(html).not.toContain("<script>x</script>");
   });
+
+  it("renders the New surface area + Touched hot spots sections for a sizeable change", () => {
+    const d = emptyDelta();
+    // add symbols under module a; mark one existing hot symbol as changed.
+    d.nodes.added = [
+      { id: "symbol:a/src/n1.ts#n1", level: "symbol", name: "n1", path: "a/src/n1.ts" },
+      { id: "symbol:a/src/n2.ts#n2", level: "symbol", name: "n2", path: "a/src/n2.ts" },
+      { id: "module:c", level: "module", name: "c", path: "c" },
+    ];
+    // s0 in module a is hot (give it a hotScore) and is changed.
+    head.root.children[0]!.children[0]!.children[0]!.derived.hotScore = 99;
+    head.root.children[0]!.children[0]!.children[0]!.derived.churn = 12;
+    d.nodes.changed = [{ ref: { id: "symbol:a/src/f0.ts#s0", level: "symbol", name: "s0", path: "a/src/f0.ts" }, fields: ["collaborators"] }];
+    const html = renderDiffHtml(head, d);
+    expect(html).toContain("New surface area");
+    expect(html).toContain("Touched hot spots");
+    expect(html).toContain("surface-bars");
+    expect(html).toContain(">a<"); // module 'a' labelled in the footprint bar
+    expect(html).toContain("99"); // the hot-spot score
+  });
 });

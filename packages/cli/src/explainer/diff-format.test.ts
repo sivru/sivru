@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ArchDelta, CycleDelta } from "./diff-types.js";
+import type { DiffContext } from "./diff-context.js";
 import { formatDeltaGithub, formatDeltaText, isEmptyDelta } from "./diff-format.js";
 
 const empty = (): ArchDelta => ({
@@ -60,5 +61,50 @@ describe("formatDeltaGithub — marker + escaping", () => {
     const md = formatDeltaGithub(d);
     expect(md).toContain("**⟳ New dependency cycle**");
     expect(md).not.toMatch(/`a`b`/); // the raw backtick is neutralized
+  });
+});
+
+describe("surface-area + hot-spot enrichment (ctx)", () => {
+  const ctx = (): DiffContext => ({
+    surface: {
+      addedModules: [{ id: "module:new", level: "module", name: "newmod", path: "newmod" }],
+      addedPackages: [],
+      addedSymbolsByModule: [
+        { module: "gateway", count: 268 },
+        { module: "intelligence", count: 34 },
+      ],
+      addedSymbolTotal: 302,
+      changedCount: 154,
+      removedCount: 1,
+    },
+    hotspots: [
+      { ref: { id: "symbol:gw/AgentRunLoop#x", level: "symbol", name: "AgentRunLoop", path: "gw/x.ts" }, hotScore: 162, churn: 40, kind: "changed" },
+    ],
+  });
+
+  it("text shows the footprint by module and the touched hot spots", () => {
+    const d = empty();
+    d.nodes.added = [{ id: "x", level: "symbol", name: "x", path: "gw/x.ts" }];
+    const text = formatDeltaText(d, ctx());
+    expect(text).toContain("surface");
+    expect(text).toContain("gateway 268");
+    expect(text).toContain("hot spots touched");
+    expect(text).toContain("AgentRunLoop");
+  });
+
+  it("github renders New surface area + Touched hot spots sections", () => {
+    const d = empty();
+    d.nodes.added = [{ id: "x", level: "symbol", name: "x", path: "gw/x.ts" }];
+    const md = formatDeltaGithub(d, ctx());
+    expect(md).toContain("**New surface area**");
+    expect(md).toContain("**Touched hot spots**");
+    expect(md).toContain("gateway 268");
+  });
+
+  it("omits the enrichment entirely when no ctx is passed (Slice 1 behavior)", () => {
+    const d = empty();
+    d.edges.added.push({ from: "a", to: "b" });
+    expect(formatDeltaText(d)).not.toContain("surface");
+    expect(formatDeltaGithub(d)).not.toContain("New surface area");
   });
 });

@@ -6,9 +6,17 @@
 // ordered: cycles > new cross-module edges > block changes > node churn, so the
 // most important thing leads. A long cycle is truncated (design review).
 
+import type { DiffContext } from "./diff-context.js";
 import type { ArchDelta, CycleDelta, NodeRef } from "./diff-types.js";
 
 const NO_CHANGE = "No architectural change — this PR is structurally inert.";
+
+/** A compact "module N, module N" footprint line, top-6 + overflow. */
+function moduleFootprint(by: { module: string; count: number }[]): string {
+  const head = by.slice(0, 6).map((b) => `${b.module} ${b.count}`);
+  if (by.length > 6) head.push(`+${by.length - 6} more`);
+  return head.join(", ");
+}
 
 /** Short display name for a node (drop the `level:` prefix noise). */
 const short = (r: NodeRef): string => r.name || r.id;
@@ -37,7 +45,7 @@ export function isEmptyDelta(d: ArchDelta): boolean {
 }
 
 /** Terminal / CI-log text. Impact-ordered; explicit clean signal. */
-export function formatDeltaText(d: ArchDelta): string {
+export function formatDeltaText(d: ArchDelta, ctx?: DiffContext): string {
   const out: string[] = [`Architectural delta vs ${d.baseRef}:`];
   if (isEmptyDelta(d)) {
     out.push(`  ${NO_CHANGE}`);
@@ -64,6 +72,21 @@ export function formatDeltaText(d: ArchDelta): string {
   if (n.added.length || n.removed.length || n.changed.length) {
     out.push(`  nodes     +${n.added.length} added · -${n.removed.length} removed · ~${n.changed.length} changed`);
   }
+  if (ctx) {
+    const s = ctx.surface;
+    if (s.addedSymbolTotal || s.addedPackages.length || s.addedModules.length) {
+      out.push(
+        `  surface   +${s.addedSymbolTotal} symbols · +${s.addedPackages.length} packages · +${s.addedModules.length} modules`,
+      );
+      if (s.addedSymbolsByModule.length) out.push(`            by module: ${moduleFootprint(s.addedSymbolsByModule)}`);
+      const newAreas = [...s.addedModules, ...s.addedPackages].map(short);
+      if (newAreas.length) out.push(`            new: ${newAreas.slice(0, 6).join(", ")}${newAreas.length > 6 ? ` (+${newAreas.length - 6})` : ""}`);
+    }
+    if (ctx.hotspots.length) {
+      out.push(`  hot spots touched (churn × coupling):`);
+      for (const h of ctx.hotspots) out.push(`            ${h.hotScore}  ${short(h.ref)} (${h.kind}, churn ${h.churn})`);
+    }
+  }
   return out.join("\n");
 }
 
@@ -79,7 +102,7 @@ const md = (s: string): string => "`" + s.replace(/`/g, "​`") + "`";
  * workflow can find + replace ONE comment (no per-push spam). Emitted to stdout;
  * sivru never posts it (no GitHub token).
  */
-export function formatDeltaGithub(d: ArchDelta): string {
+export function formatDeltaGithub(d: ArchDelta, ctx?: DiffContext): string {
   const out: string[] = [
     "<!-- sivru-arch-delta -->",
     `### sivru · architectural delta vs ${md(d.baseRef)}`,
@@ -108,6 +131,21 @@ export function formatDeltaGithub(d: ArchDelta): string {
     for (const r of b.changed.slice(0, 8)) out.push(`- changed: ${md(short(r))}`);
     out.push("");
   }
+  if (ctx) {
+    const s = ctx.surface;
+    if (s.addedSymbolTotal || s.addedPackages.length || s.addedModules.length) {
+      out.push(`**New surface area** — +${s.addedSymbolTotal} symbols, +${s.addedPackages.length} packages, +${s.addedModules.length} modules`);
+      if (s.addedSymbolsByModule.length) out.push(`- by module: ${moduleFootprint(s.addedSymbolsByModule)}`);
+      const newAreas = [...s.addedModules, ...s.addedPackages].map((r) => md(short(r)));
+      if (newAreas.length) out.push(`- new: ${newAreas.slice(0, 8).join(", ")}${newAreas.length > 8 ? ` (+${newAreas.length - 8})` : ""}`);
+      out.push("");
+    }
+    if (ctx.hotspots.length) {
+      out.push("**Touched hot spots** _(churn × coupling)_");
+      for (const h of ctx.hotspots) out.push(`- ${md(short(h.ref))} — **${h.hotScore}** (${h.kind}, churn ${h.churn})`);
+      out.push("");
+    }
+  }
   const n = d.nodes;
   out.push(`_${n.added.length} node(s) added · ${n.removed.length} removed · ${n.changed.length} changed (structural)._`);
   out.push("");
@@ -117,8 +155,8 @@ export function formatDeltaGithub(d: ArchDelta): string {
 
 export type DeltaFormat = "text" | "json" | "github";
 
-export function formatDelta(d: ArchDelta, format: DeltaFormat): string {
+export function formatDelta(d: ArchDelta, format: DeltaFormat, ctx?: DiffContext): string {
   if (format === "json") return formatDeltaJson(d);
-  if (format === "github") return formatDeltaGithub(d);
-  return formatDeltaText(d);
+  if (format === "github") return formatDeltaGithub(d, ctx);
+  return formatDeltaText(d, ctx);
 }

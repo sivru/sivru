@@ -23,6 +23,8 @@ export { buildBaseModel } from "./diff-worktree.js";
 export type { BaseModelResult, DiffWorktreeDeps } from "./diff-worktree.js";
 export { formatDelta, formatDeltaText, formatDeltaJson, formatDeltaGithub, isEmptyDelta } from "./diff-format.js";
 export type { DeltaFormat } from "./diff-format.js";
+export { buildDiffContext } from "./diff-context.js";
+export type { DiffContext, SurfaceArea, TouchedHotspot } from "./diff-context.js";
 export { buildDepGraph, findCycleGroups, newCycles } from "./cycles.js";
 // DESIGN-0023 Slice 3: drift (linkage integrity) + the gate.
 export { checkDrift } from "./drift.js";

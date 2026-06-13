@@ -30,6 +30,7 @@ import { writeFile } from "node:fs/promises";
 
 import {
   buildBaseModel,
+  buildDiffContext,
   checkDrift,
   diffModels,
   evaluateGate,
@@ -301,10 +302,13 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
         }
         const head = await projectModel(args.repoRoot);
         const delta = diffModels(base.model, head, base.baseRef);
+        // Surface-area + touched-hot-spot views so a large change shows its real
+        // footprint, not just the structural-delta headline (DESIGN-0023 Slice 2).
+        const diffCtx = buildDiffContext(head, delta);
         if (args.html) {
           // The delta as a standalone, shareable visual: HEAD architecture map
           // with the change overlaid + a text digest (WCAG: tags, not color alone).
-          const html = renderDiffHtml(head, delta);
+          const html = renderDiffHtml(head, delta, diffCtx);
           const outPath = resolvePath(args.out ?? DEFAULT_DIFF_HTML_OUT);
           await writeFile(outPath, html, "utf8");
           process.stdout.write(`Wrote ${outPath} (${Math.round(html.length / 1024)} KB)\n`);
@@ -325,7 +329,7 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
           );
           return result.fired ? 1 : 0;
         }
-        process.stdout.write(formatDelta(delta, args.json ? "json" : args.format) + "\n");
+        process.stdout.write(formatDelta(delta, args.json ? "json" : args.format, diffCtx) + "\n");
         return 0;
       }
       const model = await projectModel(args.repoRoot);

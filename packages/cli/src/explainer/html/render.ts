@@ -15,6 +15,8 @@ import { basename } from "node:path";
 import { SivruExplainError } from "@sivru/search";
 
 import type { ArchDelta, NodeRef } from "../diff-types.js";
+import { buildDiffContext } from "../diff-context.js";
+import type { DiffContext } from "../diff-context.js";
 import { isEmptyDelta } from "../diff-format.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc, jsonIsland } from "./escape.js";
@@ -194,6 +196,14 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .delta-row.removed{border-left-style:dotted;border-left-color:var(--mute)}
 .delta-row code{font-size:12px;color:var(--text)}
 .delta-note{color:var(--mute);font-size:12px;margin-top:18px;font-style:italic}
+.surface-head{color:var(--text);font-size:13px;margin:6px 0}
+.surface-bars{list-style:none;margin:8px 0;padding:0}
+.surface-bars li{display:flex;align-items:center;gap:10px;padding:3px 0}
+.surface-bars .sb-label{flex:0 0 200px;color:var(--text);font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.surface-bars .sb-bar{height:12px;background:var(--accent);border-radius:2px;min-width:2px;opacity:.85}
+.surface-bars .sb-count{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+.surface-new{color:var(--mute);font-size:12px;margin:8px 0}
+.surface-new code{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--accent);font-size:11px}
 .diagram .bar{fill:var(--accent)}
 .diagram .bar-label{fill:var(--text);font-size:12px;text-anchor:end;dominant-baseline:middle}
 .diagram .bar-value{fill:var(--mute);font-size:11px;dominant-baseline:middle}
@@ -349,7 +359,11 @@ function affectedModules(head: ExplainerModel, delta: ArchDelta): Map<string, "a
   return out;
 }
 
-export function renderDiffHtml(head: ExplainerModel, delta: ArchDelta): string {
+export function renderDiffHtml(
+  head: ExplainerModel,
+  delta: ArchDelta,
+  ctx: DiffContext = buildDiffContext(head, delta),
+): string {
   const modules = head.root.children;
   const symbolsOf = (m: ExplainerNode): number =>
     m.children.reduce((n, p) => n + p.children.length, 0);
@@ -413,6 +427,50 @@ export function renderDiffHtml(head: ExplainerModel, delta: ArchDelta): string {
     `<span><span class="delta-tag removed">DEL</span> removed</span>` +
     `</div>`;
 
+  // New surface area — where the change's bulk landed (added modules/packages +
+  // added symbols bucketed by module). The headline above is the high-signal
+  // structural delta; this is the footprint so a large change isn't a bare count.
+  const s = ctx.surface;
+  const hasSurface = s.addedSymbolTotal > 0 || s.addedPackages.length > 0 || s.addedModules.length > 0;
+  const surfaceHtml = hasSurface
+    ? `<h2>New surface area</h2>` +
+      `<p class="surface-head">+${s.addedSymbolTotal} symbols · +${s.addedPackages.length} packages · +${s.addedModules.length} modules · ${s.changedCount} changed · ${s.removedCount} removed</p>` +
+      (s.addedSymbolsByModule.length
+        ? `<ul class="surface-bars">` +
+          (() => {
+            const max = Math.max(1, ...s.addedSymbolsByModule.map((b) => b.count));
+            return s.addedSymbolsByModule
+              .slice(0, 10)
+              .map(
+                (b) =>
+                  `<li><span class="sb-label">${esc(b.module)}</span>` +
+                  `<span class="sb-bar" style="width:${Math.round((b.count / max) * 100)}%"></span>` +
+                  `<span class="sb-count">+${b.count}</span></li>`,
+              )
+              .join("");
+          })() +
+          `</ul>`
+        : "") +
+      ([...s.addedModules, ...s.addedPackages].length
+        ? `<p class="surface-new">new: ${[...s.addedModules, ...s.addedPackages].slice(0, 12).map((r) => `<code>${esc(r.name)}</code>`).join(" ")}</p>`
+        : "")
+    : "";
+
+  // Touched hot-spots — the high-traffic code the change disturbed (churn × coupling).
+  const hotHtml = ctx.hotspots.length
+    ? `<h2>Touched hot spots <span class="muted">— churn × coupling</span></h2>` +
+      `<ol class="attention">` +
+      ctx.hotspots
+        .map(
+          (h) =>
+            `<li><span>${esc(h.ref.name)} <span class="muted">(${h.kind})</span></span>` +
+            `<span class="hot-meta">churn ${h.churn}</span>` +
+            `<span class="hot-score" title="churn × coupling">${h.hotScore}</span></li>`,
+        )
+        .join("") +
+      `</ol>`
+    : "";
+
   const body =
     `<h1>Architectural delta</h1>` +
     `<p class="delta-base">vs <code>${esc(delta.baseRef)}</code></p>` +
@@ -421,6 +479,8 @@ export function renderDiffHtml(head: ExplainerModel, delta: ArchDelta): string {
       : legend +
         (map ? `<h2>Architecture (changes highlighted)</h2><div class="diagram-wrap">${map}</div>` : "") +
         `<h2>What changed</h2>${digest.join("")}` +
+        surfaceHtml +
+        hotHtml +
         `<p class="delta-note">Informational — sivru does not gate on this signal yet (DESIGN-0023).</p>`);
 
   const title = `Architectural delta vs ${delta.baseRef} — sivru`;
