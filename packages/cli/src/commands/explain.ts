@@ -32,6 +32,7 @@ import {
   buildBaseModel,
   buildDiffContext,
   checkDrift,
+  cycleMemberIds,
   diffModels,
   evaluateGate,
   formatDelta,
@@ -40,6 +41,7 @@ import {
   projectModel,
   renderDiffHtml,
   renderHtml,
+  staticBrokenLinkages,
 } from "../explainer/index.js";
 
 /** Warn (not fail) when the generated HTML exceeds this size. */
@@ -334,9 +336,16 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
       }
       const model = await projectModel(args.repoRoot);
       if (args.html) {
+        // Static health annotations (DESIGN-0023): `↻ in a cycle` for dependency-
+        // cycle members, `⚠ drift` for symbols whose @sivru linkage no longer
+        // resolves — drift you can see without a PR.
+        const annotations = {
+          cycleMembers: cycleMemberIds(model),
+          brokenLinkages: await staticBrokenLinkages(model),
+        };
         // renderHtml self-verifies and throws SIVRU-E2011 rather than emit a
         // broken file — so a written file is always a coherent artifact.
-        const html = renderHtml(model);
+        const html = renderHtml(model, annotations);
         const outPath = resolvePath(args.out ?? DEFAULT_HTML_OUT);
         await writeFile(outPath, html, "utf8");
         const kb = Math.round(html.length / 1024);

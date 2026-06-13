@@ -107,3 +107,37 @@ export async function checkDrift(
   unguardable.sort((a, b) => k(a).localeCompare(k(b)));
   return { broken, unguardable };
 }
+
+/**
+ * Node ids carrying an `@sivru` block with at least one BROKEN invariant→test
+ * linkage, across the WHOLE model (not diff-scoped). Drives the `⚠ drift` badge
+ * on the static System page — drift you can see without a PR. One shared symbol
+ * map amortises the resolution (createEnforcementResolver).
+ */
+export async function staticBrokenLinkages(model: ExplainerModel, resolve?: ResolveFn): Promise<Set<string>> {
+  const resolveRef: (ref: ParsedReference) => ReturnType<ResolveFn> = resolve
+    ? (ref) => resolve(ref, model.repoPath)
+    : createEnforcementResolver(model.repoPath);
+  const nodes: ExplainerNode[] = [];
+  const walk = (n: ExplainerNode): void => {
+    nodes.push(n);
+    n.children.forEach(walk);
+  };
+  walk(model.root);
+
+  const broken = new Set<string>();
+  for (const node of nodes) {
+    if (node.block === null) continue;
+    for (const inv of node.block.invariantsV2 ?? []) {
+      if (inv.enforcedBy === null) continue;
+      const parsed = parseEnforcedBy(inv.enforcedBy);
+      if (parsed === null) {
+        broken.add(node.id);
+        continue;
+      }
+      const r = await resolveRef(parsed);
+      if (r.kind === "missing" || (r.kind === "found" && r.skipped)) broken.add(node.id);
+    }
+  }
+  return broken;
+}

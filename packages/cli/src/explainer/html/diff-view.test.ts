@@ -95,6 +95,22 @@ describe("renderDiffHtml", () => {
     expect(html).not.toContain("<script>x</script>");
   });
 
+  it("reduces the map to the changed slice + neighbors on a multi-module repo", () => {
+    // 3 isolated modules; the change touches only module x → map shows x (+ its
+    // neighbors, none here), not the untouched y/z.
+    const m3 = (name: string): ExplainerNode => mod(name, [], 2);
+    const big: ExplainerModel = {
+      ...head,
+      root: { ...head.root, children: [m3("x"), m3("y"), m3("z")] },
+    };
+    const d = emptyDelta();
+    d.blocks.changed.push({ id: "symbol:x/src/f0.ts#s0", level: "symbol", name: "s0", path: "x/src/f0.ts" });
+    const html = renderDiffHtml(big, d);
+    expect(html).toContain("changed slice + neighbors");
+    expect(html).toMatch(/map-name[^>]*>x</); // x is on the map
+    expect(html).not.toMatch(/map-name[^>]*>y</); // y is not (untouched, no edge)
+  });
+
   it("renders the New surface area + Touched hot spots sections for a sizeable change", () => {
     const d = emptyDelta();
     // add symbols under module a; mark one existing hot symbol as changed.

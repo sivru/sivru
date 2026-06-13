@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDepGraph, findCycleGroups, newCycles, type DepGraph } from "./cycles.js";
+import { buildDepGraph, cycleMemberIds, findCycleGroups, newCycles, type DepGraph } from "./cycles.js";
+import type { ExplainerModel, ExplainerNode } from "./types.js";
 
 const g = (edges: Record<string, string[]>): DepGraph => new Map(Object.entries(edges));
+
+const modNode = (id: string, depEdges: string[]): ExplainerNode => ({
+  id,
+  level: "module",
+  name: id,
+  path: id,
+  children: [],
+  derived: { exports: [], importsResolved: [], churn: 0, depEdges, collaborators: [] },
+  block: null,
+});
+const modelOf = (mods: ExplainerNode[]): ExplainerModel => ({
+  schema: 1,
+  repoPath: "/r",
+  stateId: "s",
+  head: "h",
+  root: { id: "system", level: "system", name: "r", path: "", children: mods, derived: { exports: [], importsResolved: [], churn: 0, depEdges: [], collaborators: [] }, block: null },
+  stats: { files: 0, symbols: 0, modules: mods.length },
+});
 
 describe("findCycleGroups (Tarjan)", () => {
   it("a DAG has no cycles", () => {
@@ -63,5 +82,14 @@ describe("newCycles", () => {
     const b = newCycles(base, head);
     expect(a).toEqual(b);
     expect(a[0]!.render).toBe("x → y → z → x");
+  });
+});
+
+describe("cycleMemberIds (static badge source)", () => {
+  it("returns the ids of every node in some cycle, none for a DAG", () => {
+    const cyclic = modelOf([modNode("module:a", ["module:b"]), modNode("module:b", ["module:a"]), modNode("module:c", ["module:a"])]);
+    expect([...cycleMemberIds(cyclic)].sort()).toEqual(["module:a", "module:b"]); // c depends in but isn't in the cycle
+    const dag = modelOf([modNode("module:a", ["module:b"]), modNode("module:b", [])]);
+    expect(cycleMemberIds(dag).size).toBe(0);
   });
 });

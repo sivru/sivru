@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkDrift } from "./drift.js";
+import { checkDrift, staticBrokenLinkages } from "./drift.js";
 import type { ResolveFn } from "./drift.js";
 import type { ArchDelta } from "./diff-types.js";
 import type { ExplainerModel, ExplainerNode, ExplainerDerived } from "./types.js";
@@ -103,5 +103,21 @@ describe("checkDrift", () => {
     });
     expect(called).toBe(false);
     expect(r.broken[0]?.reason).toContain("malformed");
+  });
+});
+
+describe("staticBrokenLinkages (System-page drift badge source)", () => {
+  it("returns ids of all block symbols with a broken linkage, repo-wide (not diff-scoped)", async () => {
+    const m = model([
+      sym("symbol:m/a", block([{ rule: "x", enforcedBy: "a.test.ts::it" }])), // broken (missing)
+      sym("symbol:m/b", block([{ rule: "y", enforcedBy: "b.test.ts::it" }])), // ok (found)
+      sym("symbol:m/c", block([{ rule: "z", enforcedBy: null }])), // unguardable → not "broken"
+    ]);
+    const resolve: ResolveFn = async (ref) =>
+      ref.kind === "file-anchored" && ref.path === "a.test.ts"
+        ? { kind: "missing", reason: "gone" }
+        : { kind: "found", skipped: false };
+    const broken = await staticBrokenLinkages(m, resolve);
+    expect([...broken]).toEqual(["symbol:m/a"]);
   });
 });

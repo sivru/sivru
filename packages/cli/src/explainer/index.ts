@@ -5,6 +5,9 @@
 
 export { buildExplainerModel, projectModel } from "./model.js";
 export { renderHtml, renderDiffHtml } from "./html/render.js";
+export type { StaticAnnotations } from "./html/views.js";
+export { staticBrokenLinkages } from "./drift.js";
+export { cycleMemberIds } from "./cycles.js";
 export { topHotNodes } from "./attention.js";
 export type { HotNode } from "./attention.js";
 export { selfVerify } from "./html/routes.js";

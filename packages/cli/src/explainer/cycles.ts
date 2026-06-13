@@ -12,6 +12,7 @@
 // informational; it does not gate on them.
 
 import type { CycleDelta, DepEdge } from "./diff-types.js";
+import type { ExplainerModel, ExplainerNode } from "./types.js";
 
 /** Adjacency: node id → the ids it depends on. */
 export type DepGraph = Map<string, string[]>;
@@ -88,6 +89,24 @@ export function findCycleGroups(graph: DepGraph): string[][] {
 /** Stable key for a cycle (its member set). */
 function cycleKey(members: string[]): string {
   return members.join("|");
+}
+
+/**
+ * All node ids that participate in SOME dependency cycle in the model (static —
+ * every cycle at HEAD, not just new ones). Drives the `↻ in a cycle` badge on
+ * the static System page. Nodes with no out-edges can't be in a cycle, so only
+ * dep-bearing nodes seed the graph.
+ */
+export function cycleMemberIds(model: ExplainerModel): Set<string> {
+  const nodes: { id: string; depEdges: string[] }[] = [];
+  const walk = (n: ExplainerNode): void => {
+    if (n.derived.depEdges.length > 0) nodes.push({ id: n.id, depEdges: n.derived.depEdges });
+    n.children.forEach(walk);
+  };
+  walk(model.root);
+  const out = new Set<string>();
+  for (const group of findCycleGroups(buildDepGraph(nodes))) for (const id of group) out.add(id);
+  return out;
 }
 
 /** Canonical render: the sorted members as a ring, deterministic across runs. */

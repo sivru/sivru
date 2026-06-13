@@ -1,0 +1,77 @@
+# Example CI workflow — sivru architectural diff + gate on every PR (DESIGN-0023).
+#
+# sivru EMITS the markdown / sets the exit code; CI POSTS the comment and fails
+# the check (credential-free — sivru never needs a GitHub token). Copy this into
+# your repo's `.github/workflows/` and adjust the install + base-ref steps.
+#
+# Two independent jobs so the report always posts even when the gate fails:
+#   report — comment the architectural delta on the PR (informational, never fails)
+#   gate   — fail the check on a new dependency cycle or a broken @sivru linkage
+#
+# REQUIRED: fetch-depth: 0 — sivru builds the base model from the merge-base, so
+# CI must have history. A shallow clone makes the base unfetchable → exit 2.
+
+name: sivru arch-delta
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write   # the report job updates one PR comment
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Install sivru however you ship it (published package, or build from a pin).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g @sivru/cli   # or: pnpm -C path/to/sivru build
+
+      # Emit the PR-comment body. --format=github prepends the hidden marker
+      # `<!-- sivru-arch-delta -->` so the step below updates ONE comment instead
+      # of spamming one per push. Report-only here (no --gate) → always exit 0.
+      - name: Compute architectural delta
+        run: |
+          sivru explain --project --diff --format=github \
+            --base="origin/${{ github.base_ref }}" > delta.md
+          cat delta.md
+
+      - name: Post / update the PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('delta.md', 'utf8');
+            const marker = '<!-- sivru-arch-delta -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g @sivru/cli
+
+      # Exit 0 = clean / all-suppressed · 1 = a new cycle or broken @sivru
+      # invariant->test linkage on a touched symbol · 2 = base could-not-evaluate.
+      # Suppress a known-accepted finding by adding its key to .sivru/gate-allowlist.
+      - name: Architectural gate
+        run: sivru explain --project --diff --gate --base="origin/${{ github.base_ref }}"

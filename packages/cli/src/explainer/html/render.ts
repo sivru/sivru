@@ -24,9 +24,10 @@ import { routeOf, selfVerify } from "./routes.js";
 import { buildSearchIndex } from "./search.js";
 import { renderSystemMap } from "./svg.js";
 import { renderSections } from "./views.js";
+import type { StaticAnnotations } from "./views.js";
 
-export function renderHtml(model: ExplainerModel): string {
-  const sections = renderSections(model);
+export function renderHtml(model: ExplainerModel, annotations?: StaticAnnotations): string {
+  const sections = renderSections(model, annotations);
   const verdict = selfVerify(sections.map((s) => s.html).join(""), model);
   if (!verdict.ok) {
     // Fail loud — never write a broken artifact (SIVRU-E2011).
@@ -151,6 +152,8 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .muted{color:var(--mute)}
 .badge{font-size:11px;color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.badge.cycle{color:var(--error);border-color:var(--error);margin-left:6px}
+.badge.drift{color:var(--warn);border-color:var(--warn);margin-left:6px}
 .attention{list-style:none;margin:8px 0;padding:0;counter-reset:hot}
 .attention li{counter-increment:hot;display:flex;align-items:baseline;gap:10px;padding:5px 8px;border-bottom:1px solid var(--border)}
 .attention li::before{content:counter(hot);color:var(--mute);font-size:11px;font-variant-numeric:tabular-nums;min-width:14px}
@@ -373,10 +376,33 @@ export function renderDiffHtml(
     delta.cycles.added.filter((c) => c.closedBy).map((c) => edgeKey(c.closedBy!.from, c.closedBy!.to)),
   );
 
-  const edges = modules.flatMap((m) => m.derived.depEdges.map((to) => ({ from: m.id, to })));
-  const map = modules.length
+  const allEdges = modules.flatMap((m) => m.derived.depEdges.map((to) => ({ from: m.id, to })));
+
+  // The CHANGED SLICE + 1-hop neighbors (design "UI surfaces"): seed with the
+  // modules the change touched (affected) + the endpoints of new edges / cycle-
+  // closing edges, then pull in each seed's direct dependency neighbors (either
+  // direction). On a small repo this is the whole map; on a large one it focuses
+  // on what moved instead of drawing every module.
+  const seed = new Set<string>(affected.keys());
+  for (const k of [...newEdges, ...cycleEdges]) {
+    const [from, to] = k.split(" ");
+    if (from) seed.add(from);
+    if (to) seed.add(to);
+  }
+  const slice = new Set(seed);
+  for (const e of allEdges) {
+    if (seed.has(e.from)) slice.add(e.to);
+    if (seed.has(e.to)) slice.add(e.from);
+  }
+  // Fallback: nothing structural at module level → show all (still highlights blocks).
+  const shown = slice.size > 0 ? modules.filter((m) => slice.has(m.id)) : modules;
+  const shownIds = new Set(shown.map((m) => m.id));
+  const edges = allEdges.filter((e) => shownIds.has(e.from) && shownIds.has(e.to));
+  const reduced = shown.length < modules.length;
+
+  const map = shown.length
     ? renderSystemMap(
-        modules.map((m) => ({
+        shown.map((m) => ({
           id: m.id,
           name: m.name,
           sub: `${symbolsOf(m)} sym · churn ${m.derived.churn}`,
@@ -477,7 +503,9 @@ export function renderDiffHtml(
     (empty
       ? `<p class="delta-empty">✓ No architectural change — this PR is structurally inert.</p>`
       : legend +
-        (map ? `<h2>Architecture (changes highlighted)</h2><div class="diagram-wrap">${map}</div>` : "") +
+        (map
+          ? `<h2>Architecture <span class="muted">— ${reduced ? "changed slice + neighbors" : "changes highlighted"}</span></h2><div class="diagram-wrap">${map}</div>`
+          : "") +
         `<h2>What changed</h2>${digest.join("")}` +
         surfaceHtml +
         hotHtml +

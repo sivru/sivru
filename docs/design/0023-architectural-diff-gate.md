@@ -6,8 +6,12 @@
 (Slice 1 `8b403fe`, Slice 2 `8583d0a`, Slice 3 `669d9a9`). `sivru explain
 --project --diff [--base] [--format=text|json|github] [--html] [--gate]` ships
 the report, the visual delta + Attention panel, and the cycle/linkage gate with
-a `.sivru/gate-allowlist` escape hatch. Release sequencing (one cut vs.
-v0.14 report → v0.15 gate) is left to `/ship`.
+a `.sivru/gate-allowlist` escape hatch. Post-QA against buildwrightV2 the diff
+view gained surface-area + touched-hot-spot sections (`07a0fea`), the static
+System page gained `↻ in a cycle` / `⚠ drift` health badges, the `--diff --html`
+map was reduced to the changed slice + 1-hop neighbors, and an example PR
+workflow ships at [`docs/examples/arch-delta.yml`](../examples/arch-delta.yml).
+Release sequencing (one cut vs. v0.14 report → v0.15 gate) is left to `/ship`.
 **Implements:** [DESIGN-0022](0022-explainer-reasoning-surface.md) **Move 1**
 (M-A core ∪ M-B) — the differentiated 10x the CEO review named: *"where did
 the code diverge from intent, and block the PR that breaks an invariant."*
