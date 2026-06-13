@@ -28,7 +28,7 @@ import {
 import { formatDiagnostic } from "../lib/diagnostics.js";
 import { writeFile } from "node:fs/promises";
 
-import { projectModel, renderHtml } from "../explainer/index.js";
+import { buildBaseModel, diffModels, formatDelta, projectModel, renderHtml } from "../explainer/index.js";
 
 /** Warn (not fail) when the generated HTML exceeds this size. */
 const HTML_SIZE_WARN_BYTES = 5 * 1024 * 1024;
@@ -57,6 +57,10 @@ type ExplainArgs = {
   html: boolean;
   /** Output path for --html (default ./sivru-explainer.html). */
   out: string | null;
+  /** --project --diff: base ref to diff HEAD against (default: merge-base with the default branch). */
+  base: string | null;
+  /** --project --diff output format. */
+  format: "text" | "json" | "github";
 };
 
 type ParseOk = { kind: "ok"; args: ExplainArgs };
@@ -72,6 +76,8 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let project = false;
   let html = false;
   let out: string | null = null;
+  let base: string | null = null;
+  let format: ExplainArgs["format"] = "text";
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -122,6 +128,25 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
       depth = v;
       continue;
     }
+    if (a.startsWith("--base=")) {
+      base = a.slice("--base=".length);
+      continue;
+    }
+    if (a === "--base") {
+      const next = argv[i + 1];
+      if (next === undefined) return { kind: "err", message: `--base requires a value` };
+      base = next;
+      i++;
+      continue;
+    }
+    if (a.startsWith("--format=")) {
+      const v = a.slice("--format=".length);
+      if (v !== "text" && v !== "json" && v !== "github") {
+        return { kind: "err", message: `invalid --format value: "${v}" (text|json|github)` };
+      }
+      format = v;
+      continue;
+    }
     if (a.startsWith("--repo=")) {
       repoRoot = resolvePath(a.slice("--repo=".length));
       continue;
@@ -154,7 +179,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     return {
       kind: "ok",
-      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out },
+      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out, base, format },
     };
   }
   if (positionals.length === 0) {
@@ -166,7 +191,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   }
   return {
     kind: "ok",
-    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null },
+    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null, base, format },
   };
 }
 
@@ -174,10 +199,16 @@ const USAGE = [
   "sivru explain <path> [--json] [--since=<N>] [--depth=1] [--repo=<dir>]",
   "sivru explain --project [--repo=<dir>]",
   "sivru explain --html [--out=<path>] [--repo=<dir>]",
+  "sivru explain --project --diff [--base=<ref>] [--format=text|json|github]",
   "",
   "  <path>            Repo-relative file path (or path::symbol for region-level)",
   "  --project         Whole-repo projection: emit the explainer model JSON",
   "                    (System → Module → Package → Symbol). Takes no <path>.",
+  "  --diff            (with --project) the architectural delta vs a base ref:",
+  "                    new edges / cycles / @sivru block changes. Exit 0 (report,",
+  "                    no gate); 2 if the base can't be evaluated.",
+  "  --base=<ref>      (--project --diff) base ref (default: merge-base w/ default branch)",
+  "  --format=<f>      (--project --diff) text (default) | json | github (PR-comment markdown)",
   "  --html            Render the projection as one self-contained HTML file",
   "                    (implies --project). Default ./sivru-explainer.html.",
   "  --out=<path>      Output path for --html",
@@ -216,6 +247,21 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
   // JSON; the `--html` projection and feedback loop are later slices.
   if (args.project) {
     try {
+      // DESIGN-0023 Slice 1: the architectural diff of a change. Build the model
+      // at a base ref (via a worktree) + at HEAD, diff them, report. Report-only
+      // in v0.14 — exit 0 on success, 2 when the base can't be evaluated (never
+      // a silent pass); the `--gate` (non-zero on a regression) lands in v0.15.
+      if (args.diff) {
+        const base = await buildBaseModel(args.repoRoot, args.base);
+        if (!base.ok) {
+          process.stderr.write(`sivru explain --project --diff: ${base.reason}\n`);
+          return 2;
+        }
+        const head = await projectModel(args.repoRoot);
+        const delta = diffModels(base.model, head, base.baseRef);
+        process.stdout.write(formatDelta(delta, args.json ? "json" : args.format) + "\n");
+        return 0;
+      }
       const model = await projectModel(args.repoRoot);
       if (args.html) {
         // renderHtml self-verifies and throws SIVRU-E2011 rather than emit a
