@@ -28,7 +28,18 @@ import {
 import { formatDiagnostic } from "../lib/diagnostics.js";
 import { writeFile } from "node:fs/promises";
 
-import { buildBaseModel, diffModels, formatDelta, projectModel, renderDiffHtml, renderHtml } from "../explainer/index.js";
+import {
+  buildBaseModel,
+  checkDrift,
+  diffModels,
+  evaluateGate,
+  formatDelta,
+  formatGateText,
+  loadAllowlist,
+  projectModel,
+  renderDiffHtml,
+  renderHtml,
+} from "../explainer/index.js";
 
 /** Warn (not fail) when the generated HTML exceeds this size. */
 const HTML_SIZE_WARN_BYTES = 5 * 1024 * 1024;
@@ -62,6 +73,8 @@ type ExplainArgs = {
   base: string | null;
   /** --project --diff output format. */
   format: "text" | "json" | "github";
+  /** --project --diff --gate: exit 1 on a gateable regression (new cycle / broken linkage). */
+  gate: boolean;
 };
 
 type ParseOk = { kind: "ok"; args: ExplainArgs };
@@ -79,6 +92,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let out: string | null = null;
   let base: string | null = null;
   let format: ExplainArgs["format"] = "text";
+  let gate = false;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -92,6 +106,12 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
       continue;
     }
     if (a === "--project") {
+      project = true;
+      continue;
+    }
+    if (a === "--gate") {
+      gate = true;
+      diff = true; // the gate is a property of the diff
       project = true;
       continue;
     }
@@ -180,7 +200,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     return {
       kind: "ok",
-      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out, base, format },
+      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out, base, format, gate },
     };
   }
   if (positionals.length === 0) {
@@ -192,7 +212,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   }
   return {
     kind: "ok",
-    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null, base, format },
+    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null, base, format, gate: false },
   };
 }
 
@@ -200,7 +220,7 @@ const USAGE = [
   "sivru explain <path> [--json] [--since=<N>] [--depth=1] [--repo=<dir>]",
   "sivru explain --project [--repo=<dir>]",
   "sivru explain --html [--out=<path>] [--repo=<dir>]",
-  "sivru explain --project --diff [--base=<ref>] [--format=text|json|github]",
+  "sivru explain --project --diff [--base=<ref>] [--format=text|json|github] [--gate]",
   "",
   "  <path>            Repo-relative file path (or path::symbol for region-level)",
   "  --project         Whole-repo projection: emit the explainer model JSON",
@@ -211,6 +231,10 @@ const USAGE = [
   "  --base=<ref>      (--project --diff) base ref (default: merge-base w/ default branch)",
   "  --format=<f>      (--project --diff) text (default) | json | github (PR-comment markdown)",
   "                    With --html, writes the delta as a standalone visual page instead.",
+  "  --gate            (--project --diff) exit 1 on a gateable regression — a new",
+  "                    dependency cycle or a broken @sivru invariant→test linkage on a",
+  "                    touched symbol. Exit 2 if the base can't be evaluated. Suppress",
+  "                    an accepted finding via .sivru/gate-allowlist (one key per line).",
   "  --html            Render the projection as one self-contained HTML file",
   "                    (implies --project). Default ./sivru-explainer.html.",
   "  --out=<path>      Output path for --html",
@@ -269,6 +293,21 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
           await writeFile(outPath, html, "utf8");
           process.stdout.write(`Wrote ${outPath} (${Math.round(html.length / 1024)} KB)\n`);
           return 0;
+        }
+        if (args.gate) {
+          // DESIGN-0023 Slice 3: exit 1 on a gateable regression (new cycle or a
+          // broken @sivru invariant→test linkage on a touched symbol), 0 when
+          // clean or fully suppressed by .sivru/gate-allowlist. (Exit 2 — base
+          // could-not-evaluate — is handled above.) Never a silent pass.
+          const drift = await checkDrift(head, delta);
+          const allowlist = await loadAllowlist(args.repoRoot);
+          const result = evaluateGate(delta, drift, allowlist);
+          process.stdout.write(
+            (args.json
+              ? JSON.stringify({ baseRef: delta.baseRef, ...result, drift })
+              : formatGateText(result, drift, delta.baseRef)) + "\n",
+          );
+          return result.fired ? 1 : 0;
         }
         process.stdout.write(formatDelta(delta, args.json ? "json" : args.format) + "\n");
         return 0;
