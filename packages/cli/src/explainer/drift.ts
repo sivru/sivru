@@ -9,7 +9,7 @@
 // are UNGUARDABLE — reported (never silently passing), never gated. The check
 // does NOT run tests or judge semantics; it verifies the linkage resolves.
 
-import { parseEnforcedBy, resolveEnforcement } from "@sivru/search";
+import { createEnforcementResolver, parseEnforcedBy } from "@sivru/search";
 import type { ParsedReference } from "@sivru/search";
 
 import type { ArchDelta, NodeRef } from "./diff-types.js";
@@ -51,8 +51,15 @@ function touchedIds(delta: ArchDelta): Set<string> {
 export async function checkDrift(
   head: ExplainerModel,
   delta: ArchDelta,
-  resolve: ResolveFn = resolveEnforcement,
+  resolve?: ResolveFn,
 ): Promise<DriftReport> {
+  // Default to a resolver that builds the whole-repo symbol map ONCE and reuses
+  // it for every touched ref — resolveEnforcement rebuilds it per call, so a loop
+  // would be O(refs) full-repo walks on the gate's CI hot path. An injected
+  // `resolve` (tests) is honored verbatim.
+  const resolveRef: (ref: ParsedReference) => ReturnType<ResolveFn> = resolve
+    ? (ref) => resolve(ref, head.repoPath)
+    : createEnforcementResolver(head.repoPath);
   const touched = touchedIds(delta);
   const byId = new Map<string, ExplainerNode>();
   const index = (n: ExplainerNode): void => {
@@ -81,7 +88,7 @@ export async function checkDrift(
         });
         continue;
       }
-      const result = await resolve(parsed, head.repoPath);
+      const result = await resolveRef(parsed);
       if (result.kind === "missing") {
         broken.push({ ref: refOf(node), rule: inv.rule, enforcedBy: inv.enforcedBy, reason: result.reason });
       } else if (result.skipped) {

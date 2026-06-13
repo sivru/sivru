@@ -15,6 +15,7 @@ import { basename } from "node:path";
 import { SivruExplainError } from "@sivru/search";
 
 import type { ArchDelta, NodeRef } from "../diff-types.js";
+import { isEmptyDelta } from "../diff-format.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc, jsonIsland } from "./escape.js";
 import { routeOf, selfVerify } from "./routes.js";
@@ -377,15 +378,7 @@ export function renderDiffHtml(head: ExplainerModel, delta: ArchDelta): string {
       )
     : "";
 
-  const empty =
-    delta.nodes.added.length === 0 &&
-    delta.nodes.removed.length === 0 &&
-    delta.nodes.changed.length === 0 &&
-    delta.edges.added.length === 0 &&
-    delta.cycles.added.length === 0 &&
-    delta.blocks.added.length === 0 &&
-    delta.blocks.changed.length === 0 &&
-    delta.blocks.removed.length === 0;
+  const empty = isEmptyDelta(delta);
 
   const row = (cls: string, tag: string, body: string): string =>
     `<div class="delta-row ${cls}"><span class="delta-tag ${cls}">${tag}</span><span>${body}</span></div>`;

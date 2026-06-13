@@ -92,6 +92,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let out: string | null = null;
   let base: string | null = null;
   let format: ExplainArgs["format"] = "text";
+  let formatSet = false;
   let gate = false;
   const positionals: string[] = [];
 
@@ -166,6 +167,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
         return { kind: "err", message: `invalid --format value: "${v}" (text|json|github)` };
       }
       format = v;
+      formatSet = true;
       continue;
     }
     if (a.startsWith("--repo=")) {
@@ -189,6 +191,20 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
 
   if (out !== null && !html) {
     return { kind: "err", message: "--out only applies to --html" };
+  }
+  // The gate reports a pass/fail exit code; --html writes a visual file. Combining
+  // them would make one silently win — and a gate that silently turns itself off
+  // is worse than no gate (DESIGN-0023). Reject the combination outright.
+  if (gate && html) {
+    return { kind: "err", message: "--gate cannot be combined with --html (use --json for machine-readable gate output)" };
+  }
+  // --format shapes the textual diff report only; with --html or --gate it would
+  // be silently ignored. Fail loud instead of dropping it.
+  if (formatSet && (html || gate)) {
+    return {
+      kind: "err",
+      message: "--format applies to the --project --diff report; it has no effect with --html or --gate (use --json there)",
+    };
   }
   if (project) {
     // Whole-repo projection takes no <path>; reject one so the contract is clear.
