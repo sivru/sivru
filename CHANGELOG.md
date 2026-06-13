@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: pre-1.0 semver. Any breaking change in 0.x.y bumps `x`. Patches `y` are bug-fix only.
 Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
-## [Unreleased]
+## [0.14.0] — 2026-06-14
 
 **Architectural diff + drift gate — the PR surface.** `sivru explain --project
 --diff` builds the [`ExplainerModel`](docs/design/0018-codebase-explainer.md) at
@@ -45,6 +45,25 @@ deterministic, no LLM.
   hatch (one canonical, rotation-independent key per line); a suppressed finding
   is still reported. Exit `0` clean / all-suppressed, `1` fired, `2`
   could-not-evaluate — never a silent off.
+- **Diff footprint + hot spots** — the `--diff` report (text / github / html) now
+  shows where a large change actually landed: added modules/packages by name,
+  added symbols bucketed by module, and the touched symbols ranked by `hotScore`
+  ("this change landed on these high-traffic spots"), instead of collapsing the
+  bulk into a single count.
+- **Static health badges** on the HTML System page — `↻ in a cycle` for modules
+  in a dependency cycle, `⚠ drift` for symbols whose `@sivru` linkage no longer
+  resolves (drift you can see without a PR). Text-first (WCAG 1.4.1).
+- **`--diff --html` map** shows the changed slice + its 1-hop neighbors on a
+  multi-module repo, not the whole map.
+- **Example PR workflow** at [`docs/examples/arch-delta.yml`](docs/examples/arch-delta.yml)
+  — a report job (posts/updates one comment by the marker) + a gate job. sivru
+  emits, CI posts (credential-free).
+
+### Performance
+
+- The drift check builds the whole-repo symbol map once and reuses it across all
+  references (`createEnforcementResolver`), instead of rebuilding it per reference
+  — important on CI, the gate's home.
 
 ## [0.13.0] — 2026-06-11
 

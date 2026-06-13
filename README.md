@@ -32,6 +32,14 @@ test every release must pass: [`GOALS.md`](GOALS.md).
   map. Its **feedback loop** (`sivru feedback apply`) writes a reader's
   corrections straight back to the `@sivru` block in source, so
   understanding compounds in the repo instead of evaporating in a chat.
+- **The architectural diff + gate** — `sivru explain --project --diff`
+  diffs the model across a change and reports what it did to the
+  architecture: new cross-module edges, new dependency cycles, `@sivru`
+  authored-intent changes, the added surface area, and the touched hot
+  spots. `--gate` exits non-zero on a regression worth blocking a PR on (a
+  new cycle, or a broken `@sivru` invariant→test linkage), with a
+  `.sivru/gate-allowlist` escape hatch. Runs on every PR, not just at
+  onboarding.
 - **Observe + self-benchmark** — reads your Claude Code session
   history, shows what the agent is actually doing, surfaces authored
   blocks in a Blocks tab, and benchmarks embedders + rerankers on YOUR
@@ -265,6 +273,12 @@ sivru explain "packages/search/src/rank.ts::rankResults"
 # email — no server, no build step.
 sivru explain --project --repo=/path/to/repo            # the model as JSON
 sivru explain --html --repo=/path/to/repo --out=map.html
+
+# Diff the architecture across a change, and gate a PR on regressions.
+sivru explain --project --diff --base=main              # the delta (text)
+sivru explain --project --diff --format=github          # a PR-comment body
+sivru explain --project --diff --html                   # the delta as a page
+sivru explain --project --diff --gate --base=main       # exit 1 on a regression
 ```
 
 The HTML map has a **feedback mode**: toggle it on, then edit a block's
