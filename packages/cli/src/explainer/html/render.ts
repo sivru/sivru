@@ -383,11 +383,18 @@ export function renderDiffHtml(
   // closing edges, then pull in each seed's direct dependency neighbors (either
   // direction). On a small repo this is the whole map; on a large one it focuses
   // on what moved instead of drawing every module.
+  // Seed from the delta objects directly — never round-trip through edgeKey
+  // strings (a node id can contain a space, which split(" ") would corrupt).
   const seed = new Set<string>(affected.keys());
-  for (const k of [...newEdges, ...cycleEdges]) {
-    const [from, to] = k.split(" ");
-    if (from) seed.add(from);
-    if (to) seed.add(to);
+  for (const e of delta.edges.added) {
+    seed.add(e.from);
+    seed.add(e.to);
+  }
+  for (const c of delta.cycles.added) {
+    if (c.closedBy) {
+      seed.add(c.closedBy.from);
+      seed.add(c.closedBy.to);
+    }
   }
   const slice = new Set(seed);
   for (const e of allEdges) {

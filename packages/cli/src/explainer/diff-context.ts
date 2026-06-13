@@ -57,7 +57,7 @@ export function buildDiffContext(head: ExplainerModel, delta: ArchDelta, hotLimi
         best = m;
       }
     }
-    return best?.name ?? path.split("/")[0] ?? "(root)";
+    return (best?.name ?? path.split("/")[0]) || "(root)"; // `||` so an empty top segment falls back too
   };
 
   const addedSymbols = delta.nodes.added.filter((n) => n.level === "symbol");

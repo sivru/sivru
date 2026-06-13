@@ -111,6 +111,19 @@ describe("renderDiffHtml", () => {
     expect(html).not.toMatch(/map-name[^>]*>y</); // y is not (untouched, no edge)
   });
 
+  it("keeps a new-edge endpoint in the slice even when its id contains a space", () => {
+    // regression: the seed must come from the delta objects, not edgeKey().split(" ").
+    const withSpace = (name: string, depEdges: string[]): ExplainerNode => mod(name, depEdges, 2);
+    const big: ExplainerModel = {
+      ...head,
+      root: { ...head.root, children: [withSpace("my lib", []), withSpace("y", []), withSpace("z", [])] },
+    };
+    const d = emptyDelta();
+    d.edges.added.push({ from: "module:y", to: "module:my lib" });
+    const html = renderDiffHtml(big, d);
+    expect(html).toMatch(/map-name[^>]*>my lib</); // the space-id module is on the map
+  });
+
   it("renders the New surface area + Touched hot spots sections for a sizeable change", () => {
     const d = emptyDelta();
     // add symbols under module a; mark one existing hot symbol as changed.
