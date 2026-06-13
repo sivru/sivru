@@ -14,14 +14,20 @@ import { basename } from "node:path";
 
 import { SivruExplainError } from "@sivru/search";
 
+import type { ArchDelta, NodeRef } from "../diff-types.js";
+import { buildDiffContext } from "../diff-context.js";
+import type { DiffContext } from "../diff-context.js";
+import { isEmptyDelta } from "../diff-format.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc, jsonIsland } from "./escape.js";
 import { routeOf, selfVerify } from "./routes.js";
 import { buildSearchIndex } from "./search.js";
+import { renderSystemMap } from "./svg.js";
 import { renderSections } from "./views.js";
+import type { StaticAnnotations } from "./views.js";
 
-export function renderHtml(model: ExplainerModel): string {
-  const sections = renderSections(model);
+export function renderHtml(model: ExplainerModel, annotations?: StaticAnnotations): string {
+  const sections = renderSections(model, annotations);
   const verdict = selfVerify(sections.map((s) => s.html).join(""), model);
   if (!verdict.ok) {
     // Fail loud — never write a broken artifact (SIVRU-E2011).
@@ -146,6 +152,13 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .muted{color:var(--mute)}
 .badge{font-size:11px;color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.badge.cycle{color:var(--error);border-color:var(--error);margin-left:6px}
+.badge.drift{color:var(--warn);border-color:var(--warn);margin-left:6px}
+.attention{list-style:none;margin:8px 0;padding:0;counter-reset:hot}
+.attention li{counter-increment:hot;display:flex;align-items:baseline;gap:10px;padding:5px 8px;border-bottom:1px solid var(--border)}
+.attention li::before{content:counter(hot);color:var(--mute);font-size:11px;font-variant-numeric:tabular-nums;min-width:14px}
+.attention .hot-meta{color:var(--mute);font-size:12px;margin-left:auto}
+.attention .hot-score{color:var(--accent);font-variant-numeric:tabular-nums;font-size:12px;min-width:36px;text-align:right}
 .facts{display:grid;grid-template-columns:120px 1fr;gap:4px 14px;margin:10px 0}
 .facts dt{color:var(--mute)}
 .facts dd{margin:0}
@@ -166,6 +179,34 @@ table.grid td{border-bottom:1px solid var(--border);padding:6px 8px}
 .diagram .map-sub{fill:var(--mute);font-size:11px;text-anchor:middle}
 .diagram .edge{stroke:var(--mute);stroke-width:1.2;fill:none}
 .diagram .arrow-head{fill:var(--mute)}
+.diagram .map-box.added{stroke:#4ade80;stroke-width:2.5}
+.diagram .map-box.changed{stroke:var(--warn);stroke-width:2;stroke-dasharray:5 3}
+.diagram .edge.new-edge{stroke:#4ade80;stroke-width:2}
+.diagram .edge.cycle-edge{stroke:var(--error);stroke-width:2.5;stroke-dasharray:2 3}
+.delta-empty{color:#4ade80;font-size:15px;margin:18px 0}
+.delta-base{color:var(--mute);font-size:13px;margin:2px 0 16px}
+.delta-legend{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 18px;font-size:12px;color:var(--mute)}
+.delta-legend span{display:inline-flex;align-items:center;gap:5px}
+.delta-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.delta-tag.cycle{color:var(--error);border:1px solid var(--error)}
+.delta-tag.edge{color:#4ade80;border:1px solid #4ade80}
+.delta-tag.block{color:var(--warn);border:1px solid var(--warn)}
+.delta-tag.removed{color:var(--mute);border:1px solid var(--mute)}
+.delta-row{display:flex;gap:10px;align-items:baseline;padding:7px 11px;margin:5px 0;background:var(--panel);border-left:3px solid var(--border)}
+.delta-row.cycle{border-left-style:double;border-left-width:5px;border-left-color:var(--error)}
+.delta-row.edge{border-left-style:solid;border-left-color:#4ade80}
+.delta-row.block{border-left-style:dashed;border-left-color:var(--warn)}
+.delta-row.removed{border-left-style:dotted;border-left-color:var(--mute)}
+.delta-row code{font-size:12px;color:var(--text)}
+.delta-note{color:var(--mute);font-size:12px;margin-top:18px;font-style:italic}
+.surface-head{color:var(--text);font-size:13px;margin:6px 0}
+.surface-bars{list-style:none;margin:8px 0;padding:0}
+.surface-bars li{display:flex;align-items:center;gap:10px;padding:3px 0}
+.surface-bars .sb-label{flex:0 0 200px;color:var(--text);font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.surface-bars .sb-bar{height:12px;background:var(--accent);border-radius:2px;min-width:2px;opacity:.85}
+.surface-bars .sb-count{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+.surface-new{color:var(--mute);font-size:12px;margin:8px 0}
+.surface-new code{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:0 4px;color:var(--accent);font-size:11px}
 .diagram .bar{fill:var(--accent)}
 .diagram .bar-label{fill:var(--text);font-size:12px;text-anchor:end;dominant-baseline:middle}
 .diagram .bar-value{fill:var(--mute);font-size:11px;dominant-baseline:middle}
@@ -286,3 +327,206 @@ export const CLIENT_JS = `
   show(location.hash||'#/');
 })();
 `.trim();
+
+// ── diff view (DESIGN-0023 Slice 2) ──────────────────────────────────────────
+//
+// `sivru explain --project --diff --html` → a standalone page: the HEAD
+// architecture map with the delta overlaid (added/changed modules, new edges,
+// the cycle's closing edge) plus a textual "What changed" digest. Every change
+// is named in the digest with a text tag (NEW/CHG/DEL/⟳CYCLE), so color is never
+// the only signal (WCAG 1.4.1); the map's color + stroke-style is enhancement.
+
+const strip = (id: string): string => id.replace(/^(module|package|symbol):/, "").split("#")[0]!;
+const edgeKey = (from: string, to: string): string => `${from} ${to}`;
+
+/** Which HEAD modules a delta touches, and how (added vs otherwise changed). */
+function affectedModules(head: ExplainerModel, delta: ArchDelta): Map<string, "added" | "changed"> {
+  const modules = head.root.children;
+  const out = new Map<string, "added" | "changed">();
+  const addedIds = new Set(delta.nodes.added.map((r) => r.id));
+  for (const m of modules) if (addedIds.has(m.id)) out.set(m.id, "added");
+  const markByPath = (path: string): void => {
+    for (const m of modules) {
+      if (out.get(m.id) === "added") continue;
+      if (path === m.path || (m.path !== "" && path.startsWith(`${m.path}/`))) out.set(m.id, "changed");
+    }
+  };
+  const touchRefs = (refs: NodeRef[]): void => refs.forEach((r) => markByPath(r.path));
+  touchRefs(delta.nodes.changed.map((c) => c.ref));
+  touchRefs(delta.nodes.removed);
+  touchRefs([...delta.blocks.added, ...delta.blocks.changed, ...delta.blocks.removed]);
+  for (const e of delta.edges.added) {
+    markByPath(strip(e.from));
+    markByPath(strip(e.to));
+  }
+  return out;
+}
+
+export function renderDiffHtml(
+  head: ExplainerModel,
+  delta: ArchDelta,
+  ctx: DiffContext = buildDiffContext(head, delta),
+): string {
+  const modules = head.root.children;
+  const symbolsOf = (m: ExplainerNode): number =>
+    m.children.reduce((n, p) => n + p.children.length, 0);
+  const affected = affectedModules(head, delta);
+  const newEdges = new Set(delta.edges.added.map((e) => edgeKey(e.from, e.to)));
+  const cycleEdges = new Set(
+    delta.cycles.added.filter((c) => c.closedBy).map((c) => edgeKey(c.closedBy!.from, c.closedBy!.to)),
+  );
+
+  const allEdges = modules.flatMap((m) => m.derived.depEdges.map((to) => ({ from: m.id, to })));
+
+  // The CHANGED SLICE + 1-hop neighbors (design "UI surfaces"): seed with the
+  // modules the change touched (affected) + the endpoints of new edges / cycle-
+  // closing edges, then pull in each seed's direct dependency neighbors (either
+  // direction). On a small repo this is the whole map; on a large one it focuses
+  // on what moved instead of drawing every module.
+  // Seed from the delta objects directly — never round-trip through edgeKey
+  // strings (a node id can contain a space, which split(" ") would corrupt).
+  const seed = new Set<string>(affected.keys());
+  for (const e of delta.edges.added) {
+    seed.add(e.from);
+    seed.add(e.to);
+  }
+  for (const c of delta.cycles.added) {
+    if (c.closedBy) {
+      seed.add(c.closedBy.from);
+      seed.add(c.closedBy.to);
+    }
+  }
+  const slice = new Set(seed);
+  for (const e of allEdges) {
+    if (seed.has(e.from)) slice.add(e.to);
+    if (seed.has(e.to)) slice.add(e.from);
+  }
+  // Fallback: nothing structural at module level → show all (still highlights blocks).
+  const shown = slice.size > 0 ? modules.filter((m) => slice.has(m.id)) : modules;
+  const shownIds = new Set(shown.map((m) => m.id));
+  const edges = allEdges.filter((e) => shownIds.has(e.from) && shownIds.has(e.to));
+  const reduced = shown.length < modules.length;
+
+  const map = shown.length
+    ? renderSystemMap(
+        shown.map((m) => ({
+          id: m.id,
+          name: m.name,
+          sub: `${symbolsOf(m)} sym · churn ${m.derived.churn}`,
+          size: symbolsOf(m),
+        })),
+        edges,
+        (id) => routeOf(id),
+        {
+          box: (id) => affected.get(id) ?? null,
+          edge: (from, to) =>
+            cycleEdges.has(edgeKey(from, to)) ? "cycle-edge" : newEdges.has(edgeKey(from, to)) ? "new-edge" : null,
+        },
+      )
+    : "";
+
+  const empty = isEmptyDelta(delta);
+
+  const row = (cls: string, tag: string, body: string): string =>
+    `<div class="delta-row ${cls}"><span class="delta-tag ${cls}">${tag}</span><span>${body}</span></div>`;
+  const code = (s: string): string => `<code>${esc(s)}</code>`;
+
+  const digest: string[] = [];
+  for (const c of delta.cycles.added) {
+    const closing = c.closedBy ? ` — closed by ${code(`${c.closedBy.from} → ${c.closedBy.to}`)}` : "";
+    digest.push(row("cycle", "⟳ CYCLE", `New dependency cycle: ${code(c.render)}${closing}`));
+  }
+  for (const e of delta.edges.added.slice(0, 20)) {
+    digest.push(row("edge", "NEW", `New dependency ${code(`${e.from} → ${e.to}`)}`));
+  }
+  if (delta.edges.added.length > 20) {
+    digest.push(row("edge", "NEW", `… +${delta.edges.added.length - 20} more new edge(s)`));
+  }
+  for (const r of delta.blocks.changed.slice(0, 20)) {
+    digest.push(row("block", "CHG", `Authored block changed on ${code(r.name)}`));
+  }
+  for (const r of delta.blocks.added.slice(0, 20)) {
+    digest.push(row("edge", "NEW", `Authored block added on ${code(r.name)}`));
+  }
+  for (const r of [...delta.nodes.removed, ...delta.blocks.removed].slice(0, 20)) {
+    digest.push(row("removed", "DEL", `Removed ${code(r.name)}`));
+  }
+
+  const legend =
+    `<div class="delta-legend">` +
+    `<span><span class="delta-tag cycle">⟳ CYCLE</span> new cycle</span>` +
+    `<span><span class="delta-tag edge">NEW</span> new edge / block</span>` +
+    `<span><span class="delta-tag block">CHG</span> changed block</span>` +
+    `<span><span class="delta-tag removed">DEL</span> removed</span>` +
+    `</div>`;
+
+  // New surface area — where the change's bulk landed (added modules/packages +
+  // added symbols bucketed by module). The headline above is the high-signal
+  // structural delta; this is the footprint so a large change isn't a bare count.
+  const s = ctx.surface;
+  const hasSurface = s.addedSymbolTotal > 0 || s.addedPackages.length > 0 || s.addedModules.length > 0;
+  const surfaceHtml = hasSurface
+    ? `<h2>New surface area</h2>` +
+      `<p class="surface-head">+${s.addedSymbolTotal} symbols · +${s.addedPackages.length} packages · +${s.addedModules.length} modules · ${s.changedCount} changed · ${s.removedCount} removed</p>` +
+      (s.addedSymbolsByModule.length
+        ? `<ul class="surface-bars">` +
+          (() => {
+            const max = Math.max(1, ...s.addedSymbolsByModule.map((b) => b.count));
+            return s.addedSymbolsByModule
+              .slice(0, 10)
+              .map(
+                (b) =>
+                  `<li><span class="sb-label">${esc(b.module)}</span>` +
+                  `<span class="sb-bar" style="width:${Math.round((b.count / max) * 100)}%"></span>` +
+                  `<span class="sb-count">+${b.count}</span></li>`,
+              )
+              .join("");
+          })() +
+          `</ul>`
+        : "") +
+      ([...s.addedModules, ...s.addedPackages].length
+        ? `<p class="surface-new">new: ${[...s.addedModules, ...s.addedPackages].slice(0, 12).map((r) => `<code>${esc(r.name)}</code>`).join(" ")}</p>`
+        : "")
+    : "";
+
+  // Touched hot-spots — the high-traffic code the change disturbed (churn × coupling).
+  const hotHtml = ctx.hotspots.length
+    ? `<h2>Touched hot spots <span class="muted">— churn × coupling</span></h2>` +
+      `<ol class="attention">` +
+      ctx.hotspots
+        .map(
+          (h) =>
+            `<li><span>${esc(h.ref.name)} <span class="muted">(${h.kind})</span></span>` +
+            `<span class="hot-meta">churn ${h.churn}</span>` +
+            `<span class="hot-score" title="churn × coupling">${h.hotScore}</span></li>`,
+        )
+        .join("") +
+      `</ol>`
+    : "";
+
+  const body =
+    `<h1>Architectural delta</h1>` +
+    `<p class="delta-base">vs <code>${esc(delta.baseRef)}</code></p>` +
+    (empty
+      ? `<p class="delta-empty">✓ No architectural change — this PR is structurally inert.</p>`
+      : legend +
+        (map
+          ? `<h2>Architecture <span class="muted">— ${reduced ? "changed slice + neighbors" : "changes highlighted"}</span></h2><div class="diagram-wrap">${map}</div>`
+          : "") +
+        `<h2>What changed</h2>${digest.join("")}` +
+        surfaceHtml +
+        hotHtml +
+        `<p class="delta-note">Informational — sivru does not gate on this signal yet (DESIGN-0023).</p>`);
+
+  const title = `Architectural delta vs ${delta.baseRef} — sivru`;
+  return (
+    `<!DOCTYPE html>\n<html lang="en"><head>` +
+    `<meta charset="utf-8" />` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
+    `<title>${esc(title)}</title>` +
+    `<style>${THEME_CSS}</style>` +
+    `</head><body>` +
+    `<main id="main" style="margin-left:0;max-width:900px">${body}</main>` +
+    `</body></html>\n`
+  );
+}

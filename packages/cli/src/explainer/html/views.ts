@@ -10,6 +10,7 @@
 //   package → symbol list
 //   symbol  → derived facts + @sivru block (or add-intent affordance) + radial
 
+import { topHotNodes } from "../attention.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc } from "./escape.js";
 import { mdToHtml } from "./markdown.js";
@@ -19,9 +20,22 @@ import { renderBars, renderRadial, renderSystemMap } from "./svg.js";
 /** The narrative stub sentinel prefix from narrative.ts (kept in sync). */
 const STUB_NARRATIVE_PREFIX = "No system narrative yet";
 
+/**
+ * Static health annotations (DESIGN-0023 UI surfaces) computed off the model +
+ * the enforcement resolver, threaded into the views as restrained badges:
+ *   cycleMembers   → `↻ in a cycle`  (a module/package in a dependency cycle)
+ *   brokenLinkages → `⚠ drift`       (a symbol whose @sivru linkage no longer resolves)
+ * The text carries the meaning; color only reinforces (WCAG 1.4.1).
+ */
+export interface StaticAnnotations {
+  cycleMembers: Set<string>;
+  brokenLinkages: Set<string>;
+}
+
 interface Ctx {
   byId: Map<string, ExplainerNode>;
   reverseDeps: Map<string, string[]>; // module id → ids that depend on it
+  ann: StaticAnnotations;
 }
 
 export interface Section {
@@ -29,8 +43,10 @@ export interface Section {
   html: string;
 }
 
+const NO_ANNOTATIONS: StaticAnnotations = { cycleMembers: new Set(), brokenLinkages: new Set() };
+
 /** Render every node in the model into a flat list of sections. */
-export function renderSections(model: ExplainerModel): Section[] {
+export function renderSections(model: ExplainerModel, ann: StaticAnnotations = NO_ANNOTATIONS): Section[] {
   const byId = new Map<string, ExplainerNode>();
   const reverseDeps = new Map<string, string[]>();
   const index = (n: ExplainerNode): void => {
@@ -43,7 +59,7 @@ export function renderSections(model: ExplainerModel): Section[] {
       (reverseDeps.get(dep) ?? reverseDeps.set(dep, []).get(dep)!).push(mod.id);
     }
   }
-  const ctx: Ctx = { byId, reverseDeps };
+  const ctx: Ctx = { byId, reverseDeps, ann };
 
   const sections: Section[] = [];
   const walk = (node: ExplainerNode, ancestors: ExplainerNode[]): void => {
@@ -63,16 +79,16 @@ function renderSection(
   let body: string;
   switch (node.level) {
     case "system":
-      body = renderSystem(node, model);
+      body = renderSystem(node, model, ctx);
       break;
     case "module":
       body = renderModule(node, ctx);
       break;
     case "package":
-      body = renderPackage(node);
+      body = renderPackage(node, ctx);
       break;
     default:
-      body = renderSymbol(node);
+      body = renderSymbol(node, ctx);
   }
   const hidden = node.id === "system" ? "" : " hidden";
   return (
@@ -81,6 +97,16 @@ function renderSection(
     body +
     `</section>`
   );
+}
+
+// ── health badges (cycle / drift) ─────────────────────────────────────────────
+
+/** `↻ in a cycle` / `⚠ drift` chips for a node id, text-first (WCAG 1.4.1). */
+function healthBadges(id: string, ann: StaticAnnotations): string {
+  let out = "";
+  if (ann.cycleMembers.has(id)) out += `<span class="badge cycle" title="member of a dependency cycle">↻ in a cycle</span>`;
+  if (ann.brokenLinkages.has(id)) out += `<span class="badge drift" title="@sivru invariant→test linkage no longer resolves">⚠ drift</span>`;
+  return out;
 }
 
 // ── breadcrumb ────────────────────────────────────────────────────────────────
@@ -96,7 +122,7 @@ function breadcrumb(ancestors: ExplainerNode[], node: ExplainerNode): string {
 
 // ── system ────────────────────────────────────────────────────────────────────
 
-function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
+function renderSystem(node: ExplainerNode, model: ExplainerModel, ctx: Ctx): string {
   const modules = model.root.children;
   const symbolsOf = (m: ExplainerNode): number =>
     m.children.reduce((n, p) => n + p.children.length, 0);
@@ -125,6 +151,23 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
       )
     : "";
 
+  // Attention: where change meets coupling. A short ranked list — the first
+  // place to read in an unfamiliar repo (and the spots a PR most wants review).
+  const hot = topHotNodes(model, 8);
+  const attention = hot.length
+    ? `<h2>Attention <span class="muted">— churn × coupling</span></h2>` +
+      `<ol class="attention">` +
+      hot
+        .map(
+          (h) =>
+            `<li><a href="${routeOf(h.ref.id)}">${esc(h.ref.name)}</a>` +
+            `<span class="hot-meta">${h.churn} churn · ${h.coupling} links</span>` +
+            `<span class="hot-score" title="churn × coupling">${h.hotScore}</span></li>`,
+        )
+        .join("") +
+      `</ol>`
+    : "";
+
   const overview = modules.length
     ? `<p class="overview">${modules.length} modules · ${totalSymbols} load-bearing symbols` +
       (foundation.length
@@ -136,7 +179,7 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
   const rows = modules
     .map(
       (m) =>
-        `<tr><td><a href="${routeOf(m.id)}">${esc(m.name)}</a></td>` +
+        `<tr><td><a href="${routeOf(m.id)}">${esc(m.name)}</a> ${healthBadges(m.id, ctx.ann)}</td>` +
         `<td class="num">${symbolsOf(m)}</td>` +
         `<td class="num">${m.derived.churn}</td>` +
         `<td class="muted">${m.derived.depEdges.map((d) => esc(labelOf(d))).join(", ") || "—"}</td></tr>`,
@@ -159,6 +202,7 @@ function renderSystem(node: ExplainerNode, model: ExplainerModel): string {
     `<h1>${esc(node.name)}</h1>` +
     overview +
     (map ? `<h2>Architecture</h2><div class="diagram-wrap">${map}</div>` : "") +
+    attention +
     `<h2>Modules</h2><table class="grid"><thead><tr><th>Module</th><th class="num">Symbols</th><th class="num">Churn</th><th>Depends on</th></tr></thead><tbody>${rows}</tbody></table>` +
     narrativeBlock +
     narrBtn
@@ -190,7 +234,7 @@ function renderModule(node: ExplainerNode, ctx: Ctx): string {
     .join("");
 
   return (
-    `<h1>${esc(node.name)}</h1>` +
+    `<h1>${esc(node.name)} ${healthBadges(node.id, ctx.ann)}</h1>` +
     `<p class="meta">churn ${node.derived.churn} · ${node.children.length} packages</p>` +
     `<p class="deps"><strong>Depends on:</strong> ${linkList(out)}</p>` +
     `<p class="deps"><strong>Depended on by:</strong> ${linkList(incoming)}</p>` +
@@ -201,17 +245,17 @@ function renderModule(node: ExplainerNode, ctx: Ctx): string {
 
 // ── package ───────────────────────────────────────────────────────────────────
 
-function renderPackage(node: ExplainerNode): string {
+function renderPackage(node: ExplainerNode, ctx: Ctx): string {
   const rows = node.children
     .map(
       (s) =>
-        `<tr><td><a href="${routeOf(s.id)}">${esc(s.name)}</a></td>` +
+        `<tr><td><a href="${routeOf(s.id)}">${esc(s.name)}</a> ${healthBadges(s.id, ctx.ann)}</td>` +
         `<td>${s.block !== null ? '<span class="badge">@sivru</span>' : ""}</td>` +
         `<td class="num">${s.derived.churn}</td></tr>`,
     )
     .join("");
   return (
-    `<h1>${esc(node.name)}</h1>` +
+    `<h1>${esc(node.name)} ${healthBadges(node.id, ctx.ann)}</h1>` +
     `<p class="meta">${node.children.length} symbols · churn ${node.derived.churn}</p>` +
     `<table class="grid"><thead><tr><th>Symbol</th><th>Authored</th><th class="num">Churn</th></tr></thead><tbody>${rows}</tbody></table>`
   );
@@ -219,7 +263,7 @@ function renderPackage(node: ExplainerNode): string {
 
 // ── symbol ────────────────────────────────────────────────────────────────────
 
-function renderSymbol(node: ExplainerNode): string {
+function renderSymbol(node: ExplainerNode, ctx: Ctx): string {
   const d = node.derived;
   const facts =
     `<dl class="facts">` +
@@ -248,7 +292,7 @@ function renderSymbol(node: ExplainerNode): string {
   // never auto-applied) for anything the structured fields can't capture.
   const noteBtn = `<button class="fb-note" data-node-id="${esc(node.id)}" data-path="${esc(node.path)}">+ note</button>`;
 
-  return `<h1><code>${esc(node.name)}</code></h1>` + facts + block + radial + noteBtn;
+  return `<h1><code>${esc(node.name)}</code> ${healthBadges(node.id, ctx.ann)}</h1>` + facts + block + radial + noteBtn;
 }
 
 interface BlockMeta {

@@ -417,6 +417,25 @@ export async function resolveEnforcement(
 }
 
 /**
+ * Build a resolver that AMORTISES the symbol-map walk across many references —
+ * for callers that resolve a batch (the DESIGN-0023 drift gate). `resolveEnforcement`
+ * rebuilds the whole-repo symbol map on every symbol-form ref; calling it in a
+ * loop is O(refs) full-repo walks. This builds the map lazily once (only if a
+ * symbol-form ref is seen) and reuses it; file-anchored refs read their single
+ * file directly. Same `ResolveResult` shape, O(1) repo walks.
+ */
+export function createEnforcementResolver(
+  repoRoot: string,
+): (ref: ParsedReference) => Promise<ResolveResult> {
+  let indexPromise: Promise<EnforcementIndex> | null = null;
+  return async (ref) => {
+    if (ref.kind === "file-anchored") return resolveFileAnchored(ref, repoRoot);
+    if (indexPromise === null) indexPromise = buildSymbolMap(repoRoot);
+    return lookupSymbol(await indexPromise, ref);
+  };
+}
+
+/**
  * Walk every extracted block, find invariants with a non-null
  * `enforced-by`, and emit SIVRU-E230 / E231 diagnostics for each
  * failure. SIVRU-E232 is left to `validateBlock` because it's a

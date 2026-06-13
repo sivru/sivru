@@ -13,6 +13,28 @@ describe("renderSections", () => {
     expect(renderSections(fixtureModel())).toHaveLength(6);
   });
 
+  it("renders cycle / drift health badges when annotations mark a node", () => {
+    const ann = {
+      cycleMembers: new Set(["module:packages/a"]),
+      brokenLinkages: new Set(["symbol:packages/a/src/x.ts#doThing"]),
+    };
+    const secs = renderSections(fixtureModel(), ann);
+    const mod = secs.find((s) => s.id === "module:packages/a")!.html;
+    const sym = secs.find((s) => s.id === "symbol:packages/a/src/x.ts#doThing")!.html;
+    expect(mod).toContain("in a cycle");
+    expect(mod).toContain("badge cycle");
+    expect(sym).toContain("drift");
+    expect(sym).toContain("badge drift");
+    // a clean symbol carries no badge
+    const clean = secs.find((s) => s.id === "symbol:packages/a/src/x.ts#helper")!.html;
+    expect(clean).not.toContain("badge drift");
+  });
+
+  it("renders no health badges by default (annotations omitted)", () => {
+    const mod = renderSections(fixtureModel()).find((s) => s.id === "module:packages/a")!.html;
+    expect(mod).not.toContain("badge cycle");
+  });
+
   it("only the system section is visible by default", () => {
     const sections = renderSections(fixtureModel());
     const system = sections.find((s) => s.id === "system")!.html;

@@ -28,11 +28,26 @@ import {
 import { formatDiagnostic } from "../lib/diagnostics.js";
 import { writeFile } from "node:fs/promises";
 
-import { projectModel, renderHtml } from "../explainer/index.js";
+import {
+  buildBaseModel,
+  buildDiffContext,
+  checkDrift,
+  cycleMemberIds,
+  diffModels,
+  evaluateGate,
+  formatDelta,
+  formatGateText,
+  loadAllowlist,
+  projectModel,
+  renderDiffHtml,
+  renderHtml,
+  staticBrokenLinkages,
+} from "../explainer/index.js";
 
 /** Warn (not fail) when the generated HTML exceeds this size. */
 const HTML_SIZE_WARN_BYTES = 5 * 1024 * 1024;
 const DEFAULT_HTML_OUT = "sivru-explainer.html";
+const DEFAULT_DIFF_HTML_OUT = "sivru-arch-delta.html";
 
 /**
  * Max block-health diagnostics rendered inline in the markdown BLOCKS HEALTH
@@ -57,6 +72,12 @@ type ExplainArgs = {
   html: boolean;
   /** Output path for --html (default ./sivru-explainer.html). */
   out: string | null;
+  /** --project --diff: base ref to diff HEAD against (default: merge-base with the default branch). */
+  base: string | null;
+  /** --project --diff output format. */
+  format: "text" | "json" | "github";
+  /** --project --diff --gate: exit 1 on a gateable regression (new cycle / broken linkage). */
+  gate: boolean;
 };
 
 type ParseOk = { kind: "ok"; args: ExplainArgs };
@@ -72,6 +93,10 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   let project = false;
   let html = false;
   let out: string | null = null;
+  let base: string | null = null;
+  let format: ExplainArgs["format"] = "text";
+  let formatSet = false;
+  let gate = false;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -85,6 +110,12 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
       continue;
     }
     if (a === "--project") {
+      project = true;
+      continue;
+    }
+    if (a === "--gate") {
+      gate = true;
+      diff = true; // the gate is a property of the diff
       project = true;
       continue;
     }
@@ -122,6 +153,26 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
       depth = v;
       continue;
     }
+    if (a.startsWith("--base=")) {
+      base = a.slice("--base=".length);
+      continue;
+    }
+    if (a === "--base") {
+      const next = argv[i + 1];
+      if (next === undefined) return { kind: "err", message: `--base requires a value` };
+      base = next;
+      i++;
+      continue;
+    }
+    if (a.startsWith("--format=")) {
+      const v = a.slice("--format=".length);
+      if (v !== "text" && v !== "json" && v !== "github") {
+        return { kind: "err", message: `invalid --format value: "${v}" (text|json|github)` };
+      }
+      format = v;
+      formatSet = true;
+      continue;
+    }
     if (a.startsWith("--repo=")) {
       repoRoot = resolvePath(a.slice("--repo=".length));
       continue;
@@ -144,6 +195,20 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   if (out !== null && !html) {
     return { kind: "err", message: "--out only applies to --html" };
   }
+  // The gate reports a pass/fail exit code; --html writes a visual file. Combining
+  // them would make one silently win — and a gate that silently turns itself off
+  // is worse than no gate (DESIGN-0023). Reject the combination outright.
+  if (gate && html) {
+    return { kind: "err", message: "--gate cannot be combined with --html (use --json for machine-readable gate output)" };
+  }
+  // --format shapes the textual diff report only; with --html or --gate it would
+  // be silently ignored. Fail loud instead of dropping it.
+  if (formatSet && (html || gate)) {
+    return {
+      kind: "err",
+      message: "--format applies to the --project --diff report; it has no effect with --html or --gate (use --json there)",
+    };
+  }
   if (project) {
     // Whole-repo projection takes no <path>; reject one so the contract is clear.
     if (positionals.length > 0) {
@@ -154,7 +219,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
     }
     return {
       kind: "ok",
-      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out },
+      args: { target: "", repoRoot, sinceDays, depth, diff, json, project: true, html, out, base, format, gate },
     };
   }
   if (positionals.length === 0) {
@@ -166,7 +231,7 @@ export function parseExplainArgs(argv: readonly string[]): ParseOk | ParseErr {
   }
   return {
     kind: "ok",
-    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null },
+    args: { target, repoRoot, sinceDays, depth, diff, json, project: false, html: false, out: null, base, format, gate: false },
   };
 }
 
@@ -174,10 +239,21 @@ const USAGE = [
   "sivru explain <path> [--json] [--since=<N>] [--depth=1] [--repo=<dir>]",
   "sivru explain --project [--repo=<dir>]",
   "sivru explain --html [--out=<path>] [--repo=<dir>]",
+  "sivru explain --project --diff [--base=<ref>] [--format=text|json|github] [--gate]",
   "",
   "  <path>            Repo-relative file path (or path::symbol for region-level)",
   "  --project         Whole-repo projection: emit the explainer model JSON",
   "                    (System → Module → Package → Symbol). Takes no <path>.",
+  "  --diff            (with --project) the architectural delta vs a base ref:",
+  "                    new edges / cycles / @sivru block changes. Exit 0 (report,",
+  "                    no gate); 2 if the base can't be evaluated.",
+  "  --base=<ref>      (--project --diff) base ref (default: merge-base w/ default branch)",
+  "  --format=<f>      (--project --diff) text (default) | json | github (PR-comment markdown)",
+  "                    With --html, writes the delta as a standalone visual page instead.",
+  "  --gate            (--project --diff) exit 1 on a gateable regression — a new",
+  "                    dependency cycle or a broken @sivru invariant→test linkage on a",
+  "                    touched symbol. Exit 2 if the base can't be evaluated. Suppress",
+  "                    an accepted finding via .sivru/gate-allowlist (one key per line).",
   "  --html            Render the projection as one self-contained HTML file",
   "                    (implies --project). Default ./sivru-explainer.html.",
   "  --out=<path>      Output path for --html",
@@ -216,11 +292,60 @@ export async function runExplain(argv: readonly string[]): Promise<number> {
   // JSON; the `--html` projection and feedback loop are later slices.
   if (args.project) {
     try {
+      // DESIGN-0023 Slice 1: the architectural diff of a change. Build the model
+      // at a base ref (via a worktree) + at HEAD, diff them, report. Report-only
+      // in v0.14 — exit 0 on success, 2 when the base can't be evaluated (never
+      // a silent pass); the `--gate` (non-zero on a regression) lands in v0.15.
+      if (args.diff) {
+        const base = await buildBaseModel(args.repoRoot, args.base);
+        if (!base.ok) {
+          process.stderr.write(`sivru explain --project --diff: ${base.reason}\n`);
+          return 2;
+        }
+        const head = await projectModel(args.repoRoot);
+        const delta = diffModels(base.model, head, base.baseRef);
+        // Surface-area + touched-hot-spot views so a large change shows its real
+        // footprint, not just the structural-delta headline (DESIGN-0023 Slice 2).
+        const diffCtx = buildDiffContext(head, delta);
+        if (args.html) {
+          // The delta as a standalone, shareable visual: HEAD architecture map
+          // with the change overlaid + a text digest (WCAG: tags, not color alone).
+          const html = renderDiffHtml(head, delta, diffCtx);
+          const outPath = resolvePath(args.out ?? DEFAULT_DIFF_HTML_OUT);
+          await writeFile(outPath, html, "utf8");
+          process.stdout.write(`Wrote ${outPath} (${Math.round(html.length / 1024)} KB)\n`);
+          return 0;
+        }
+        if (args.gate) {
+          // DESIGN-0023 Slice 3: exit 1 on a gateable regression (new cycle or a
+          // broken @sivru invariant→test linkage on a touched symbol), 0 when
+          // clean or fully suppressed by .sivru/gate-allowlist. (Exit 2 — base
+          // could-not-evaluate — is handled above.) Never a silent pass.
+          const drift = await checkDrift(head, delta);
+          const allowlist = await loadAllowlist(args.repoRoot);
+          const result = evaluateGate(delta, drift, allowlist);
+          process.stdout.write(
+            (args.json
+              ? JSON.stringify({ baseRef: delta.baseRef, ...result, drift })
+              : formatGateText(result, drift, delta.baseRef)) + "\n",
+          );
+          return result.fired ? 1 : 0;
+        }
+        process.stdout.write(formatDelta(delta, args.json ? "json" : args.format, diffCtx) + "\n");
+        return 0;
+      }
       const model = await projectModel(args.repoRoot);
       if (args.html) {
+        // Static health annotations (DESIGN-0023): `↻ in a cycle` for dependency-
+        // cycle members, `⚠ drift` for symbols whose @sivru linkage no longer
+        // resolves — drift you can see without a PR.
+        const annotations = {
+          cycleMembers: cycleMemberIds(model),
+          brokenLinkages: await staticBrokenLinkages(model),
+        };
         // renderHtml self-verifies and throws SIVRU-E2011 rather than emit a
         // broken file — so a written file is always a coherent artifact.
-        const html = renderHtml(model);
+        const html = renderHtml(model, annotations);
         const outPath = resolvePath(args.out ?? DEFAULT_HTML_OUT);
         await writeFile(outPath, html, "utf8");
         const kb = Math.round(html.length / 1024);

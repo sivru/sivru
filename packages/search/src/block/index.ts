@@ -55,10 +55,11 @@ export { wrapYamlError } from "./yaml-errors.js";
 
 export {
   checkEnforcement,
+  createEnforcementResolver,
   parseEnforcedBy,
   resolveEnforcement,
 } from "./enforcement.js";
-export type { ParsedReference } from "./enforcement.js";
+export type { ParsedReference, ResolveResult } from "./enforcement.js";
 
 export { autofixFile, autofixFiles } from "./autofix.js";
 export type { AutofixResult } from "./autofix.js";

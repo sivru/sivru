@@ -122,6 +122,26 @@ describe("parseExplainArgs", () => {
     expect(parseExplainArgs(["--html", "src/foo.ts"]).kind).toBe("err");
   });
 
+  it("accepts --project --diff with --base / --format / --gate", () => {
+    const a = parseExplainArgs(["--project", "--diff", "--base=HEAD~1", "--format=github"]);
+    expect(a.kind).toBe("ok");
+    if (a.kind === "ok") expect(a.args).toMatchObject({ diff: true, base: "HEAD~1", format: "github", gate: false });
+    const g = parseExplainArgs(["--project", "--diff", "--gate"]);
+    expect(g.kind).toBe("ok");
+    if (g.kind === "ok") expect(g.args).toMatchObject({ diff: true, gate: true });
+  });
+
+  it("rejects --gate combined with --html (a gate must never silently no-op)", () => {
+    expect(parseExplainArgs(["--project", "--diff", "--gate", "--html"]).kind).toBe("err");
+  });
+
+  it("rejects --format when it would be silently ignored (--html or --gate)", () => {
+    expect(parseExplainArgs(["--project", "--diff", "--gate", "--format=github"]).kind).toBe("err");
+    expect(parseExplainArgs(["--project", "--diff", "--html", "--format=json"]).kind).toBe("err");
+    // default format (text) is fine with --gate — only an explicit --format is rejected.
+    expect(parseExplainArgs(["--project", "--diff", "--gate"]).kind).toBe("ok");
+  });
+
   it("supports --repo=<dir> shorthand and long form", () => {
     const a = parseExplainArgs(["src/foo.ts", "--repo=/tmp/x"]);
     const b = parseExplainArgs(["src/foo.ts", "--repo", "/tmp/x"]);

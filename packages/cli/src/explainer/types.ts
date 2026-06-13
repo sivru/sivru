@@ -37,6 +37,14 @@ export interface ExplainerDerived {
    * resolved import targets (the callees). Empty at higher levels.
    */
   collaborators: string[];
+  /**
+   * Attention score (DESIGN-0023 Slice 2): churn × coupling — where the
+   * money is. Coupling is in-degree + out-degree over the same-level dep
+   * graph (module/package), or `collaborators.length` at symbol level. A
+   * post-pass sets it once the tree + edges exist; absent (undefined) until
+   * then. Higher = more change landing on more-connected code.
+   */
+  hotScore?: number;
 }
 
 export interface ExplainerNode {

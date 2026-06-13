@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { extractBlocksFromFiles } from "./extract.js";
-import { checkEnforcement, parseEnforcedBy, resolveEnforcement } from "./enforcement.js";
+import { checkEnforcement, createEnforcementResolver, parseEnforcedBy, resolveEnforcement } from "./enforcement.js";
 
 let tmpDir: string;
 
@@ -198,6 +198,34 @@ func TestClearsTenantContext(t *testing.T) {
     );
     expect(result.kind).toBe("found");
     if (result.kind === "found") expect(result.skipped).toBe(false);
+  });
+});
+
+describe("createEnforcementResolver (batched — DESIGN-0023 drift gate)", () => {
+  it("resolves many symbol-form refs against one shared symbol map", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "src", "math.ts"),
+      `export function addsTwo(a: number) { return a + 2; }\nexport function triples(a: number) { return a * 3; }\n`,
+    );
+    const resolve = createEnforcementResolver(tmpDir);
+    const a = await resolve({ kind: "symbol", qualifier: null, name: "addsTwo" });
+    const b = await resolve({ kind: "symbol", qualifier: null, name: "triples" });
+    const c = await resolve({ kind: "symbol", qualifier: null, name: "gone" });
+    expect(a.kind).toBe("found");
+    expect(b.kind).toBe("found");
+    expect(c.kind).toBe("missing");
+  });
+
+  it("matches resolveEnforcement for a file-anchored ref", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "x.test.ts"), `it("holds the line", () => {});\n`);
+    const ref = parseEnforcedBy("src/x.test.ts::holds the line");
+    expect(ref).not.toBeNull();
+    const viaResolver = await createEnforcementResolver(tmpDir)(ref!);
+    const viaOneShot = await resolveEnforcement(ref!, tmpDir);
+    expect(viaResolver).toEqual(viaOneShot);
+    expect(viaResolver.kind).toBe("found");
   });
 });
 

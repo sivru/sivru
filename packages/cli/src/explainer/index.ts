@@ -4,7 +4,12 @@
 // projection). Slice 3 (feedback) adds without reshaping the model contract.
 
 export { buildExplainerModel, projectModel } from "./model.js";
-export { renderHtml } from "./html/render.js";
+export { renderHtml, renderDiffHtml } from "./html/render.js";
+export type { StaticAnnotations } from "./html/views.js";
+export { staticBrokenLinkages } from "./drift.js";
+export { cycleMemberIds } from "./cycles.js";
+export { topHotNodes } from "./attention.js";
+export type { HotNode } from "./attention.js";
 export { selfVerify } from "./html/routes.js";
 export type {
   BuildModelDeps,
@@ -15,6 +20,21 @@ export { loadModelCache, saveModelCache } from "./model-cache.js";
 export { resolveNarrative } from "./narrative.js";
 export type { NarrativeOrigin, ResolvedNarrative } from "./narrative.js";
 export { moduleDirOf, packageSegOf } from "./levels.js";
+// DESIGN-0023: the architectural diff.
+export { diffModels } from "./diff.js";
+export { buildBaseModel } from "./diff-worktree.js";
+export type { BaseModelResult, DiffWorktreeDeps } from "./diff-worktree.js";
+export { formatDelta, formatDeltaText, formatDeltaJson, formatDeltaGithub, isEmptyDelta } from "./diff-format.js";
+export type { DeltaFormat } from "./diff-format.js";
+export { buildDiffContext } from "./diff-context.js";
+export type { DiffContext, SurfaceArea, TouchedHotspot } from "./diff-context.js";
+export { buildDepGraph, findCycleGroups, newCycles } from "./cycles.js";
+// DESIGN-0023 Slice 3: drift (linkage integrity) + the gate.
+export { checkDrift } from "./drift.js";
+export type { DriftReport, BrokenLinkage, Unguardable, ResolveFn } from "./drift.js";
+export { evaluateGate, loadAllowlist, formatGateText } from "./gate.js";
+export type { GateResult, GateFinding } from "./gate.js";
+export type { ArchDelta, CycleDelta, DepEdge, NodeRef, ChangedNode, ChurnDelta } from "./diff-types.js";
 export type {
   ExplainerLevel,
   ExplainerDerived,
