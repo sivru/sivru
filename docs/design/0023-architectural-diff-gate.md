@@ -267,13 +267,17 @@ is the most actionable thing). A `.panel` card:
 ```
 
 - Each row links to the node page. The bar uses `--accent`; the breakdown
-  (`churn × coupling = score`) shows on hover/inline.
+  (`churn × coupling = score`) shows on hover/inline. The panel caps at the top
+  N (default 8); `… N more` is a real **"see full ranking"** affordance (a
+  `<details>` expand), not a dead end.
 - **Chips:** `⚠ drift` (`--warn`) when a symbol's `@sivru` invariant→test linkage
-  is broken (Slice 3); `↻ in a cycle` (`--error`) for a cycle member. Small,
-  not noisy.
-- **Badges** echo on module/symbol tree entries + page headers (a hot-spot dot
-  `--accent` for top-N, a drift dot `--warn`) so the signal follows you as you
-  navigate.
+  is broken (Slice 3); `↻ in a cycle` (`--error`) for a cycle member. The text
+  ("drift" / "in a cycle") carries the meaning; color reinforces (so they read
+  without color too).
+- **Badges (restrained — avoid "everything shouts").** A subtle dot only on the
+  **top-N hot-spot** nodes and only where drift is **actually broken** — not on
+  every tree entry. Hot-spot dot `--accent`, drift dot `--warn`; a tooltip names
+  the reason. The signal follows you without turning the tree into noise.
 - **Empty state** (a feature, not a blank): "Churn and coupling are evenly
   spread — no stand-out hot spots." If not a git repo: "No churn data — run in a
   git repo."
@@ -298,11 +302,27 @@ NEW CYCLE   search → model → search   (closed by model→search)
 +2 edges · 1 block changed (rankResults) · touched hot spot model.ts
 ```
 
-- **Color semantics** (existing tokens): added → `--accent`; changed → `--warn`;
-  removed → `--mute` (dashed/ghost, strikethrough label); a new cycle's edges +
-  members → `--error`.
+- **Delta encoding — never color alone (design review, WCAG 1.4.1).** Every
+  delta element carries a **text tag + a shape/line channel + color**, so it
+  reads in greyscale and for red-green colorblind users:
+  - added → tag `NEW`, accent outline (`--accent` gold).
+  - changed → tag `CHG`, a **cool hue distinct from gold** (a blue/teal token,
+    NOT `--warn` amber — gold≈amber blur), solid outline.
+  - removed → tag `DEL`, `--mute` dashed/ghost outline + strikethrough label.
+  - new cycle → tag `⟳ CYCLE`, `--error` red **doubled** stroke on its edges +
+    members. Edges use line-style too: new edge solid, removed dashed, cycle
+    doubled — so the edge story (the highest-value signal) survives without
+    color.
+  Color is reinforcement, not the sole channel; the legend states all three
+  encodings.
 - The map is the existing layered SVG with delta classes overlaid
-  (`.map-box-new` / `-changed` / `-removed`, `.edge-new` / `.edge-cycle`).
+  (`.map-box-new` / `-changed` / `-removed`, `.edge-new` / `.edge-removed` /
+  `.edge-cycle`), each pairing its color with a tag + line style.
+- **Overflow (this runs on big repos — buildwright is 3.6k files):** a long
+  cycle renders truncated (`a → b → c → … (+47) → a`; full members in the
+  digest/JSON). The map shows the **changed slice + 1-hop neighbors**, not the
+  whole repo; past a threshold (e.g. > 40 changed nodes) it collapses to "large
+  delta — N modules changed, see the digest" rather than lighting up every box.
 - Below the map: the delta as collapsible sections (added/removed/changed nodes,
   new/removed edges, new cycles with the closing edge, block changes, hot-spot
   context), each linking to the node — the digest a human reads, the map the
@@ -449,10 +469,12 @@ real checkout.
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR | SELECTIVE EXPANSION: strategy confirmed (ship as planned); 1 expansion accepted (`--format=github`), 2 UX folded, 1 deferred (HTML diff) |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | run 1: 6 findings (1 fork, 5 folded) + outside voice; run 2 (post-CEO expansion): pinned `--format=github` to a markdown PR comment (annotations deferred to the gate), escaping + update-in-place folded |
+| Design Review | `/plan-design-review` | UI/UX (the 2 visual surfaces) | 1 | CLEAR | 6/10 → 9/10; fork resolved: full non-color encoding (text tag + line-style + color, WCAG 1.4.1); folded overflow (cycle truncation, changed-slice map, "see full ranking") + badge restraint |
 | Outside Voice | Claude subagent (codex account-blocked) | Independent challenge | 1 | issues_found | 3 CRITICAL / 5 MAJOR / 3 MINOR — 1 strategic fork resolved, rest folded |
 
 - **OUTSIDE VOICE (eng review):** read `model.ts` and found the signal-quality + adoption gaps the review missed (parsed-import edge graph C1, module-cycle no-op C2, cold HEAD build C3, concurrency M1, no escape-hatch M3, version skew M4, exit codes M5). Reshaped the gate posture.
 - **CROSS-MODEL TENSION (resolved):** Eng review shipped a cycle gate in Slice 1; outside voice argued the gate is premature on a weak commodity signal. **Chose: Slice 1 = diff report only; `--gate` waits for v0.15 with drift + a baseline.** Granularity/honesty findings folded.
-- **CEO DECISIONS:** ship as planned (over fold-into-one-release / pivot-to-agent-map); **accepted** `--format=github` PR-surfaced output in v0.14 (the report appears on the PR, not just CI logs; sivru emits, CI posts — credential-free); folded the "no architectural change" signal + impact-ordering; deferred the HTML diff view.
+- **CEO DECISIONS:** ship as planned (over fold-into-one-release / pivot-to-agent-map); **accepted** `--format=github` PR-surfaced output in v0.14 (the report appears on the PR, not just CI logs; sivru emits, CI posts — credential-free); folded the "no architectural change" signal + impact-ordering. The HTML diff view was later **un-deferred** (design-fully) and is built in Slice 2.
+- **DESIGN DECISIONS:** the two visual surfaces (Attention panel + `--diff --html`) fully designed (UI surfaces §); the diff encodes added/changed/removed/cycle with a **text tag + line-style + color** (never color alone — WCAG 1.4.1, colorblind-safe; changed hue moved off amber); overflow handled (cycle truncation, changed-slice map, "see full ranking"); badges restrained to top-N / drift-only.
 - **UNRESOLVED:** none.
-- **VERDICT:** CEO + ENG CLEARED — design settled (v0.14 diff report incl. `--format=github` → v0.15 gate+drift), ready to implement Slice 1.
+- **VERDICT:** CEO + ENG + DESIGN CLEARED — fully designed (mechanics + both UI surfaces), ready to execute Slice 1 → 2 → 3.
