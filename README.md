@@ -1,6 +1,30 @@
 # sivru
 
-**The comprehension layer for AI-written code.** Local, MCP-native.
+[![npm](https://img.shields.io/npm/v/@sivru/cli)](https://www.npmjs.com/package/@sivru/cli) [![CI](https://github.com/sivru/sivru/actions/workflows/ci.yml/badge.svg)](https://github.com/sivru/sivru/actions/workflows/ci.yml) [![license: MIT](https://img.shields.io/github/license/sivru/sivru)](LICENSE) ![local-first](https://img.shields.io/badge/network%20egress-none-success) ![MCP](https://img.shields.io/badge/MCP-native-blue)
+
+**The comprehension layer for AI-written code.**
+
+> Your agent just confidently broke something it didn't understand. sivru is the
+> layer that remembers *why* your code is the way it is — and blocks the PR that breaks it.
+
+<!-- DEMO GIF — the map → gate, ~20s. Record it with marketing/demo/STORYBOARD.md,
+     drop it at docs/assets/demo.gif, then this image goes live. Do not merge the
+     README to main until the gif exists (avoids a broken image). -->
+<p align="center">
+  <img src="docs/assets/demo.gif" width="760"
+       alt="sivru maps a repo's authored intent, then blocks a PR where an agent's refactor deleted the test guarding a security decision">
+</p>
+
+```sh
+npm install -g @sivru/cli
+
+# Gate a PR on intent drift — exits non-zero when an agent's change breaks the
+# test guarding an authored @sivru decision (or introduces a dependency cycle):
+sivru explain --project --diff --gate --base=main
+
+# Or just read the repo: the whole-repo map as one offline HTML file.
+sivru explain --html --out=map.html
+```
 
 Code creation is becoming cheap. Code comprehension is becoming
 expensive — and as agents write more of every codebase, the gap shows
