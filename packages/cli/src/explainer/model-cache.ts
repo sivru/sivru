@@ -7,7 +7,7 @@
 // rebuild — the cache is an optimization, never a correctness dependency.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -42,6 +42,34 @@ export async function loadModelCache(
     // Guard against a stale/forward-incompatible on-disk shape.
     if (model.schema !== 1 || model.stateId !== stateId) return null;
     return model;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The most recently written cached model for a repo, ANY stateId (DESIGN-0024,
+ * T6 serve-stale). When the working tree changed since the last build, the
+ * current stateId misses — rather than rebuild inline on the agent's hot path,
+ * `map` serves this last-known model and marks it stale. Returns null when no
+ * cache entry exists for the repo (a genuine cold start, which must build once).
+ */
+export async function loadNewestModelCache(
+  repoPath: string,
+  cacheDir: string = defaultCacheDir(),
+): Promise<ExplainerModel | null> {
+  try {
+    const dir = join(cacheDir, repoSlug(repoPath));
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".json") && !f.includes(".tmp."));
+    if (files.length === 0) return null;
+    let newest: { file: string; mtimeMs: number } | null = null;
+    for (const file of files) {
+      const st = await stat(join(dir, file));
+      if (newest === null || st.mtimeMs > newest.mtimeMs) newest = { file, mtimeMs: st.mtimeMs };
+    }
+    if (newest === null) return null;
+    const model = JSON.parse(await readFile(join(dir, newest.file), "utf8")) as ExplainerModel;
+    return model.schema === 1 ? model : null;
   } catch {
     return null;
   }

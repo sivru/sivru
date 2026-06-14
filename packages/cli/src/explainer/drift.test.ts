@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkDrift, staticBrokenLinkages } from "./drift.js";
+import { checkDrift, staticBrokenLinkages, staticDriftDetail } from "./drift.js";
 import type { ResolveFn } from "./drift.js";
 import type { ArchDelta } from "./diff-types.js";
 import type { ExplainerModel, ExplainerNode, ExplainerDerived } from "./types.js";
@@ -119,5 +119,30 @@ describe("staticBrokenLinkages (System-page drift badge source)", () => {
         : { kind: "found", skipped: false };
     const broken = await staticBrokenLinkages(m, resolve);
     expect([...broken]).toEqual(["symbol:m/a"]);
+  });
+});
+
+describe("staticDriftDetail (DESIGN-0024 — per-node detail for the map slice)", () => {
+  it("keeps the broken + unguardable detail per node, only for nodes with a signal", async () => {
+    const m = model([
+      sym("symbol:m/a", block([{ rule: "x", enforcedBy: "a.test.ts::it" }])), // broken (missing)
+      sym("symbol:m/b", block([{ rule: "y", enforcedBy: "b.test.ts::it" }])), // ok → no entry
+      sym("symbol:m/c", block([{ rule: "z", enforcedBy: null }])), // unguardable
+    ]);
+    const resolve: ResolveFn = async (ref) =>
+      ref.kind === "file-anchored" && ref.path === "a.test.ts"
+        ? { kind: "missing", reason: "gone" }
+        : { kind: "found", skipped: false };
+    const detail = await staticDriftDetail(m, resolve);
+    expect([...detail.keys()].sort()).toEqual(["symbol:m/a", "symbol:m/c"]); // b is clear → absent
+    expect(detail.get("symbol:m/a")!.broken[0]).toMatchObject({ rule: "x", enforcedBy: "a.test.ts::it" });
+    expect(detail.get("symbol:m/c")!.unguardable).toEqual([{ ref: expect.anything(), rule: "z" }]);
+  });
+
+  it("staticBrokenLinkages and staticDriftDetail agree", async () => {
+    const m = model([sym("symbol:m/a", block([{ rule: "x", enforcedBy: "a.test.ts::it" }]))]);
+    const detail = await staticDriftDetail(m, missing);
+    const broken = await staticBrokenLinkages(m, missing);
+    expect([...broken]).toEqual([...detail.keys()].filter((id) => detail.get(id)!.broken.length > 0));
   });
 });

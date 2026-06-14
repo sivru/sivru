@@ -115,6 +115,28 @@ function renderCycle(members: string[]): string {
 }
 
 /**
+ * Map every cycle-member node id → the canonical render of the cycle it sits in
+ * (DESIGN-0024). Same static whole-model graph as `cycleMemberIds`, but keeps the
+ * render so the `map` slice can answer "this module is ALREADY in THIS cycle".
+ * A node in two SCCs (impossible for SCCs, which partition) is not a concern;
+ * each id appears in exactly one group.
+ */
+export function cycleRenders(model: ExplainerModel): Map<string, string> {
+  const nodes: { id: string; depEdges: string[] }[] = [];
+  const walk = (n: ExplainerNode): void => {
+    if (n.derived.depEdges.length > 0) nodes.push({ id: n.id, depEdges: n.derived.depEdges });
+    n.children.forEach(walk);
+  };
+  walk(model.root);
+  const out = new Map<string, string>();
+  for (const group of findCycleGroups(buildDepGraph(nodes))) {
+    const render = renderCycle(group);
+    for (const id of group) out.set(id, render);
+  }
+  return out;
+}
+
+/**
  * Cycles present at head but not at base. For each, identify the edge that
  * closed it: an edge present in head, absent in base, with both endpoints in
  * the cycle (the lex-smallest such edge, for determinism).

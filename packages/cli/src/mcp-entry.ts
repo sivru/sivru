@@ -53,6 +53,10 @@ import {
 } from "@sivru/observe";
 import type { HandlerContext, HandlerResult, FeedbackKind } from "@sivru/observe";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+// DESIGN-0024 — the agent's working map. Reads off the cached ExplainerModel +
+// cached health; the slice assembly lives in ./explainer/agent-map.ts (pure).
+import { mapByPath, mapByTask } from "./explainer/agent-map.js";
+import { loadModelAndHealth } from "./explainer/map-serve.js";
 import { SIVRU_VERSION } from "./commands/version.js";
 
 const SERVER_NAME = "sivru";
@@ -150,6 +154,34 @@ const FIND_RELATED_INPUT_SCHEMA = {
     hybrid: { type: "boolean", default: true },
   },
   required: ["filePath", "startLine", "endLine"],
+};
+
+const MAP_TOOL_NAME = "map";
+// Routing hint: the ORIENT-the-area workflow (DESIGN-0024). Deliberately distinct
+// from SEARCH (locate a file) and EXPLAIN (inspect one symbol) — the three-way
+// routing precondition: "search finds, map orients, explain inspects."
+export const MAP_TOOL_DESCRIPTION =
+  "Orient in the architecture around a target before editing it. One call " +
+  "returns the target's module and role, its 1-hop dependency neighbourhood " +
+  "(what it imports and what imports it — the blast radius), its collaborators, " +
+  "and its descriptive health: hot-spot rank, dependency-cycle membership, and " +
+  "broken `@sivru` invariant->test linkages. Pass `path: \"<file>\"` or " +
+  '`path: "<file>::<symbol>"` (or a separate `symbol`); or pass `task: ' +
+  '"<free text>"` to get ranked candidate targets first, then map a confirmed ' +
+  "one. Sits between search and explain in the before-edit arc: search finds the " +
+  "file, map orients you in the area, explain inspects one symbol's intent. " +
+  "Descriptive only — it reports current state, never predicts what your edit " +
+  "will break (that is `explain diff:true` and the PR gate). The graph is the " +
+  "parsed-import graph at module granularity; dynamic/unparsed imports are invisible.";
+const MAP_INPUT_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    path: { type: "string", minLength: 1 },
+    symbol: { type: "string" },
+    task: { type: "string", minLength: 1 },
+    repoRoot: { type: "string", default: "." },
+  },
+  required: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -898,6 +930,42 @@ async function feedbackReadTool(args: Record<string, unknown>): Promise<ToolResu
   return mcpResult(r);
 }
 
+export async function mapTool(rawArgs: unknown): Promise<ToolResult> {
+  const args = (rawArgs ?? {}) as Record<string, unknown>;
+  const path = typeof args["path"] === "string" ? args["path"] : undefined;
+  const symbol = typeof args["symbol"] === "string" ? args["symbol"] : undefined;
+  const task = typeof args["task"] === "string" ? args["task"] : undefined;
+  const repoRoot = typeof args["repoRoot"] === "string" ? args["repoRoot"] : ".";
+  const absRepo = resolvePath(process.cwd(), repoRoot);
+
+  if (path === undefined && task === undefined) {
+    return fail(
+      JSON.stringify({
+        kind: "error",
+        error:
+          'map requires `path` ("<file>" or "<file>::<symbol>") or `task` ("<free text>")',
+      }),
+    );
+  }
+
+  try {
+    const { model, health, freshAsOf } = await loadModelAndHealth(absRepo);
+    // path wins when both are given (documented contract).
+    if (path !== undefined) {
+      const result = mapByPath(model, health, path, symbol);
+      const body = JSON.stringify({ ...result, freshAsOf }, null, 2);
+      // A did-you-mean error is still an MCP error envelope, but carries candidates.
+      return result.kind === "error" ? fail(body) : ok(body);
+    }
+    const result = mapByTask(model, task!);
+    return ok(JSON.stringify({ ...result, freshAsOf }, null, 2));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`sivru mcp: map error: ${message}\n`);
+    return fail(JSON.stringify({ kind: "error", error: `map failed: ${message}` }));
+  }
+}
+
 export function createMcpServer(opts?: { writable?: boolean }): Server {
   const writable = opts?.writable === true;
   const server = new Server(
@@ -921,6 +989,11 @@ export function createMcpServer(opts?: { writable?: boolean }): Server {
         name: EXPLAIN_TOOL_NAME,
         description: EXPLAIN_TOOL_DESCRIPTION,
         inputSchema: EXPLAIN_INPUT_SCHEMA,
+      },
+      {
+        name: MAP_TOOL_NAME,
+        description: MAP_TOOL_DESCRIPTION,
+        inputSchema: MAP_INPUT_SCHEMA,
       },
       {
         name: CHECKUP_TOOL_NAME,
@@ -960,6 +1033,8 @@ export function createMcpServer(opts?: { writable?: boolean }): Server {
           return await findRelatedTool(args ?? {});
         case EXPLAIN_TOOL_NAME:
           return await explainTool(args ?? {});
+        case MAP_TOOL_NAME:
+          return await mapTool(args ?? {});
         case CHECKUP_TOOL_NAME:
           return await checkupTool(args ?? {});
         case BLOCK_AUTOFIX_TOOL_NAME:

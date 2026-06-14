@@ -16,6 +16,7 @@ export { runBenchModels } from "./bench-models.js";
 export { runConfig } from "./config.js";
 export { runSkill } from "./skill.js";
 export { runExplain } from "./explain.js";
+export { runMap } from "./map.js";
 export { runFeedback } from "./feedback.js";
 export { runBlock } from "./block.js";
 export { runCheckupCmd } from "./checkup.js";
@@ -32,6 +33,7 @@ export type Command =
   | "config"
   | "skill"
   | "explain"
+  | "map"
   | "block"
   | "checkup"
   | "version"

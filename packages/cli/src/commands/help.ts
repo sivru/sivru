@@ -28,6 +28,7 @@ const HELP_TEXT = [
   "  explain <path>              Public API, callers, callees, churn & ownership for one file",
   "  explain --project           Project the whole repo into the System→Module→Package→Symbol model",
   "  explain --html              Render the project model as one self-contained, offline HTML map",
+  "  map <file>[::<symbol>]      Orient before editing: module, neighbours (blast radius) & health",
   "  feedback apply <patch.json> Write an explainer patch back to @sivru blocks / .sivru/explainer.md",
   "  checkup                     Coach-loop: report drift in CLAUDE.md / SKILL.md / agent files",
   "  block validate [path]       Lint every @sivru annotation block under path (default cwd)",

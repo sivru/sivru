@@ -14,6 +14,8 @@ import {
   explainTool,
   FIND_RELATED_TOOL_DESCRIPTION,
   findRelatedTool,
+  MAP_TOOL_DESCRIPTION,
+  mapTool,
   parseExplainArgs,
   SEARCH_TOOL_DESCRIPTION,
   searchTool,
@@ -75,8 +77,13 @@ describe("mcp-entry — tools/list", () => {
         "feedback_append",
         "feedback_read",
         "find_related",
+        "map",
         "search",
       ]);
+
+      const map = result.tools.find((t) => t.name === "map");
+      expect(map?.description).toMatch(/orient in the architecture/i);
+      expect(map?.inputSchema.required).toEqual([]);
 
       const search = result.tools.find((t) => t.name === "search");
       expect(search?.description).toMatch(/semantic \+ lexical code search/i);
@@ -300,6 +307,69 @@ describe("mcp-entry — routing-hint drift guard", () => {
   it("find_related description keeps the after-edit hint", () => {
     expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/after editing/i);
     expect(FIND_RELATED_TOOL_DESCRIPTION).toMatch(/callers/i);
+  });
+
+  // DESIGN-0024 T1: the three-way routing precondition. map must read distinctly
+  // against BOTH search (locate) and explain (inspect), and encode the sequence —
+  // not just differ from explain.
+  it("map description orients (distinct from search/locate and explain/inspect)", () => {
+    expect(MAP_TOOL_DESCRIPTION).toMatch(/orient/i);
+    expect(MAP_TOOL_DESCRIPTION).toMatch(/blast radius|neighbourhood/i);
+    // encodes the arc: search finds, map orients, explain inspects
+    expect(MAP_TOOL_DESCRIPTION).toMatch(/search finds/i);
+    expect(MAP_TOOL_DESCRIPTION).toMatch(/explain inspects/i);
+    // descriptive, never predictive (honesty boundary vs explain --diff / the gate)
+    expect(MAP_TOOL_DESCRIPTION).toMatch(/never predicts/i);
+    // distinct lead verb from explain
+    expect(MAP_TOOL_DESCRIPTION).not.toMatch(/^Get a symbol/);
+  });
+});
+
+describe("mcp-entry — map tool", () => {
+  it("returns kind:error when neither path nor task is given", async () => {
+    const result = await mapTool({ repoRoot: root });
+    expect(result.isError).toBe(true);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as { kind: string; error: string };
+    expect(env.kind).toBe("error");
+    expect(env.error).toMatch(/requires `path`/);
+  });
+
+  it("path → a slice with kind + freshAsOf over a real temp repo", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: root });
+    await write(
+      "src/loop.ts",
+      "export function run(): number { return 1; }\nexport function helper(): number { return 2; }\n",
+    );
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+
+    const result = await mapTool({ path: "src/loop.ts::run", repoRoot: root });
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      kind: string;
+      target: { name: string };
+      freshAsOf: { stale: boolean; note: string };
+    };
+    expect(env.kind).toBe("slice");
+    expect(env.target.name).toBe("run");
+    expect(env.freshAsOf).toBeDefined();
+    expect(typeof env.freshAsOf.note).toBe("string");
+  });
+
+  it("task → candidates first (never auto-orients)", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: root });
+    await write("src/retry.ts", "export function backoff(): number { return 1; }\n");
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+
+    const result = await mapTool({ task: "backoff retry", repoRoot: root });
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as { kind: string };
+    expect(env.kind).toBe("candidates");
   });
 });
 
