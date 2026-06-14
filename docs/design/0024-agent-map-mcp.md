@@ -1,6 +1,7 @@
 # DESIGN-0024: The agent's working map (M-C, the platform layer)
 
-**Status:** Draft <!-- Stub → Draft → Accepted → Implemented → Superseded -->
+**Status:** Draft (CEO-reviewed 2026-06-14, SCOPE EXPANSION → trimmed by the
+outside voice; eng review pending) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Targets:** v0.15.0 (Slice 1).
 **Implements:** [DESIGN-0022](0022-explainer-reasoning-surface.md) **Move 2**
 (M-C) — *"expose the model as the context substrate an agent routes through,
@@ -33,33 +34,52 @@ Nobody else serves authored-intent + architectural health as agent context.
 
 ## Proposal
 
-A new MCP tool — working name **`map`** — that, given the file or symbol an
-agent is about to work on, returns the relevant **slice of the `ExplainerModel`
-plus its health flags**. Deterministic, no network, no LLM: a projection of the
-already-built model, exactly like the rest of the explainer.
+A new MCP tool — working name **`map`** — that, given the file/symbol an agent
+is about to work on (or a free-text task), returns the relevant **slice of the
+`ExplainerModel` plus its descriptive health**. Deterministic, no network, no
+LLM: a projection of the already-built model, exactly like the rest of the
+explainer.
 
 ```
-mcp__sivru__map  { path: "<file>" | "<file>::<symbol>" }
-  → {
+mcp__sivru__map {
+  path?: "<file>" | "<file>::<symbol>",   // target-based entry
+  task?: "<free-text task>"                // task-based entry (returns candidates first)
+}
+  → // path given, or a candidate confirmed:
+    {
       target:       { id, level, name, path, block?, declLine? },
       module:       { name, role?, responsibility?, churn, hotScore, rank },
       dependsOn:    NodeRef[],   // 1-hop: what the target's module imports
       dependedOnBy: NodeRef[],   // 1-hop: what imports it (the blast radius)
       collaborators: string[],   // symbol-level callees ∪ block.collaborators
-      health: {
+      health: {                  // DESCRIPTIVE state, never a prediction (CEO review T1)
         hot:         { score, rank } | null,   // churn × coupling, repo rank
-        inCycle:     { render } | null,        // the module dependency cycle it sits in
-        driftBroken: { rule, enforcedBy, reason }[],  // @sivru linkages that no longer resolve
+        inCycle:     { render } | null,        // the module is ALREADY in this cycle
+        driftBroken: { rule, enforcedBy, reason }[],  // @sivru linkages that DON'T resolve now
         unguardable: { rule }[]                // invariants with enforced-by: null
-      }
+      },
+      authoring?: { stubHint: string }  // present ONLY when target has no @sivru block:
+                                        // surfaces the GAP ("authoring this would let
+                                        // sivru guard it"); does NOT hand over a fill-in
+                                        // stub (CEO review T2 — no machine-authored intent)
     }
+  → // task given (no path): candidates first, the agent confirms before a slice (CEO review T3):
+    { candidates: { ref: NodeRef, score: number }[] }   // never auto-orient on the top hit
 ```
 
 The agent calls it the way a careful engineer orients before a change: *"I'm
 about to edit `AgentRunLoop.run`. What is this, what's around it, and is it
 healthy?"* The tool answers in one call what would otherwise be five greps and
 a guess — and it answers with the **authored intent** (the `@sivru` block) and
-the **M-A health** (hot/cycle/drift), which greps can never surface.
+the **descriptive M-A health** (hot/cycle/drift), which greps can never surface.
+
+**Honesty (CEO review T1).** `health` reports the target's *current* state, never
+a prediction about an edit `map` hasn't seen. The "would my in-progress edit
+break something" check already exists in the right tool — `explain diff:true`
+("shows what an in-progress edit is about to break") — and is *not* duplicated
+here under a name that overclaims. `map` orients; `explain --diff` judges an
+actual edit; the PR gate (DESIGN-0023) blocks a regression. Three honest moments,
+no overlap.
 
 ### What it serves (the slice)
 
@@ -104,6 +124,25 @@ The alternative — a `scope: "symbol" | "module" | "map"` argument on `explain`
 is recorded for review (it keeps the tool count down at the cost of contract
 clarity). The reviews decide.
 
+## Precondition — resolve before building (CEO review T4)
+
+The outside-voice review named the real risk: `map` could overlap `explain`'s
+routing slot ("orient before editing"), and shipping a 5th tool adds *supply*
+without proven *demand* — its value is zero until an agent harness reliably
+routes to it pre-edit. Two cheap checks gate the build:
+
+1. **Routing-hint diff.** Write `map`'s candidate one-sentence description and
+   diff it against the live `EXPLAIN_TOOL_DESCRIPTION` in `mcp-entry.ts`. If the
+   two hints can't be made non-overlapping in one sentence each (orient-the-area
+   vs inspect-the-symbol), fall back to the `scope` arg on `explain` rather than
+   ship two tools competing for one slot.
+2. **Consumption signal.** Confirm agents call the *existing* pre-edit tools
+   (`explain` / `find_related`) at all today. If pre-edit tool use is near-zero,
+   the bottleneck is routing/harness, not a missing tool, and the next design
+   should be the harness hook / SKILL workflow that forces the orient-before-edit
+   arc — not a fifth tool. (Ties to the deferred Cursor/Codex adapters,
+   DESIGN-0010/0011, and the efficacy bench, DESIGN-0013.)
+
 ## Architecture
 
 ```
@@ -129,13 +168,15 @@ agent ──MCP──► map(path)
   exact health passes the static System-page badges already run.
 - The path/symbol resolution + `reverseDeps` already in `renderSections`.
 
-**Cost discipline.** `staticBrokenLinkages` resolves every `@sivru`
-`enforced-by` across the repo (one shared symbol map via
-`createEnforcementResolver` — DESIGN-0023). On a large repo that is a few
-hundred ms on the *first* call and is the only non-trivial cost. Two mitigations
-for review: (a) compute drift lazily and **scope it to the target's module**
-rather than the whole repo, or (b) cache the health passes alongside the model
-(same stateId key). Either keeps `map` sub-second after warm-up.
+**Cost discipline (CEO review — decided: cache with the model).**
+`staticBrokenLinkages` resolves every `@sivru` `enforced-by` across the repo (one
+shared symbol map via `createEnforcementResolver` — DESIGN-0023); `topHotNodes` +
+`cycleMemberIds` are whole-model passes too. `map` is an MCP tool an agent calls
+*liberally* mid-task, so per-call recomputation is a latency smell that would
+suppress the very behavior we want. **Decision:** compute the three health passes
+**once per model build** and cache them under the same stateId key as the model.
+The first `map` call warms the cache (a few hundred ms); every later call is a
+slice lookup (sub-10ms). Whole-repo accuracy, no per-call recompute.
 
 **Honesty (inherited).** The graph is the parsed-import graph at module
 granularity (DESIGN-0023). `inCycle` and the neighbor edges carry the same
@@ -143,35 +184,46 @@ caveat: unparsed/dynamic imports are invisible, and a single-module repo has no
 module cycles. `map` states this in its tool description so the agent doesn't
 over-trust the blast radius.
 
-## Slicing
+## Slicing (CEO-reviewed, SCOPE EXPANSION → trimmed by outside voice)
 
 | Slice | Ships | Scope |
 |------:|-------|-------|
-| 1 | v0.15.0 | The `map` MCP tool, **target-based** (`path` / `path::symbol`): the deterministic model slice + M-A health, off the cached model. The full platform value with zero new engine. A CLI mirror (`sivru explain --project --map=<path>`) for parity + testing. |
-| 2 | later | **Task-based** entry: a free-text task string → semantic selection of the relevant slice (which modules/symbols this task touches) via the existing embedding search, for agents that describe intent before they know the file. |
+| 0 | (precondition) | The routing-hint diff vs `explain` + the consumption signal (above). Gates the build; cheap. |
+| 1 | v0.15.0 | The `map` MCP tool. **Target-based** (`path` / `path::symbol`) AND **task-based with a confirm step** (`task` → top-N candidates with scores → agent confirms → slice; never auto-orient on the top hit, CEO review T3). The deterministic slice (block + module + 1-hop neighbors + collaborators, neighbors capped with "+N more") + **descriptive `health`** (hot / inCycle / driftBroken / unguardable) off the **cached** health passes. The **surface-the-gap** authoring hint (no fill-in stub, CEO review T2). A CLI mirror (`sivru explain --project --map=<path>`) for parity + testing. |
 
-## NOT in scope
+**Output budget.** Neighbors + collaborators are capped (default depth 1) with a
+`+N more` overflow, like the diff view — a slice that floods the agent's context
+is a slice it stops calling.
+
+## NOT in scope (CEO review)
 
 - **Any LLM.** `map` is a projection of the authored model, never a generated
   summary. (LLM narratives remain deferred — DESIGN-0022 "Deferred".)
-- **Free-text task routing** — Slice 2; Slice 1 is target-based only.
-- **Writing / steering through the tool.** `map` is read-only orientation. The
-  PR gate is M-B (DESIGN-0023); authoring is the feedback loop (DESIGN-0018
-  Slice 3). `map` does not mutate.
-- **A new health metric.** `map` serves the M-A signals that already exist; it
-  does not invent new ones (that was the deferred "full metric suite").
+- **A predictive `wouldRegress` signal** (CEO review T1). Pre-edit, `map` has no
+  edit to judge; predicting a regression from static state is a false-positive
+  engine and a duplicate of `explain diff:true`. `map` reports descriptive health
+  only; the edit-aware judgment stays in `explain --diff` and the PR gate.
+- **Handing the agent an `@sivru` fill-in stub** (CEO review T2). `map` surfaces
+  the *gap* ("no `@sivru` here") but never solicits machine-authored intent into
+  the human-authored trust layer. Agent-assisted authoring — *with* provenance
+  marking (`@sivru source: agent-drafted`) and a human-confirm step — is its own
+  future design, not a free rider on `map`.
+- **Cross-agent reach proof** (CEO review E4 → TODOS). Verifying `map` serves a
+  non-Claude MCP client is the Cursor/Codex adapter work (DESIGN-0010/0011); the
+  MCP tool is already client-neutral.
+- **Auto-orienting on a task's top semantic hit** (CEO review T3). A wrong hit
+  silently mis-grounds the agent; task-entry always confirms a candidate first.
+- **A new health metric.** `map` serves the M-A signals that already exist.
 
-## Open questions
+## Open questions (for eng review)
 
-- **New method vs. `scope` arg on `explain`** — proposed new method; reviews decide.
 - **Tool name** — `map` / `orient` / `context_map` / `architecture`. `map` is
-  short and matches the mental model; `orient` names the verb. Bikeshed for review.
-- **Slice size** — 1-hop neighbors (proposed) vs 2-hop. 1-hop is the blast
-  radius; 2-hop risks flooding the agent's context. Cap + "+N more" like the diff.
-- **Drift cost** — whole-repo `staticBrokenLinkages` per call vs module-scoped vs
-  cached-with-model. Leaning module-scoped for latency; confirm in eng review.
+  short and matches the mental model; `orient` names the verb.
 - **Symbol-less targets** — `map` on a file with no load-bearing symbol returns
   the module/package slice; confirm that is the right fallback.
+- **Candidate count** for task-entry — how many top-N candidates to return before
+  the confirm (3? 5?), and the score threshold below which it says "no clear
+  target, here's what I found."
 
 ## Relationship to existing designs
 
@@ -183,3 +235,40 @@ over-trust the blast radius.
 - **DESIGN-0003/0004** — `map` joins the MCP tool family (`search`, `explain`,
   `checkup`, `find_related`); composes with `explain` (per-symbol intent) and
   `find_related` (callers/tests) rather than replacing either.
+
+## Implementation Tasks
+
+Synthesized from the CEO review. Each derives from a specific finding.
+
+- [ ] **T1 (P1, human: ~1h / CC: ~10min)** — mcp-entry — Routing-hint diff (precondition)
+  - Surfaced by: outside voice F1/T4 — `map` may overlap `explain`'s routing slot.
+  - Write `map`'s candidate description; diff vs the live `EXPLAIN_TOOL_DESCRIPTION`. If not non-overlapping in one sentence each, fall back to a `scope` arg on `explain`.
+  - Verify: the two descriptions read as distinct moments (orient-area vs inspect-symbol).
+- [ ] **T2 (P1, human: ~half day / CC: ~20min)** — explainer — Cache the 3 health passes with the model
+  - Surfaced by: Section 1/7 — per-call whole-repo drift is an MCP latency smell.
+  - Compute `topHotNodes` + `cycleMemberIds` + `staticBrokenLinkages` once per build; cache under the stateId key.
+  - Verify: 2nd `map` call is sub-10ms; cache invalidates on working-tree change.
+- [ ] **T3 (P1, human: ~1 day / CC: ~30min)** — mcp-entry/explainer — The `map` tool + slice assembler
+  - Surfaced by: the core proposal. target-based + task-based(confirm) entry; slice (block + module + 1-hop neighbors capped + collaborators) + descriptive health + surface-the-gap authoring hint.
+  - Verify: `map { path }` returns the slice; `map { task }` returns candidates-first.
+- [ ] **T4 (P2, human: ~2h / CC: ~10min)** — explainer — Share neighbor logic with the diff
+  - Surfaced by: Section 5 DRY — `affectedModules` / `reverseDeps` overlap.
+  - Verify: one helper builds the 1-hop neighborhood for both `--diff --html` and `map`.
+- [ ] **T5 (P2, human: ~2h / CC: ~10min)** — mcp-entry — Error contract + output cap
+  - Surfaced by: Section 2/4 — unresolved path, empty model, no task match, oversized slice.
+  - Structured `{error}` like `explain`; neighbors/collaborators capped with `+N more`.
+
+_No new tasks from Sections 3 (security — map returns repo content the agent already reads), 8 (observability — standard MCP call logging), 9 (deploy — ships in @sivru/cli, no migration, reversible), 11 (design — no GUI; the JSON shape is the agent's UX)._
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | issues_resolved | SCOPE EXPANSION: 4 expansions accepted, then 3 trimmed + 1 reframed by the outside voice; 1 architecture fork (health latency → cache) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | pending |
+| Outside Voice | Claude subagent | Independent challenge | 1 | issues_found | 7 findings, verdict "trim-to-minimal"; 4 cross-model tensions all resolved toward the trim |
+
+- **OUTSIDE VOICE:** challenged the EXPANSION scope hard — `wouldRegress` dishonest pre-edit (→ reframed to descriptive health), authoring stub breaks the human-authored brand (→ softened to surface-the-gap), task-entry risks silent mis-grounding (→ top-N confirm), and supply-before-demand (→ added a consumption precondition).
+- **CROSS-MODEL:** the outside voice and the review agreed on the latency fix (cache health with the model). The 4 tensions were the user's calls; all resolved toward the trim.
+- **UNRESOLVED:** 0 (3 open questions remain for eng review: tool name, symbol-less fallback, candidate count).
+- **VERDICT:** CEO CLEARED (scope reconciled). Eng review required before implementation.
