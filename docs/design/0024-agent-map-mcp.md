@@ -1,7 +1,7 @@
 # DESIGN-0024: The agent's working map (M-C, the platform layer)
 
-**Status:** Accepted (CEO + Eng + DX reviewed 2026-06-14; SCOPE EXPANSION → trimmed by
-the outside voice → eng-hardened → DX-polished on the agent-facing contract)
+**Status:** Implemented (v0.15.0; CEO + Eng + DX reviewed 2026-06-14; SCOPE EXPANSION
+→ trimmed by the outside voice → eng-hardened → DX-polished → /code-review hardened)
 <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Targets:** v0.15.0 (Slice 1).
 **Implements:** [DESIGN-0022](0022-explainer-reasoning-surface.md) **Move 2**

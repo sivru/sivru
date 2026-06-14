@@ -5,6 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: pre-1.0 semver. Any breaking change in 0.x.y bumps `x`. Patches `y` are bug-fix only.
 Breaking changes are prefixed `BREAKING:` per DESIGN.md §21.10.
 
+## [0.15.0] — 2026-06-14
+
+**The agent's working map — the platform layer.** A new `map` MCP tool (and a
+`sivru map` CLI mirror) hands a coding agent the relevant slice of the
+[`ExplainerModel`](docs/design/0018-codebase-explainer.md) *before* it edits:
+the target's authored `@sivru` intent, its containing module + role, the 1-hop
+dependency neighbourhood (what it imports and what imports it — the blast
+radius), its collaborators, and its descriptive M-A health (hot-spot rank,
+dependency-cycle membership, broken invariant→test linkages). The explainer
+stops being a human-only CLI artifact and becomes a substrate *other* coding
+agents route through. Implements [DESIGN-0024](docs/design/0024-agent-map-mcp.md)
+(DESIGN-0022 Move 2 / M-C); deterministic, no LLM, no network.
+
+### Added
+
+- **`map` MCP tool** — `map { path: "<file>" | "<file>::<symbol>", symbol?,
+  task? }`. Target-based entry returns the slice; task-based entry returns
+  ranked candidate targets first (the agent confirms — it never auto-orients on
+  a guess). Every response carries a `kind` discriminator (`slice` |
+  `candidates` | `error`) so the agent branches on one field. An unresolved
+  path returns did-you-mean `candidates`, never a dead end. The routing hint
+  sits between `search` (locate) and `explain` (inspect): search finds, map
+  orients, explain inspects. Descriptive only — it never predicts what an edit
+  will break (that stays `explain --diff` + the PR gate).
+- **`sivru map <file>[::<symbol>]` / `sivru map --task "<text>"`** — the CLI
+  mirror, its own top-level subcommand (parity with the MCP tool and with
+  `find-related`). `--json` emits the raw slice an agent sees.
+- **Cached descriptive health** — the three M-A passes (hot-spot rank,
+  dependency-cycle membership, broken/unguardable `@sivru` linkages) are
+  computed once per model build and cached under the stateId key, so a liberal
+  mid-task caller pays the build cost once.
+- **Serve-stale + legible `freshAsOf`** — under active editing `map` serves the
+  last cached model and stamps `freshAsOf { sha, dirty, stale, note }` rather
+  than rebuilding inline on the agent's hot path; the marker says, in words,
+  whether the slice reflects the latest edit yet.
+
+### Changed
+
+- The sivru skill (`SKILL.md`) now teaches the orient-before-edit arc:
+  search → map → explain → edit → find_related.
+
 ## [0.14.0] — 2026-06-14
 
 **Architectural diff + drift gate — the PR surface.** `sivru explain --project

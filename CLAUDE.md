@@ -101,7 +101,8 @@ See [`ROADMAP.md`](ROADMAP.md) for direction.
 - `sivru completion` + `sivru bench tthw`
 - Drift + hot spots + PR-diff gate — `explain --project --diff` +
   `--gate` (DESIGN-0022 M-A∪M-B; next planned release).
-- Agent map over MCP — task/symbol-scoped model slice (DESIGN-0022 M-C).
+- ~~Agent map over MCP — task/symbol-scoped model slice (DESIGN-0022 M-C).~~
+  Shipped v0.15.0 — `map` MCP tool + `sivru map` CLI ([DESIGN-0024](docs/design/0024-agent-map-mcp.md)).
 - Authored-story — deterministic system narrative from `@sivru` intent
   (DESIGN-0022 M-D).
 - Coach loop v2 — looped-on-error (DESIGN-0006).
