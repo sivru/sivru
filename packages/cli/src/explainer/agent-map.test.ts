@@ -226,6 +226,12 @@ describe("mapByTask", () => {
     expect(r.candidates).toEqual([]);
     expect(r.hint).toMatch(/no clear target/);
   });
+  it("a natural-language task resolves past filler words (stopwords)", () => {
+    // "where ... is handled" are all stopwords; ranking keys on "doThing".
+    const r = mapByTask(model, "where is doThing handled");
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(r.candidates.some((c) => c.ref.name === "doThing")).toBe(true);
+  });
 });
 
 describe("mapByPath did-you-mean", () => {

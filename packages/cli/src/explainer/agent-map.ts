@@ -175,6 +175,23 @@ function tokenise(s: string): string[] {
     .filter((t) => t.length > 0);
 }
 
+// Filler words a free-text TASK query carries that no code identifier matches.
+// Dropping them from the query (not the haystack) keeps the denominator honest,
+// so "where dependency cycles are detected" scores on "dependency"/"cycles", not
+// diluted by "where"/"are". Lexical Slice-1 ranking; semantic is a future upgrade.
+// Pure grammatical filler only — deliberately NOT code-ish words like do/get/set/
+// find/handle, which appear in real identifiers (doThing, getUser, findCycleGroups).
+const STOPWORDS = new Set([
+  "where", "what", "which", "how", "the", "an", "is", "are", "was", "were", "be",
+  "to", "of", "in", "on", "for", "and", "or", "does", "this", "that", "it", "we",
+  "when", "with", "from", "by", "at", "as",
+]);
+
+/** Meaningful query tokens: camelCase-split, lowercased, stopwords + 1-char dropped. */
+function queryTokensOf(query: string): string[] {
+  return tokenise(query).filter((t) => t.length > 1 && !STOPWORDS.has(t));
+}
+
 function scoreNode(queryTokens: string[], queryRaw: string, node: ExplainerNode): number {
   if (queryTokens.length === 0) return 0;
   const hay = `${node.name} ${node.path} ${node.id}`.toLowerCase();
@@ -201,7 +218,7 @@ export function rankCandidates(
   floor: number = MAP_CANDIDATE_FLOOR,
 ): Candidate[] {
   const { all } = indexModel(model);
-  const queryTokens = tokenise(query);
+  const queryTokens = queryTokensOf(query);
   const queryRaw = query.trim().replace(/\\/g, "/");
   const levelRank = (lvl: string): number => (lvl === "symbol" ? 3 : lvl === "package" ? 2 : 1);
   return all
