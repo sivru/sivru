@@ -14,6 +14,15 @@ import type { NodeRef } from "./diff-types.js";
 import { healthOf, type ModelHealth, type NodeHealth } from "./health.js";
 import type { ExplainerModel, ExplainerNode } from "./types.js";
 
+// Stable error codes for the map contract (CLAUDE.md: every error gets a
+// SIVRU-ENNN code; codes are stable, never renumbered).
+/** A `path` target did not resolve to a node (did-you-mean candidates follow). */
+export const MAP_ERR_NO_TARGET = "SIVRU-E249";
+/** Neither `path` nor `task` was supplied. */
+export const MAP_ERR_MISSING_ARGS = "SIVRU-E250";
+/** An unexpected failure while building the slice. */
+export const MAP_ERR_FAILED = "SIVRU-E251";
+
 /** Default neighbour/collaborator cap before "+N more" overflow (DESIGN-0024). */
 export const MAP_NEIGHBOR_CAP = 12;
 /** Default number of task / did-you-mean candidates returned. */
@@ -278,13 +287,13 @@ export function buildMapSlice(
   const dependsOnRaw: NodeRef[] = [];
   const dependedOnByRaw: NodeRef[] = [];
   if (moduleNode !== null) {
-    const block = moduleNode.block as { role?: unknown; responsibility?: unknown } | null;
+    const block = moduleNode.block; // SivruBlockJSON | null — role/responsibility are typed strings
     const moduleHot = healthOf(health, moduleNode.id).hot;
     moduleInfo = {
       name: moduleNode.name,
       churn: moduleNode.derived.churn,
-      ...(typeof block?.role === "string" ? { role: block.role } : {}),
-      ...(typeof block?.responsibility === "string" ? { responsibility: block.responsibility } : {}),
+      ...(block !== null && block.role.length > 0 ? { role: block.role } : {}),
+      ...(block !== null && block.responsibility.length > 0 ? { responsibility: block.responsibility } : {}),
       ...(moduleNode.derived.hotScore !== undefined ? { hotScore: moduleNode.derived.hotScore } : {}),
       ...(moduleHot !== null ? { rank: moduleHot.rank } : {}),
     };
@@ -340,7 +349,7 @@ export function mapByPath(
     const candidates = rankCandidates(model, symbol !== undefined ? `${rawPath} ${symbol}` : rawPath);
     return {
       kind: "error",
-      error: `no such target: ${symbol !== undefined ? `${rawPath}::${symbol}` : rawPath}`,
+      error: `${MAP_ERR_NO_TARGET}: no such target: ${symbol !== undefined ? `${rawPath}::${symbol}` : rawPath}`,
       ...(candidates.length > 0 ? { candidates, hint: "closest matches" } : { hint: "no close matches" }),
     };
   }

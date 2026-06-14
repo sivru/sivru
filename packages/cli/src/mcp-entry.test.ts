@@ -361,6 +361,27 @@ describe("mcp-entry — map tool", () => {
     expect(env.freshAsOf.stale).toBe(false);
   });
 
+  it("path wins when both path and task are given (documented precedence)", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: root });
+    await write("src/loop.ts", "export function run(): number { return 1; }\n");
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+
+    const result = await mapTool({ path: "src/loop.ts::run", task: "something else entirely", repoRoot: root });
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as { kind: string; target?: { name: string } };
+    expect(env.kind).toBe("slice"); // path resolved → slice, task ignored
+    expect(env.target?.name).toBe("run");
+  });
+
+  it("missing-args error carries a stable SIVRU code", async () => {
+    const result = await mapTool({ repoRoot: root });
+    const env = JSON.parse((result.content[0] as { text: string }).text) as { error: string };
+    expect(env.error).toMatch(/^SIVRU-E\d+:/);
+  });
+
   it("task → candidates first (never auto-orients)", async () => {
     execFileSync("git", ["init", "-q"], { cwd: root });
     execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });

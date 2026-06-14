@@ -55,7 +55,7 @@ import type { HandlerContext, HandlerResult, FeedbackKind } from "@sivru/observe
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 // DESIGN-0024 — the agent's working map. Reads off the cached ExplainerModel +
 // cached health; the slice assembly lives in ./explainer/agent-map.ts (pure).
-import { mapByPath, mapByTask } from "./explainer/agent-map.js";
+import { mapByPath, mapByTask, MAP_ERR_FAILED, MAP_ERR_MISSING_ARGS } from "./explainer/agent-map.js";
 import { loadModelAndHealth } from "./explainer/map-serve.js";
 import { SIVRU_VERSION } from "./commands/version.js";
 
@@ -942,27 +942,28 @@ export async function mapTool(rawArgs: unknown): Promise<ToolResult> {
     return fail(
       JSON.stringify({
         kind: "error",
-        error:
-          'map requires `path` ("<file>" or "<file>::<symbol>") or `task` ("<free text>")',
+        error: `${MAP_ERR_MISSING_ARGS}: map requires \`path\` ("<file>" or "<file>::<symbol>") or \`task\` ("<free text>")`,
       }),
     );
   }
 
   try {
     const { model, health, freshAsOf } = await loadModelAndHealth(absRepo);
+    // Compact JSON on the MCP path — the agent parses it and pays per token; the
+    // pretty-printed form is reserved for the human-facing `sivru map --json`.
     // path wins when both are given (documented contract).
     if (path !== undefined) {
       const result = mapByPath(model, health, path, symbol);
-      const body = JSON.stringify({ ...result, freshAsOf }, null, 2);
+      const body = JSON.stringify({ ...result, freshAsOf });
       // A did-you-mean error is still an MCP error envelope, but carries candidates.
       return result.kind === "error" ? fail(body) : ok(body);
     }
     const result = mapByTask(model, task!);
-    return ok(JSON.stringify({ ...result, freshAsOf }, null, 2));
+    return ok(JSON.stringify({ ...result, freshAsOf }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`sivru mcp: map error: ${message}\n`);
-    return fail(JSON.stringify({ kind: "error", error: `map failed: ${message}` }));
+    return fail(JSON.stringify({ kind: "error", error: `${MAP_ERR_FAILED}: map failed: ${message}` }));
   }
 }
 

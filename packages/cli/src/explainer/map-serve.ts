@@ -40,9 +40,36 @@ export interface LoadModelAndHealthOptions {
   healthCacheDir?: string;
 }
 
+// In-flight de-dup for the production path: two concurrent first-ever `map`
+// calls on a cold repo would otherwise both run `projectModel` (the symbol-index
+// layer dedups its build, but this projection does not). Share the promise while
+// it is pending and drop it on settle, so a later call still recomputes
+// freshAsOf. Skipped when custom cache dirs are passed (tests run in parallel
+// with independent fixtures).
+const inFlight = new Map<string, Promise<ServedModel>>();
+
 export async function loadModelAndHealth(
   absRepo: string,
   opts: LoadModelAndHealthOptions = {},
+): Promise<ServedModel> {
+  const dedup = opts.modelCacheDir === undefined && opts.healthCacheDir === undefined;
+  if (dedup) {
+    const existing = inFlight.get(absRepo);
+    if (existing !== undefined) return existing;
+    const p = loadModelAndHealthUncached(absRepo, opts);
+    inFlight.set(absRepo, p);
+    try {
+      return await p;
+    } finally {
+      inFlight.delete(absRepo);
+    }
+  }
+  return loadModelAndHealthUncached(absRepo, opts);
+}
+
+async function loadModelAndHealthUncached(
+  absRepo: string,
+  opts: LoadModelAndHealthOptions,
 ): Promise<ServedModel> {
   const currentStateId = await computeStateId(absRepo);
   let model = await loadModelCache(absRepo, currentStateId, opts.modelCacheDir);
