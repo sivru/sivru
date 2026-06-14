@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 
-import { loadModelCache, saveModelCache } from "./model-cache.js";
+import { loadModelCache, loadNewestModelCache, saveModelCache } from "./model-cache.js";
 import type { ExplainerModel } from "./types.js";
 
 let dir: string;
@@ -70,5 +70,21 @@ describe("model cache", () => {
       JSON.stringify({ ...m, schema: 99 }),
     );
     expect(await loadModelCache("/repo", "state-abc", dir)).toBeNull();
+  });
+});
+
+describe("loadNewestModelCache (DESIGN-0024 serve-stale)", () => {
+  it("returns null when the repo has no cache entry", async () => {
+    expect(await loadNewestModelCache("/repo", dir)).toBeNull();
+  });
+
+  it("returns the most recently written model across stateIds", async () => {
+    await saveModelCache(model({ stateId: "older" }), dir);
+    // saveModelCache uses rename; bump mtime by writing the second later.
+    await new Promise((r) => setTimeout(r, 10));
+    await saveModelCache(model({ stateId: "newer", head: "newhead" }), dir);
+    const back = await loadNewestModelCache("/repo", dir);
+    expect(back?.stateId).toBe("newer");
+    expect(back?.head).toBe("newhead");
   });
 });
