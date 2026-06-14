@@ -184,3 +184,16 @@ agent harness consumes it; deferred from the CEO review (E4) as adapter work.
 consumption precondition in DESIGN-0024. The MCP tool is already client-neutral.
 **Effort:** M (human ~1 day) → with CC+gstack: ~S. **Priority:** P2.
 **Depends on:** DESIGN-0024 Slice 1.
+
+## Post-ship usage metric for the map tool
+
+**What:** After `map` ships, measure whether agents actually call it pre-edit and
+whether it completes the locate → orient → inspect → edit → `find_related` arc.
+**Why:** DESIGN-0024's DX review (Pass 8) noted the Slice 0 consumption signal
+measures *demand before* build, but nothing measures `map`'s *own* uptake after.
+Supply without measured uptake is the failure mode the precondition warned about.
+**Context:** MCP call logging already exists; track map call-rate + arc completion.
+Ties to the efficacy bench (DESIGN-0013). A wrong answer here ("agents ignore it")
+should feed the harness-hook / SKILL-workflow follow-on, not another tool.
+**Effort:** S (human ~half day) → with CC+gstack: ~XS. **Priority:** P3.
+**Depends on:** DESIGN-0024 Slice 1 shipping; DESIGN-0013 (efficacy bench).
