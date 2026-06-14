@@ -1,7 +1,7 @@
 # DESIGN-0024: The agent's working map (M-C, the platform layer)
 
-**Status:** Draft (CEO-reviewed 2026-06-14, SCOPE EXPANSION → trimmed by the
-outside voice; eng review pending) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
+**Status:** Accepted (CEO + Eng reviewed 2026-06-14; SCOPE EXPANSION → trimmed by
+the outside voice → eng-hardened) <!-- Stub → Draft → Accepted → Implemented → Superseded -->
 **Targets:** v0.15.0 (Slice 1).
 **Implements:** [DESIGN-0022](0022-explainer-reasoning-surface.md) **Move 2**
 (M-C) — *"expose the model as the context substrate an agent routes through,
@@ -178,6 +178,20 @@ suppress the very behavior we want. **Decision:** compute the three health passe
 The first `map` call warms the cache (a few hundred ms); every later call is a
 slice lookup (sub-10ms). Whole-repo accuracy, no per-call recompute.
 
+**Freshness under active editing (eng review).** M-C's use case is an agent
+editing the repo it maps — so the working tree changes between `map` calls, which
+changes `stateId` (= `commit_sha` + `hash(git diff)`) and would force a full
+model rebuild (~11s on a 5.7k-file repo) on *every* orient call. Cache thrash
+exactly when the tool is used. **Decision:** `map` serves the last cached
+model/health and stamps a `freshAsOf` marker (the HEAD + dirty-hash it reflects);
+the rebuild happens lazily, not inline. `map` is *orientation*, not a gate — one
+edit of staleness is fine, and the agent that just made the edit already knows
+it. The edit-aware judgment lives in `explain --diff` and the PR gate, which are
+always current. (`stateId` correctness is verified: a committed *or* uncommitted
+test change moves the dirty-hash, so cached health never lies about a linkage —
+it just may lag the agent's own in-flight edit by one call, which `freshAsOf`
+makes visible.)
+
 **Honesty (inherited).** The graph is the parsed-import graph at module
 granularity (DESIGN-0023). `inCycle` and the neighbor edges carry the same
 caveat: unparsed/dynamic imports are invisible, and a single-module repo has no
@@ -215,15 +229,58 @@ is a slice it stops calling.
   silently mis-grounds the agent; task-entry always confirms a candidate first.
 - **A new health metric.** `map` serves the M-A signals that already exist.
 
-## Open questions (for eng review)
+## Resolved in eng review
 
-- **Tool name** — `map` / `orient` / `context_map` / `architecture`. `map` is
-  short and matches the mental model; `orient` names the verb.
-- **Symbol-less targets** — `map` on a file with no load-bearing symbol returns
-  the module/package slice; confirm that is the right fallback.
-- **Candidate count** for task-entry — how many top-N candidates to return before
-  the confirm (3? 5?), and the score threshold below which it says "no clear
-  target, here's what I found."
+- **Tool name → `map`.** Short, matches the mental model; the description carries
+  the routing hint ("orient in the architecture around a target"). (`orient` was
+  the runner-up; revisit only if the routing-hint diff vs `explain` is muddy.)
+- **Symbol-less targets → module/package slice.** A file with no load-bearing
+  symbol returns its package/module slice + health, not an error — orientation is
+  still useful without a symbol.
+- **Task candidate count → top-5 with a score floor.** Return up to 5 candidates;
+  below a similarity threshold, return `{ candidates: [], hint }` ("no clear
+  target — here's what I searched") rather than a confident wrong slice.
+- **Cache thrash under active editing → serve-stale + `freshAsOf`** (see Freshness
+  above). The one architecture risk; resolved.
+- **`stateId` cache correctness → verified.** It hashes the git diff (and the
+  gitignore-aware walk when non-git), so test-file changes invalidate the cached
+  health. No silent stale-linkage.
+
+## Test plan + failure modes (eng review)
+
+```
+CODE PATHS                                              FAILURE / EDGE
+[+] explainer/agent-map.ts  (slice assembler)
+  ├── buildMap(model, target)
+  │     ├── [TEST] target resolves → full slice              path::symbol, file-only, module
+  │     ├── [TEST] symbol-less file → module/package slice   GAP→fallback, not error
+  │     ├── [TEST] path resolves to NO node → {error}        unknown/ignored/binary path
+  │     └── [TEST] neighbors capped at depth 1 + "+N more"   hot module w/ 50 dependents
+  ├── health(model) [cached]
+  │     ├── [TEST] hot/inCycle/driftBroken/unguardable shape on real fixture
+  │     └── [TEST] cache hit on same stateId; miss + rebuild on dirty change
+  ├── taskCandidates(model, task)
+  │     ├── [TEST] returns top-5 with scores, never auto-orients
+  │     └── [TEST] below threshold → { candidates: [], hint }   empty/garbage task
+  └── authoringHint(node)
+        └── [TEST] present only when block === null; surfaces gap, NO stub
+[+] mcp-entry.ts  (map tool)
+  ├── [TEST] { path } → slice ; { task } → candidates
+  ├── [TEST] neither arg → { error } ; both args → path wins (documented)
+  └── [TEST] freshAsOf marker present + reflects HEAD/dirty-hash
+
+FAILURE MODES
+  CODEPATH            | FAILURE             | HANDLED?        | USER (agent) SEES
+  --------------------|---------------------|-----------------|-------------------
+  resolve target      | path not a node     | Y → {error}     | "no such target: <path>"
+  projectModel        | model build throws  | Y → {error}     | structured error, never a half-slice
+  enforcement resolve | test file unreadable| Y (DESIGN-0023) | linkage = unresolved (honest)
+  taskCandidates      | embed search empty  | Y → {candidates:[],hint} | "no clear target"
+  health cache        | stale vs in-flight edit | Y → freshAsOf | the marker; lag of ≤1 call
+```
+
+No silent failures: every path returns either a slice or a structured `{error}`,
+matching the existing `explain`/`find_related` MCP contract.
 
 ## Relationship to existing designs
 
@@ -257,6 +314,10 @@ Synthesized from the CEO review. Each derives from a specific finding.
 - [ ] **T5 (P2, human: ~2h / CC: ~10min)** — mcp-entry — Error contract + output cap
   - Surfaced by: Section 2/4 — unresolved path, empty model, no task match, oversized slice.
   - Structured `{error}` like `explain`; neighbors/collaborators capped with `+N more`.
+- [ ] **T6 (P1, human: ~half day / CC: ~20min)** — explainer/mcp-entry — Serve-stale + `freshAsOf`
+  - Surfaced by: Eng review finding 1 — cache thrash when the agent edits the mapped repo.
+  - `map` serves the last cached model/health with a `freshAsOf` marker; rebuild lazily, not inline.
+  - Verify: a `map` call right after an in-tree edit returns sub-second with `freshAsOf` reflecting the pre-edit state.
 
 _No new tasks from Sections 3 (security — map returns repo content the agent already reads), 8 (observability — standard MCP call logging), 9 (deploy — ships in @sivru/cli, no migration, reversible), 11 (design — no GUI; the JSON shape is the agent's UX)._
 
@@ -264,11 +325,12 @@ _No new tasks from Sections 3 (security — map returns repo content the agent a
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | issues_resolved | SCOPE EXPANSION: 4 expansions accepted, then 3 trimmed + 1 reframed by the outside voice; 1 architecture fork (health latency → cache) |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | pending |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | clean | SCOPE EXPANSION: 4 expansions accepted, then 3 trimmed + 1 reframed by the outside voice; 1 architecture fork (health latency → cache) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean | 1 architecture finding (cache thrash → serve-stale + freshAsOf); 3 open questions resolved; cache invalidation verified correct; test plan + failure modes produced. 0 critical gaps |
 | Outside Voice | Claude subagent | Independent challenge | 1 | issues_found | 7 findings, verdict "trim-to-minimal"; 4 cross-model tensions all resolved toward the trim |
 
 - **OUTSIDE VOICE:** challenged the EXPANSION scope hard — `wouldRegress` dishonest pre-edit (→ reframed to descriptive health), authoring stub breaks the human-authored brand (→ softened to surface-the-gap), task-entry risks silent mis-grounding (→ top-N confirm), and supply-before-demand (→ added a consumption precondition).
+- **ENG REVIEW:** scope under the complexity threshold; the one real architecture risk (cache thrash when the agent edits the mapped repo) resolved to serve-stale + `freshAsOf`. Verified `stateId` invalidation covers test-file changes, so cached health can't lie about a linkage. Open questions resolved (name=`map`, symbol-less=module slice, candidates=top-5+floor). Test plan + failure-mode table produced; no silent failures (every path → slice or structured `{error}`).
 - **CROSS-MODEL:** the outside voice and the review agreed on the latency fix (cache health with the model). The 4 tensions were the user's calls; all resolved toward the trim.
-- **UNRESOLVED:** 0 (3 open questions remain for eng review: tool name, symbol-less fallback, candidate count).
-- **VERDICT:** CEO CLEARED (scope reconciled). Eng review required before implementation.
+- **UNRESOLVED:** 0.
+- **VERDICT:** CEO + ENG CLEARED — ready to implement (Slice 1, gated on the T1 routing-hint/consumption precondition).
