@@ -12,6 +12,29 @@ oversells contradicts the product.
 
 ---
 
+## Locked headline strings (decided 2026-06-14)
+
+These three are the canon. Everything else — the README hero, the demo caption,
+the launch post — derives from them. Don't drift; change them here first.
+
+**Hero (top of README / landing):**
+> # The comprehension layer for AI-written code.
+> Your agent just confidently broke something it didn't understand. sivru is the
+> layer that remembers *why* your code is the way it is.
+
+**One-sentence pitch (GitHub "About", the "what is this"):**
+> sivru records why your code is the way it is, keeps it current as agents change
+> it, and blocks the PR that breaks a decision nobody re-read.
+
+**Show HN title:**
+> Show HN: Sivru – a comprehension layer for AI-written code that gates PRs on intent drift
+
+The register: **category claim → felt pain → the moat (the gate)**, in plain
+words. The hero claims the ground; the subhead makes it land in two seconds; the
+pitch and the HN title close on the one thing nobody else does.
+
+---
+
 ## The one line
 
 > As AI drives the cost of *writing* code toward zero, sivru keeps the cost of
@@ -97,9 +120,9 @@ tool can do, because no other tool holds the authored intent to check against.
 
 - **GitHub repo / npm:** the tagline + "does anyone still understand this?" + the
   v0.14 moat (the drift gate) in one breath.
-- **Landing hero:** the one line (writing→zero / understanding→infinity), then
-  the pain ("the agent broke something intentional"), then the one screenshot
-  that proves it (the explainer map, or a gate failing on a real PR).
+- **Landing hero:** the locked hero (category line + the pain subhead), then the
+  one demo that proves it — the **map → gate** sequence (the explainer map for
+  legibility, the gate failing a real PR for the punchline).
 - **Launch post:** the cost-curve crossing → the failure state → the demo → the
   moat → benchmarks.
 - **To a skeptic ("isn't this just RAG?"):** point at WHY-SIVRU.md; search is one
@@ -111,8 +134,9 @@ tool can do, because no other tool holds the authored intent to check against.
   isn't. sivru is a local, MCP-native comprehension layer for AI-written code —
   it records *why* the code is the way it is, keeps it current, and can block the
   PR that breaks a decision nobody re-read."
-- **GitHub About (≤120 chars):** "The comprehension layer for AI-written code.
-  Local, MCP-native. Records why code is the way it is — and gates the PR that breaks it."
+- **GitHub About (the locked pitch):** "sivru records why your code is the way it
+  is, keeps it current as agents change it, and blocks the PR that breaks a
+  decision nobody re-read."
 - **npm description:** "Sivru — the comprehension layer for AI-written code:
   authored-intent blocks, a repo-wide explainer model, and an architectural
   drift gate. Local, MCP-native."
