@@ -1,14 +1,22 @@
 name: release
 
+# Publish-on-version-change, NOT on a manual tag. We ship via squash-merged PRs
+# (each bumps the version in package.json), and the old `tags: v*` trigger meant
+# someone had to remember to push a tag — which stopped after v0.9.0, freezing
+# npm six minor versions behind the repo. This trigger fires on every push to
+# main and publishes ONLY when the repo's version is not already on npm, so it is
+# self-healing: a release merge publishes automatically, a docs merge is a no-op,
+# and a missed publish is reconciled by the next push. `workflow_dispatch` lets a
+# maintainer force a reconcile by hand.
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 # Lock-down: only this workflow can write to the npm registry. The default
 # CI workflow has read-only contents and never sees the NPM_TOKEN secret.
 permissions:
-  contents: write   # required to create a GitHub Release object
+  contents: write   # required to push the version tag + create a GitHub Release
   id-token: write   # required for npm provenance
 
 jobs:
@@ -18,48 +26,100 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so the provenance attestation can reference the
-          # exact commit the tag points at.
+          # Full history so provenance can reference the exact commit, and so we
+          # can create/push the version tag.
           fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
+      # Gate: publish only when the repo's version is not already on npm. This is
+      # the idempotency guard — every push to main runs this, but only a genuine
+      # version change proceeds past here.
+      - name: Should we publish?
+        id: gate
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "repo version: $version"
+          if npm view "@sivru/cli@${version}" version >/dev/null 2>&1; then
+            echo "  @sivru/cli@${version} already on npm — nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "  @sivru/cli@${version} not on npm — will publish."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.gate.outputs.publish == 'true'
+        with:
+          version: 9.15.0
+
       - name: Install
+        if: steps.gate.outputs.publish == 'true'
         run: pnpm install --frozen-lockfile=false
 
       - name: Build
+        if: steps.gate.outputs.publish == 'true'
         run: pnpm build
 
       - name: Test
+        if: steps.gate.outputs.publish == 'true'
         run: pnpm test
 
-      # `pnpm publish -r` walks the workspace topologically, skipping any
-      # package marked `private: true`, so observe-ui (Vite app, not a
-      # library) and benchmarks (internal-only) stay unpublished. The
-      # `--no-git-checks` is required because tag-triggered runs check
-      # out the tag in detached-HEAD state and pnpm refuses to publish
-      # otherwise.
+      # `pnpm publish -r` walks the workspace topologically, skipping any package
+      # marked `private: true` (observe-ui, benchmarks, the monorepo root) and any
+      # whose current version is already on the registry — so a partial prior
+      # publish self-completes here. `--no-git-checks` because CI publishes from a
+      # checkout pnpm would otherwise refuse.
+      #
+      # REQUIRED: `secrets.NPM_TOKEN` must be an npm **Automation** token (npm →
+      # Access Tokens → Generate → "Automation"). Automation tokens bypass 2FA;
+      # a "Publish"/classic token on a 2FA-enabled account fails here with
+      # `EOTP — requires a one-time password`, which is what broke every release
+      # run from v0.5.0 to v0.9.0. The workflow cannot supply an OTP.
       - name: Publish
-        run: pnpm publish -r --no-git-checks
+        if: steps.gate.outputs.publish == 'true'
+        run: pnpm publish -r --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # Extract the matching CHANGELOG.md section for the pushed tag so the
-      # GitHub Release body reads identically to the changelog entry.
-      # Falls back to a generic body when CHANGELOG.md has no entry for
-      # the tag (lets us still ship a Release; the workflow does not fail).
-      - name: Extract changelog section for this tag
+      # Verify the publish actually landed — a silent failure is exactly the
+      # failure mode this rewrite exists to kill. Fail loudly if npm did not move.
+      - name: Verify published
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          version="${{ steps.gate.outputs.version }}"
+          for pkg in @sivru/cli @sivru/search @sivru/observe; do
+            published="$(npm view "${pkg}@${version}" version 2>/dev/null || echo missing)"
+            if [ "$published" != "$version" ]; then
+              echo "::error::${pkg}@${version} did not publish (npm reports: ${published})"
+              exit 1
+            fi
+            echo "  ok ${pkg}@${version}"
+          done
+
+      # Keep a git tag per release (history + provenance), now created BY the
+      # workflow instead of by a human. There is no `tags:` trigger above, so this
+      # push cannot re-trigger the workflow.
+      - name: Tag the release
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          tag="${{ steps.gate.outputs.tag }}"
+          git tag -a "$tag" -m "$tag" || true
+          git push origin "$tag" || true
+
+      # Extract the matching CHANGELOG.md section so the GitHub Release body reads
+      # identically to the changelog. Falls back to a generic body when there is
+      # no entry (still ships a Release; never fails the run).
+      - name: Extract changelog section
+        if: steps.gate.outputs.publish == 'true'
         id: changelog
         run: |
-          tag="${GITHUB_REF_NAME}"            # e.g. v0.7.0
-          version="${tag#v}"                  # e.g. 0.7.0
+          version="${{ steps.gate.outputs.version }}"
           notes_file="$(mktemp)"
           awk -v ver="$version" '
             /^## \[/ {
@@ -69,21 +129,22 @@ jobs:
             printing { print }
           ' CHANGELOG.md > "$notes_file"
           if [ ! -s "$notes_file" ]; then
-            printf "Tag %s. See [CHANGELOG.md](CHANGELOG.md).\n" "$tag" \
-              > "$notes_file"
+            printf "Release %s. See [CHANGELOG.md](CHANGELOG.md).\n" "v$version" > "$notes_file"
           fi
           echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        if: steps.gate.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          # --verify-tag confirms the tag exists; --notes-file uses the
-          # extracted CHANGELOG section as the release body. Idempotent:
-          # re-running for an existing release fails fast rather than
-          # silently overwriting.
-          gh release create "$tag" \
-            --title "$tag" \
-            --notes-file "${{ steps.changelog.outputs.notes_file }}" \
-            --verify-tag
+          tag="${{ steps.gate.outputs.tag }}"
+          # Idempotent: skip if a release already exists for this tag.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists — skipping."
+          else
+            gh release create "$tag" \
+              --title "$tag" \
+              --notes-file "${{ steps.changelog.outputs.notes_file }}" \
+              --verify-tag
+          fi
