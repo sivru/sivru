@@ -44,6 +44,17 @@ broken `@sivru` invariant→test linkages; and `sivru feedback apply` writes a
 reader's corrections back to the block in source. Built on the search engine's
 symbol index. (DESIGN-0016/0018/0019/0023.)
 
+The shared artifact under all of that is the **ExplainerModel** (`explainer/model.ts`):
+one deterministic, tree-sitter-built tree — System → Module → Package → Symbol —
+with three layers hung off every node. **Structure:** exports + `depEdges` (the
+module/package import graph, i.e. the blast radius). **Authored intent:** the
+`@sivru` block (role / responsibility / invariants / decisions / `enforced-by`)
+when a human wrote one. **Health:** `churn`, `hotScore` (churn × coupling), cycle
+membership, and broken-linkage drift. It is a *projection of facts* (parser + git
++ human-written text), never an AI generation — which is why the one model can
+serve onboarding (`--html`), the PR gate (`--diff --gate`), and the planned agent
+map (DESIGN-0024) without inventing anything.
+
 **Product 2 — Agent session observability.** Reads the JSONL session files
 that Claude Code already writes to `~/.claude/projects/<cwd>/<uuid>.jsonl`,
 normalizes them to a stable `SivruEvent` shape, exposes a localhost-only
