@@ -75,6 +75,12 @@ jobs:
       # whose current version is already on the registry — so a partial prior
       # publish self-completes here. `--no-git-checks` because CI publishes from a
       # checkout pnpm would otherwise refuse.
+      #
+      # REQUIRED: `secrets.NPM_TOKEN` must be an npm **Automation** token (npm →
+      # Access Tokens → Generate → "Automation"). Automation tokens bypass 2FA;
+      # a "Publish"/classic token on a 2FA-enabled account fails here with
+      # `EOTP — requires a one-time password`, which is what broke every release
+      # run from v0.5.0 to v0.9.0. The workflow cannot supply an OTP.
       - name: Publish
         if: steps.gate.outputs.publish == 'true'
         run: pnpm publish -r --no-git-checks --access public
