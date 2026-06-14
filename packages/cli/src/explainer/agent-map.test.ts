@@ -138,6 +138,53 @@ describe("resolveTarget", () => {
   it("returns null for an unresolved path", () => {
     expect(resolveTarget(model, "a/foo/missing.ts::nope")).toBeNull();
   });
+
+  it("a file with symbols resolves to its OWNING package (paths drop src/, so prefix-match would miss)", () => {
+    // Package paths omit the `src/` segment; the real file lives deeper. Resolve
+    // via the symbol's parent, not a path prefix.
+    const t = resolveTarget(model, "a/foo/thing.ts");
+    expect(t?.id).toBe("package:a:foo");
+  });
+});
+
+describe("resolveTarget — single-package repo (module path === '')", () => {
+  // A single-package repo collapses the module level onto a root module with
+  // path "". A file-only target must still resolve (regression: the old
+  // prefix-match skipped path==="" and returned null).
+  const sp = (filePath: string, name: string): ExplainerNode => sym(filePath, name);
+  const spPkg = pkg("package::root", "", [sp("src/server.ts", "start")]);
+  const spMod: ExplainerNode = {
+    id: "module:",
+    level: "module",
+    name: "myapp",
+    path: "",
+    children: [spPkg],
+    derived: { exports: [], importsResolved: [], churn: 0, depEdges: [], collaborators: [] },
+    block: null,
+  };
+  const spModel: ExplainerModel = {
+    schema: 1,
+    repoPath: "/r",
+    stateId: "s",
+    head: "h",
+    root: {
+      id: "system",
+      level: "system",
+      name: "r",
+      path: "",
+      children: [spMod],
+      derived: { exports: [], importsResolved: [], churn: 0, depEdges: [], collaborators: [] },
+      block: null,
+    },
+    stats: { files: 1, symbols: 1, modules: 1 },
+  };
+
+  it("resolves a top-level src file to its package even when module path is ''", () => {
+    expect(resolveTarget(spModel, "src/server.ts")?.id).toBe("package::root");
+  });
+  it("resolves the symbol too", () => {
+    expect(resolveTarget(spModel, "src/server.ts::start")?.id).toBe("symbol:src/server.ts#start");
+  });
 });
 
 // ── buildReverseDeps ──────────────────────────────────────────────────────────

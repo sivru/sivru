@@ -350,12 +350,15 @@ describe("mcp-entry — map tool", () => {
     const env = JSON.parse((result.content[0] as { text: string }).text) as {
       kind: string;
       target: { name: string };
-      freshAsOf: { stale: boolean; note: string };
+      freshAsOf: { stale: boolean; dirty: boolean; note: string };
     };
     expect(env.kind).toBe("slice");
     expect(env.target.name).toBe("run");
     expect(env.freshAsOf).toBeDefined();
     expect(typeof env.freshAsOf.note).toBe("string");
+    // committed clean repo, built for the current state → neither dirty nor stale
+    expect(env.freshAsOf.dirty).toBe(false);
+    expect(env.freshAsOf.stale).toBe(false);
   });
 
   it("task → candidates first (never auto-orients)", async () => {

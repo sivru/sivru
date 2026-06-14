@@ -64,7 +64,10 @@ export async function loadModelAndHealth(
     await saveHealthCache(absRepo, health, opts.healthCacheDir);
   }
 
-  const dirty = currentStateId.includes(":");
+  // `dirty` describes the SERVED model (was it built from a dirty tree?), not the
+  // current tree — a clean model served stale while the tree is now dirty is NOT
+  // a dirty-built model. computeStateId encodes dirty as `<sha>:<diffhash>`.
+  const dirty = model.stateId.includes(":");
   const at = model.head.length > 0 ? `HEAD@${model.head}` : model.stateId.slice(0, 12);
   const freshAsOf: FreshAsOf = {
     sha: model.head.length > 0 ? model.head : model.stateId.slice(0, 12),

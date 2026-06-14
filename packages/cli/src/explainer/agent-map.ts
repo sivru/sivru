@@ -76,23 +76,27 @@ interface Indexed {
   all: ExplainerNode[];
   /** node id → its containing module node (model.root.children), or null. */
   moduleOf: Map<string, ExplainerNode>;
+  /** node id → its direct parent node (package for a symbol, module for a package). */
+  parentOf: Map<string, ExplainerNode>;
 }
 
 function indexModel(model: ExplainerModel): Indexed {
   const byId = new Map<string, ExplainerNode>();
   const all: ExplainerNode[] = [];
   const moduleOf = new Map<string, ExplainerNode>();
+  const parentOf = new Map<string, ExplainerNode>();
   for (const mod of model.root.children) {
-    const mark = (n: ExplainerNode): void => {
+    const mark = (n: ExplainerNode, parent: ExplainerNode): void => {
       byId.set(n.id, n);
       if (n.level !== "system") all.push(n);
       moduleOf.set(n.id, mod);
-      n.children.forEach(mark);
+      parentOf.set(n.id, parent);
+      n.children.forEach((c) => mark(c, n));
     };
-    mark(mod);
+    mark(mod, model.root);
   }
   byId.set(model.root.id, model.root);
-  return { byId, all, moduleOf };
+  return { byId, all, moduleOf, parentOf };
 }
 
 /** Module id → ids of modules that depend on it (DESIGN-0024 T4, shared with --html). */
@@ -126,7 +130,7 @@ function normaliseTarget(rawPath: string, symbol: string | undefined): { filePat
  * slice, DESIGN-0024). Returns null when nothing resolves (→ did-you-mean).
  */
 export function resolveTarget(model: ExplainerModel, rawPath: string, symbol?: string): ExplainerNode | null {
-  const { byId, all } = indexModel(model);
+  const { byId, all, parentOf } = indexModel(model);
   const { filePath, symbol: sym } = normaliseTarget(rawPath, symbol);
   if (filePath.length === 0) return null;
 
@@ -139,9 +143,15 @@ export function resolveTarget(model: ExplainerModel, rawPath: string, symbol?: s
     return match ?? null;
   }
 
-  // File-only: the deepest module/package node whose path contains the file.
-  // Prefer an exact path match, then the longest prefix; package beats module on
-  // a tie (more specific orientation).
+  // File-only → the package that OWNS the file's symbols. Symbol nodes carry the
+  // real file path, but package node paths drop the `src/` segment (levels.ts),
+  // so a path-prefix match against package paths would miss; the symbol's parent
+  // is authoritative and works for single-package repos (module path "") too.
+  const owning = all.find((n) => n.level === "symbol" && n.path === filePath);
+  if (owning !== undefined) return parentOf.get(owning.id) ?? owning;
+
+  // No load-bearing symbol at that path (a directory, or a symbol-less file):
+  // fall back to the deepest module/package node whose path prefixes the file.
   const levelRank = (n: ExplainerNode): number => (n.level === "package" ? 2 : n.level === "module" ? 1 : 0);
   let best: ExplainerNode | null = null;
   for (const n of all) {
@@ -269,13 +279,14 @@ export function buildMapSlice(
   const dependedOnByRaw: NodeRef[] = [];
   if (moduleNode !== null) {
     const block = moduleNode.block as { role?: unknown; responsibility?: unknown } | null;
+    const moduleHot = healthOf(health, moduleNode.id).hot;
     moduleInfo = {
       name: moduleNode.name,
       churn: moduleNode.derived.churn,
       ...(typeof block?.role === "string" ? { role: block.role } : {}),
       ...(typeof block?.responsibility === "string" ? { responsibility: block.responsibility } : {}),
       ...(moduleNode.derived.hotScore !== undefined ? { hotScore: moduleNode.derived.hotScore } : {}),
-      ...(healthOf(health, moduleNode.id).hot !== null ? { rank: healthOf(health, moduleNode.id).hot!.rank } : {}),
+      ...(moduleHot !== null ? { rank: moduleHot.rank } : {}),
     };
     dependsOnRaw.push(...toRefs(moduleNode.derived.depEdges));
     dependedOnByRaw.push(...toRefs(reverseDeps.get(moduleNode.id) ?? []));
