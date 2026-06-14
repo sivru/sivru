@@ -7,12 +7,17 @@ expensive — and as agents write more of every codebase, the gap shows
 up as incidents nobody can diagnose, refactors nobody dares start, and
 agents confidently "fixing" things that were deliberate.
 
-Sivru keeps a codebase comprehensible — to the agents writing it and
-the humans accountable for it — by making comprehension a durable,
-queryable asset of the repo itself. The goal, the uniqueness, and the
-test every release must pass: [`GOALS.md`](GOALS.md).
+Every coding tool *produces* code fast. None of them owns the question
+that velocity creates: **does anyone still understand this?** Sivru
+claims that question. It keeps a codebase comprehensible — to the
+agents writing it and the humans accountable for it — by making
+comprehension a durable, queryable asset of the repo itself: it records
+*why* the code is the way it is, keeps that record current as the code
+changes, and serves it at the moment it matters — the edit. The goal and
+the test every release must pass: [`GOALS.md`](GOALS.md); how it's
+positioned and described: [`POSITIONING.md`](POSITIONING.md).
 
-**Today** the comprehension layer ships end-to-end, on four legs:
+**Today** the comprehension layer ships end-to-end:
 
 - **Search** — agents call sivru via MCP and get ranked code chunks
   back in milliseconds instead of looping through `ripgrep + Read`.
@@ -45,8 +50,9 @@ test every release must pass: [`GOALS.md`](GOALS.md).
   blocks in a Blocks tab, and benchmarks embedders + rerankers on YOUR
   repos.
 
-What's next builds on this spine: drift + hot spots + a CI gate on the
-architectural delta of a PR, and an agent-facing model slice over MCP.
+What's next builds on this spine: the agent's working map — the same
+model served to any coding agent over MCP, so it orients on the
+architecture before it edits ([`DESIGN-0024`](docs/design/0024-agent-map-mcp.md)).
 See [`ROADMAP.md`](ROADMAP.md) and [`docs/design/`](docs/design/).
 
 > **Status: 0.14.0.** Engine, CLI, MCP server (8 tools), observe-ui, and the architectural diff + drift gate (`explain --project --diff [--gate]`) ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
