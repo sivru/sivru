@@ -53,6 +53,22 @@ describe("renderMap", () => {
     expect(out).toContain("freshAsOf:");
   });
 
+  it("renders the '+N more' overflow on capped neighbour and collaborator lists", () => {
+    const slice: MapResult = {
+      kind: "slice",
+      target: { id: "symbol:a.ts#f", level: "symbol", name: "f", path: "a.ts" },
+      module: { name: "alpha", churn: 1 },
+      dependsOn: [{ id: "module:b", level: "module", name: "beta", path: "b" }],
+      dependedOnBy: [],
+      collaborators: ["helper"],
+      health: { hot: null, inCycle: null, driftBroken: [], unguardable: [] },
+      truncated: { dependsOn: 7, collaborators: 4 },
+    };
+    const out = renderMap(slice, fresh);
+    expect(out).toContain("depends on: beta (+7 more)");
+    expect(out).toContain("collaborators: helper (+4 more)");
+  });
+
   it("renders did-you-mean candidates on an error", () => {
     const err: MapResult = {
       kind: "error",

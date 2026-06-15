@@ -72,6 +72,27 @@ describe("loadModelAndHealth — serve-stale (DESIGN-0024 T6)", () => {
     expect(served.freshAsOf.dirty).toBe(false); // clean committed repo
   });
 
+  it("an actual in-tree edit between two map calls flips the second to stale (no rebuild)", async () => {
+    // Reproduce the T6 promise end-to-end: orient on a clean repo (fresh), make a
+    // real edit (the working tree changes → stateId moves), orient again. The
+    // second call serves the SAME cached model marked stale — never rebuilds inline.
+    const current = await computeStateId(resolve(repo));
+    await saveModelCache(tinyModel(current, "headclean"), modelCacheDir);
+
+    const first = await loadModelAndHealth(repo, { modelCacheDir, healthCacheDir });
+    expect(first.freshAsOf.stale).toBe(false);
+
+    // The edit an agent would make mid-task — dirties the tree, moving the stateId.
+    await writeFile(join(repo, "a.ts"), "export const x = 2;\nexport const y = 3;\n");
+    const afterEdit = await computeStateId(resolve(repo));
+    expect(afterEdit).not.toBe(current); // the edit really moved the stateId
+
+    const second = await loadModelAndHealth(repo, { modelCacheDir, healthCacheDir });
+    expect(second.freshAsOf.stale).toBe(true);
+    expect(second.model.stateId).toBe(current); // served the cached model, not a rebuild
+    expect(second.freshAsOf.note).toMatch(/working tree changed since/i);
+  });
+
   it("freshAsOf.dirty reflects the SERVED model's build state, not the current tree", async () => {
     // Served model was built dirty (stateId carries the `:diffhash` marker), even
     // though it is served stale against a now-clean current state.

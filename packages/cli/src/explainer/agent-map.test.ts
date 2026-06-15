@@ -8,6 +8,8 @@ import {
   rankCandidates,
   resolveTarget,
   MAP_NEIGHBOR_CAP,
+  MAP_CANDIDATE_LIMIT,
+  MAP_ERR_NO_TARGET,
 } from "./agent-map.js";
 import { buildModelHealth, emptyNodeHealth, type ModelHealth } from "./health.js";
 import type { ResolveFn } from "./drift.js";
@@ -244,8 +246,17 @@ describe("buildMapSlice", () => {
     expect(slice.truncated?.dependsOn).toBe(1);
   });
 
-  it("the cap default is MAP_NEIGHBOR_CAP", () => {
-    expect(MAP_NEIGHBOR_CAP).toBeGreaterThan(0);
+  it("applies MAP_NEIGHBOR_CAP as the default when no neighborCap is passed", async () => {
+    // A hub module depending on cap+3 others: the default path (no opts) must cap
+    // at exactly MAP_NEIGHBOR_CAP and report the 3-node overflow in `truncated`.
+    const depIds = Array.from({ length: MAP_NEIGHBOR_CAP + 3 }, (_, i) => `module:d${i}`);
+    const depMods = depIds.map((id) => mod(id.slice("module:".length), id.slice("module:".length), [], []));
+    const hub = mod("hub", "hub", depIds, [pkg("package:hub", "hub", [sym("hub/h.ts", "hubFn")])]);
+    const m: ExplainerModel = { ...model, root: { ...model.root, children: [hub, ...depMods] } };
+    const health = await buildModelHealth(m, resolveMissing);
+    const slice = buildMapSlice(m, health, hub); // no neighborCap → default MAP_NEIGHBOR_CAP
+    expect(slice.dependsOn).toHaveLength(MAP_NEIGHBOR_CAP);
+    expect(slice.truncated?.dependsOn).toBe(3);
   });
 });
 
@@ -259,6 +270,16 @@ describe("rankCandidates", () => {
   });
   it("returns nothing for a garbage query", () => {
     expect(rankCandidates(model, "zzzqqq nonexistent xyzzy")).toEqual([]);
+  });
+  it("caps the candidate list at MAP_CANDIDATE_LIMIT even when more match", () => {
+    // A model with cap+3 symbols that all substring-match "widget": ranking must
+    // truncate to the top MAP_CANDIDATE_LIMIT, never flood the agent with all hits.
+    const widgets = Array.from({ length: MAP_CANDIDATE_LIMIT + 3 }, (_, i) => sym(`w/widget${i}.ts`, `widget${i}`));
+    const wMod = mod("w", "w", [], [pkg("package:w", "w", widgets)]);
+    const wModel: ExplainerModel = { ...model, root: { ...model.root, children: [wMod] } };
+    const c = rankCandidates(wModel, "widget");
+    expect(c).toHaveLength(MAP_CANDIDATE_LIMIT);
+    expect(c.every((x) => x.score >= 0.3)).toBe(true);
   });
 });
 
@@ -306,6 +327,18 @@ describe("mapByPath did-you-mean", () => {
     const health = await buildHealth();
     const r = mapByPath(model, health, "a/foo/thing.ts::doThing");
     expect(r.kind).toBe("slice");
+  });
+
+  it("a path that resolves to NO node returns kind:error with SIVRU-E249 (unknown/ignored/binary path)", async () => {
+    // A file outside every known module/package (e.g. an ignored or binary path)
+    // resolves to nothing — the genuine "no node at all" branch, not a package fallback.
+    const health = await buildHealth();
+    const r = mapByPath(model, health, "vendor/blob.bin");
+    expect(r.kind).toBe("error");
+    if (r.kind === "error") {
+      expect(r.error).toContain(MAP_ERR_NO_TARGET);
+      expect(r.error).toMatch(/no such target/);
+    }
   });
 });
 
