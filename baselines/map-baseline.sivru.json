@@ -1,0 +1,94 @@
+{
+  "tool": "map-baseline",
+  "schema": 1,
+  "repo": {
+    "path": "/Users/pochadri/dev/10xdelta/sivru/.claude/worktrees/design-0024",
+    "head": "6680abb",
+    "dirtyServed": true,
+    "stateId": "6680abb85893b90853ecf621fe3ae02c55db1e3f:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "model": {
+    "files": 480,
+    "symbols": 532,
+    "modules": 5,
+    "totalNodes": 567
+  },
+  "latency_ms": {
+    "load_cold_or_warm": 3943.2,
+    "load_warm_reload": 59.1,
+    "slice_p50": 0.2,
+    "slice_p95": 1,
+    "slice_n": 20,
+    "cold": true
+  },
+  "health_coverage": {
+    "hotRankLimit": 25,
+    "nodesWithHot": 25,
+    "nodesInCycle": 19,
+    "nodesDriftBroken": 1,
+    "nodesUnguardable": 28,
+    "totalSignalNodes": 66
+  },
+  "freshAsOf": {
+    "sha": "6680abb",
+    "dirty": true,
+    "stale": false,
+    "note": "current as of HEAD@6680abb (built from the dirty working tree)"
+  },
+  "contract_snapshots": [
+    {
+      "label": "symbol",
+      "kind": "slice",
+      "target": "symbol:parseExplainArgs",
+      "module": "@sivru/cli",
+      "dependsOn": 2,
+      "dependedOnBy": 0,
+      "collaborators": 12,
+      "health": {
+        "hot": true,
+        "inCycle": false,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": {
+        "collaborators": 14
+      }
+    },
+    {
+      "label": "file-only",
+      "kind": "slice",
+      "target": "package:commands",
+      "module": "@sivru/cli",
+      "dependsOn": 2,
+      "dependedOnBy": 0,
+      "collaborators": 0,
+      "health": {
+        "hot": true,
+        "inCycle": true,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": null
+    },
+    {
+      "label": "task",
+      "kind": "candidates",
+      "candidates": 5,
+      "top": "fetchSessionReplay"
+    },
+    {
+      "label": "did-you-mean",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: packages/cli/src/commands/explain.ts::parseExplainArgsZZZ",
+      "candidates": 5
+    },
+    {
+      "label": "error-nopath",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: no/such/dir/nope.xyz",
+      "candidates": 0
+    }
+  ]
+}
