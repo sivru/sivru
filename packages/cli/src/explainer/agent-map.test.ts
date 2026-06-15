@@ -9,6 +9,7 @@ import {
   resolveTarget,
   MAP_NEIGHBOR_CAP,
   MAP_CANDIDATE_LIMIT,
+  MAP_CANDIDATE_FLOOR,
   MAP_ERR_NO_TARGET,
 } from "./agent-map.js";
 import { buildModelHealth, emptyNodeHealth, type ModelHealth } from "./health.js";
@@ -279,7 +280,7 @@ describe("rankCandidates", () => {
     const wModel: ExplainerModel = { ...model, root: { ...model.root, children: [wMod] } };
     const c = rankCandidates(wModel, "widget");
     expect(c).toHaveLength(MAP_CANDIDATE_LIMIT);
-    expect(c.every((x) => x.score >= 0.3)).toBe(true);
+    expect(c.every((x) => x.score >= MAP_CANDIDATE_FLOOR)).toBe(true);
   });
 });
 

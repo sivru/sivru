@@ -382,6 +382,28 @@ describe("mcp-entry — map tool", () => {
     expect(env.error).toMatch(/^SIVRU-E\d+:/);
   });
 
+  it("an unresolved path is a SUCCESS envelope carrying did-you-mean candidates (recovery, not failure)", async () => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: root });
+    await write("src/loop.ts", "export function run(): number { return 1; }\n");
+    execFileSync("git", ["add", "-A"], { cwd: root });
+    execFileSync("git", ["commit", "-qm", "init"], { cwd: root });
+
+    const result = await mapTool({ path: "src/loop.ts::runX", repoRoot: root });
+    // isError is reserved for missing-args / internal failure — a did-you-mean is
+    // a recovery the agent should act on, so it rides a success envelope.
+    expect(result.isError).toBe(false);
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      kind: string;
+      error: string;
+      candidates?: { ref: { name: string } }[];
+    };
+    expect(env.kind).toBe("error");
+    expect(env.error).toMatch(/^SIVRU-E249:/);
+    expect(env.candidates?.some((c) => c.ref.name === "run")).toBe(true);
+  });
+
   it("task → candidates first (never auto-orients)", async () => {
     execFileSync("git", ["init", "-q"], { cwd: root });
     execFileSync("git", ["config", "user.email", "t@t.t"], { cwd: root });

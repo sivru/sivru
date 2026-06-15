@@ -80,7 +80,8 @@ const refOf = (n: ExplainerNode): NodeRef => ({ id: n.id, level: n.level, name: 
 
 // ── tree helpers ──────────────────────────────────────────────────────────────
 
-interface Indexed {
+/** A one-pass index of the model's nodes, shareable across a single map call. */
+export interface Indexed {
   byId: Map<string, ExplainerNode>;
   all: ExplainerNode[];
   /** node id → its containing module node (model.root.children), or null. */
@@ -89,7 +90,7 @@ interface Indexed {
   parentOf: Map<string, ExplainerNode>;
 }
 
-function indexModel(model: ExplainerModel): Indexed {
+export function indexModel(model: ExplainerModel): Indexed {
   const byId = new Map<string, ExplainerNode>();
   const all: ExplainerNode[] = [];
   const moduleOf = new Map<string, ExplainerNode>();
@@ -138,8 +139,13 @@ function normaliseTarget(rawPath: string, symbol: string | undefined): { filePat
  * the deepest containing package/module node (symbol-less file → module/package
  * slice, DESIGN-0024). Returns null when nothing resolves (→ did-you-mean).
  */
-export function resolveTarget(model: ExplainerModel, rawPath: string, symbol?: string): ExplainerNode | null {
-  const { byId, all, parentOf } = indexModel(model);
+export function resolveTarget(
+  model: ExplainerModel,
+  rawPath: string,
+  symbol?: string,
+  index?: Indexed,
+): ExplainerNode | null {
+  const { byId, all, parentOf } = index ?? indexModel(model);
   const { filePath, symbol: sym } = normaliseTarget(rawPath, symbol);
   if (filePath.length === 0) return null;
 
@@ -273,10 +279,10 @@ export function buildMapSlice(
   model: ExplainerModel,
   health: ModelHealth,
   target: ExplainerNode,
-  opts: { neighborCap?: number } = {},
+  opts: { neighborCap?: number; index?: Indexed } = {},
 ): MapSlice {
   const neighborCap = opts.neighborCap ?? MAP_NEIGHBOR_CAP;
-  const { byId, moduleOf } = indexModel(model);
+  const { byId, moduleOf } = opts.index ?? indexModel(model);
   const reverseDeps = buildReverseDeps(model);
   const moduleNode = moduleOf.get(target.id) ?? null;
 
@@ -344,7 +350,9 @@ export function mapByPath(
   symbol?: string,
   opts: { neighborCap?: number } = {},
 ): MapSlice | MapError {
-  const target = resolveTarget(model, rawPath, symbol);
+  // One index walk shared by resolution and slice assembly (the happy path).
+  const index = indexModel(model);
+  const target = resolveTarget(model, rawPath, symbol, index);
   if (target === null) {
     const candidates = rankCandidates(model, symbol !== undefined ? `${rawPath} ${symbol}` : rawPath);
     return {
@@ -353,7 +361,7 @@ export function mapByPath(
       ...(candidates.length > 0 ? { candidates, hint: "closest matches" } : { hint: "no close matches" }),
     };
   }
-  return buildMapSlice(model, health, target, opts);
+  return buildMapSlice(model, health, target, { ...opts, index });
 }
 
 /** Task-based entry: candidates first, the agent confirms (never auto-orient). */

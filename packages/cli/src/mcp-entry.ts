@@ -954,9 +954,12 @@ export async function mapTool(rawArgs: unknown): Promise<ToolResult> {
     // path wins when both are given (documented contract).
     if (path !== undefined) {
       const result = mapByPath(model, health, path, symbol);
-      const body = JSON.stringify({ ...result, freshAsOf });
-      // A did-you-mean error is still an MCP error envelope, but carries candidates.
-      return result.kind === "error" ? fail(body) : ok(body);
+      // A did-you-mean is a recovery, not a tool failure: the body carries `kind:
+      // "error"` + ranked candidates, and is returned as a SUCCESS envelope so the
+      // agent acts on the candidates (same as a task's empty-candidates result)
+      // rather than treating an unresolved path as a hard error to retry/discard.
+      // isError is reserved for missing-args and internal failure (below).
+      return ok(JSON.stringify({ ...result, freshAsOf }));
     }
     const result = mapByTask(model, task!);
     return ok(JSON.stringify({ ...result, freshAsOf }));

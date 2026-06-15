@@ -7,27 +7,15 @@
 // cache error degrades to a recompute — the cache is an optimization, never a
 // correctness dependency.
 
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
+import { entryPath, repoSlug } from "./cache-paths.js";
 import type { ModelHealth } from "./health.js";
 
 function defaultCacheDir(): string {
   return join(homedir(), ".cache", "sivru", "explainer-health");
-}
-
-function repoSlug(repoPath: string): string {
-  return createHash("sha256").update(resolve(repoPath)).digest("hex");
-}
-
-function sanitize(s: string): string {
-  return s.replace(/[^A-Za-z0-9._-]/g, "_");
-}
-
-function entryPath(cacheDir: string, repoPath: string, stateId: string): string {
-  return join(cacheDir, repoSlug(repoPath), `${sanitize(stateId)}.json`);
 }
 
 /** Load cached health for (repoPath, stateId), or null on miss / any error. */
