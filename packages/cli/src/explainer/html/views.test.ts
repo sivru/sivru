@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureModel } from "./fixture.js";
-import { renderSections } from "./views.js";
+import { fixtureModel, singlePackageModel } from "./fixture.js";
+import { collapsedRootModule, renderSections } from "./views.js";
 
 const sectionFor = (id: string, narrative?: string): string =>
   renderSections(fixtureModel(narrative !== undefined ? { narrative } : {})).find(
@@ -51,6 +51,17 @@ describe("symbol view", () => {
     expect(html).toContain("@sivru block");
     expect(html).toContain("worker"); // role
     expect(html).toContain("do the thing"); // responsibility
+  });
+
+  it("renders a structured decision as labelled prose, not raw JSON", () => {
+    const html = sectionFor("symbol:packages/a/src/x.ts#doThing");
+    // the decision's prose is shown...
+    expect(html).toContain("a bounded queue");
+    expect(html).toContain("unbounded growth OOMs under load");
+    expect(html).toContain("revisit if"); // camelCase key becomes a readable label
+    // ...and never as a raw JSON object dump.
+    expect(html).not.toContain('{"chose"');
+    expect(html).not.toContain("revisitIf");
   });
 
   it("shows an add-intent affordance with a paste-able stub when no block", () => {
@@ -123,4 +134,27 @@ describe("escaping", () => {
     expect(html).not.toContain("<script>x");
     expect(html).toContain("&lt;script&gt;");
   });
+});
+
+describe("single-package collapse", () => {
+  it("collapsedRootModule returns the lone empty-path module", () => {
+    const sys = singlePackageModel().root;
+    expect(collapsedRootModule(sys)?.id).toBe("module:.");
+  });
+
+  it("returns null for a monorepo (modules have real paths)", () => {
+    expect(collapsedRootModule(fixtureModel().root)).toBeNull();
+  });
+
+  it("breadcrumb does not repeat the repo name (acme › auth › validateSession)", () => {
+    const html = renderSections(singlePackageModel()).find(
+      (s) => s.id === "symbol:src/auth/session.ts#validateSession",
+    )!.html;
+    const nav = /<nav class="breadcrumb">(.*?)<\/nav>/s.exec(html)![1]!;
+    // three crumbs (acme, auth, validateSession) → two separators, not three.
+    expect(nav.match(/class="sep"/g)).toHaveLength(2);
+    expect(nav).toContain(">auth<");
+    expect(nav).toContain(">validateSession<");
+  });
+
 });

@@ -1,7 +1,7 @@
 {
   "name": "@sivru/cli",
   "version": "0.15.0",
-  "description": "Sivru CLI + MCP server — fast code search for coding agents.",
+  "description": "Sivru CLI + MCP server — the comprehension layer for AI-written code (search, authored intent, the explainer model, and the architectural drift gate). Local.",
   "license": "MIT",
   "type": "module",
   "homepage": "https://github.com/sivru/sivru",
