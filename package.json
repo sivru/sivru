@@ -2,7 +2,7 @@
   "name": "sivru-monorepo",
   "version": "0.14.0",
   "private": true,
-  "description": "Fast code search for coding agents + agent session observability layer.",
+  "description": "Sivru — the comprehension layer for AI-written code: authored-intent blocks, a repo-wide explainer model, and an architectural drift gate. Local, MCP-native.",
   "license": "MIT",
   "homepage": "https://github.com/sivru/sivru",
   "repository": {

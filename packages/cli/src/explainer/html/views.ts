@@ -111,8 +111,28 @@ function healthBadges(id: string, ann: StaticAnnotations): string {
 
 // ── breadcrumb ────────────────────────────────────────────────────────────────
 
+/**
+ * A single-package repo collapses the module level onto the repo root: the
+ * system gets exactly one synthetic module child with an empty path, named
+ * identically to the system. Returns that module so nav surfaces can skip it
+ * instead of showing the repo name twice ("acme › acme › auth"). Returns null
+ * for multi-module (monorepo) shapes, where every module is meaningful.
+ */
+export function collapsedRootModule(system: ExplainerNode): ExplainerNode | null {
+  const mods = system.children;
+  const only = mods.length === 1 ? mods[0] : undefined;
+  return only && only.level === "module" && only.path === "" ? only : null;
+}
+
 function breadcrumb(ancestors: ExplainerNode[], node: ExplainerNode): string {
-  const crumbs = [...ancestors, node].map((n, i, arr) =>
+  const system = ancestors[0];
+  const collapsed = system ? collapsedRootModule(system) : null;
+  // Drop the redundant root module from the ancestor trail, but never the
+  // current node (a direct visit to that module page still names itself).
+  const trail = collapsed
+    ? ancestors.filter((n) => n.id !== collapsed.id)
+    : ancestors;
+  const crumbs = [...trail, node].map((n, i, arr) =>
     i === arr.length - 1
       ? `<span class="crumb current">${esc(n.name)}</span>`
       : `<a class="crumb" href="${routeOf(n.id)}">${esc(n.name)}</a>`,
@@ -302,6 +322,43 @@ interface BlockMeta {
   hash: string;
 }
 
+// @sivru list fields arrive in two shapes: invariants are flattened to their
+// rule string, but decisions stay structured ({chose, because, valid-while,
+// revisit-if}). Render a structured item as labelled prose instead of dumping
+// raw JSON into the map (the decision is the whole point of the block).
+const BLOCK_ITEM_LABELS: Record<string, string> = {
+  chose: "chose",
+  because: "because",
+  validWhile: "valid while",
+  revisitIf: "revisit if",
+  rule: "rule",
+  enforcedBy: "enforced by",
+};
+const BLOCK_ITEM_ORDER = Object.keys(BLOCK_ITEM_LABELS);
+
+function fmtBlockItem(v: unknown): string {
+  if (typeof v === "string") return esc(v);
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    const keys = [
+      ...BLOCK_ITEM_ORDER.filter((k) => k in o),
+      ...Object.keys(o).filter((k) => !BLOCK_ITEM_ORDER.includes(k)),
+    ];
+    const parts = keys
+      .map((k) => {
+        const val = o[k];
+        if (val === undefined || val === null || val === "") return "";
+        const text = typeof val === "string" ? val : JSON.stringify(val);
+        const label = BLOCK_ITEM_LABELS[k] ?? k;
+        return `<span class="muted">${esc(label)}</span> ${esc(text)}`;
+      })
+      .filter(Boolean)
+      .join(" — ");
+    return parts || esc(JSON.stringify(v));
+  }
+  return esc(JSON.stringify(v));
+}
+
 function renderBlock(
   block: NonNullable<ExplainerNode["block"]>,
   meta: BlockMeta,
@@ -317,9 +374,7 @@ function renderBlock(
       : "";
   const list = (key: string, val: unknown, editable: boolean): string => {
     if (!Array.isArray(val) || val.length === 0) return "";
-    const items = val
-      .map((v) => `<li>${esc(typeof v === "string" ? v : JSON.stringify(v))}</li>`)
-      .join("");
+    const items = val.map((v) => `<li>${fmtBlockItem(v)}</li>`).join("");
     return `<dt>${esc(key)}</dt><dd${editable ? ed(key) : ""}><ul>${items}</ul></dd>`;
   };
   const attrs =

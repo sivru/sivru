@@ -1,18 +1,54 @@
 # sivru
 
-**The comprehension layer for AI-written code.** Local, MCP-native.
+[![npm](https://img.shields.io/npm/v/@sivru/cli)](https://www.npmjs.com/package/@sivru/cli) [![CI](https://github.com/sivru/sivru/actions/workflows/ci.yml/badge.svg)](https://github.com/sivru/sivru/actions/workflows/ci.yml) [![license: MIT](https://img.shields.io/github/license/sivru/sivru)](LICENSE) ![local-first](https://img.shields.io/badge/network%20egress-none-success) ![MCP](https://img.shields.io/badge/MCP-native-blue)
+
+**The comprehension layer for AI-written code.**
+
+> Your agent just confidently broke something it didn't understand. sivru is the
+> layer that remembers *why* your code is the way it is — and blocks the PR that breaks it.
+
+<!-- Static demo stills (the map → gate, from marketing/demo). The ~20s GIF
+     replaces these once recorded: marketing/demo/STORYBOARD.md (beat 2 via
+     marketing/demo/record-beat2.sh) → drop it at docs/assets/demo.gif and swap
+     the two <img> below for it. -->
+<p align="center">
+  <img src="docs/assets/demo-map.png" width="820"
+       alt="sivru's map: validateSession's @sivru block shows the 24h-expiry decision, in plain sight, linked to the test that guards it" />
+  <br /><sub><b>The map.</b> The authored intent — the <em>why</em> — attached to the code and machine-readable.</sub>
+</p>
+<p align="center">
+  <img src="docs/assets/demo-gate.png" width="820"
+       alt="sivru's gate fails a PR: an agent's refactor deleted the test guarding 'expired tokens are rejected'; the code still compiles" />
+  <br /><sub><b>The gate.</b> An agent's refactor deleted the test guarding "expired tokens are rejected." The code still compiles. sivru fails the PR.</sub>
+</p>
+
+```sh
+npm install -g @sivru/cli
+
+# Gate a PR on intent drift — exits non-zero when an agent's change breaks the
+# test guarding an authored @sivru decision (or introduces a dependency cycle):
+sivru explain --project --diff --gate --base=main
+
+# Or just read the repo: the whole-repo map as one offline HTML file.
+sivru explain --html --out=map.html
+```
 
 Code creation is becoming cheap. Code comprehension is becoming
 expensive — and as agents write more of every codebase, the gap shows
 up as incidents nobody can diagnose, refactors nobody dares start, and
 agents confidently "fixing" things that were deliberate.
 
-Sivru keeps a codebase comprehensible — to the agents writing it and
-the humans accountable for it — by making comprehension a durable,
-queryable asset of the repo itself. The goal, the uniqueness, and the
-test every release must pass: [`GOALS.md`](GOALS.md).
+Every coding tool *produces* code fast. None of them owns the question
+that velocity creates: **does anyone still understand this?** Sivru
+claims that question. It keeps a codebase comprehensible — to the
+agents writing it and the humans accountable for it — by making
+comprehension a durable, queryable asset of the repo itself: it records
+*why* the code is the way it is, keeps that record current as the code
+changes, and serves it at the moment it matters — the edit. The goal and
+the test every release must pass: [`GOALS.md`](GOALS.md); how it's
+positioned and described: [`POSITIONING.md`](POSITIONING.md).
 
-**Today** the comprehension layer ships end-to-end, on four legs:
+**Today** the comprehension layer ships end-to-end:
 
 - **Search** — agents call sivru via MCP and get ranked code chunks
   back in milliseconds instead of looping through `ripgrep + Read`.
@@ -45,8 +81,9 @@ test every release must pass: [`GOALS.md`](GOALS.md).
   blocks in a Blocks tab, and benchmarks embedders + rerankers on YOUR
   repos.
 
-What's next builds on this spine: drift + hot spots + a CI gate on the
-architectural delta of a PR, and an agent-facing model slice over MCP.
+What's next builds on this spine: the agent's working map — the same
+model served to any coding agent over MCP, so it orients on the
+architecture before it edits ([`DESIGN-0024`](docs/design/0024-agent-map-mcp.md)).
 See [`ROADMAP.md`](ROADMAP.md) and [`docs/design/`](docs/design/).
 
 > **Status: 0.14.0.** Engine, CLI, MCP server (8 tools), observe-ui, and the architectural diff + drift gate (`explain --project --diff [--gate]`) ship end-to-end. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and [`CHANGELOG.md`](CHANGELOG.md) for what's in.
