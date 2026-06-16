@@ -1,6 +1,6 @@
 {
   "name": "sivru-monorepo",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "private": true,
   "description": "Sivru — the comprehension layer for AI-written code: authored-intent blocks, a repo-wide explainer model, and an architectural drift gate. Local, MCP-native.",
   "license": "MIT",

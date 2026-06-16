@@ -14,16 +14,36 @@ replace grep. It is a second instrument, and this skill is the policy
 for when to pick which one. It is written to be honest: there are query
 shapes where grep is the better tool, and it says so.
 
-## The three instruments
+## The instruments
 
 - **grep / ripgrep** — exact, literal, current. Best when you already
   know the token you are looking for.
 - **`sivru.search`** — hybrid lexical + semantic search over the repo.
   Best when the question is about behaviour or concept and you do not
   know the exact identifier yet.
-- **`sivru.explain`** — public API, callers, callees, churn, ownership
-  for one file or symbol. Best **before editing** — to know who depends
-  on what you are about to touch.
+- **`sivru.map`** — orient in the architecture around a target: its
+  module + role, its 1-hop dependency neighbourhood (the blast radius),
+  and its descriptive health (hot rank, dependency cycle, broken `@sivru`
+  linkages). Best **before editing**, to frame the area.
+- **`sivru.explain`** — public API, callers, callees, churn, ownership,
+  and the `@sivru` intent for one file or symbol. Best **before editing**
+  one symbol — to know who depends on what you are about to touch.
+
+## The before-edit arc
+
+For a change of any size the instruments compose in order — **search
+finds, map orients, explain inspects**:
+
+1. `sivru.search` — locate the file when you do not know where it is.
+2. `sivru.map` — orient in the area: the module, the neighbours that
+   break if you change the contract, and whether the spot is hot, in a
+   cycle, or has drifted intent.
+3. `sivru.explain` — inspect the one symbol you are about to change.
+4. edit.
+5. `sivru.find_related` — catch the callers/tests your change touched.
+
+Skip steps you do not need (you often know the file already), but when
+you are about to touch unfamiliar code, run the whole arc.
 
 ## When to reach for `sivru.search`
 
@@ -53,6 +73,30 @@ Use grep — it is faster and more precise — when the query is
 A semantic search for an exact identifier is the wrong tool. Do not
 route an identifier query through `sivru.search` because this skill
 mentions sivru — route by the shape of the question.
+
+## Before you edit — orient first with `sivru.map`
+
+When you are about to work in unfamiliar code, call `sivru.map` before
+`sivru.explain`. Give it the file or symbol you are heading for:
+
+- `sivru.map({ path: "src/foo.ts" })` — a file: the module/package slice
+  (role, neighbours, health).
+- `sivru.map({ path: "src/foo.ts::doThing" })` — a symbol (or pass a
+  separate `symbol`).
+- `sivru.map({ task: "where retry backoff is configured" })` — when you
+  do not have a path yet: it returns ranked **candidate** targets. Pick
+  one and map it; it never silently orients on a guess.
+
+The slice tells you the blast radius (`dependsOn` / `dependedOnBy`) and
+the descriptive health: a `hot` rank ("you are editing a top hot spot"),
+`inCycle` ("this module is already in a cycle — don't deepen it"), and
+`driftBroken` (an `@sivru` invariant whose test no longer resolves). Every
+response carries a `kind` (`slice` / `candidates` / `error`) — branch on
+it. An unresolved path comes back as `kind: "error"` with did-you-mean
+`candidates`, not a dead end. `freshAsOf` tells you whether the slice
+reflects your latest edit yet. `map` is descriptive — it reports current
+state, never predicts what your edit will break (that is `explain
+diff:true` and the PR gate).
 
 ## Before you edit a file — `sivru.explain`
 

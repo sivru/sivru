@@ -1,0 +1,94 @@
+{
+  "tool": "map-baseline",
+  "schema": 1,
+  "repo": {
+    "path": "/Users/pochadri/dev/10xdelta/_qa-corpora/gson",
+    "head": "004e7a49",
+    "dirtyServed": false,
+    "stateId": "004e7a4949e08b430e3c8996998ee5a17ff9423a"
+  },
+  "model": {
+    "files": 310,
+    "symbols": 2395,
+    "modules": 1,
+    "totalNodes": 2403
+  },
+  "latency_ms": {
+    "load_cold_or_warm": 1099.1,
+    "load_warm_reload": 46.3,
+    "slice_p50": 0.7,
+    "slice_p95": 2.9,
+    "slice_n": 20,
+    "cold": true
+  },
+  "health_coverage": {
+    "hotRankLimit": 25,
+    "nodesWithHot": 25,
+    "nodesInCycle": 0,
+    "nodesDriftBroken": 0,
+    "nodesUnguardable": 0,
+    "totalSignalNodes": 25
+  },
+  "freshAsOf": {
+    "sha": "004e7a49",
+    "dirty": false,
+    "stale": false,
+    "note": "current as of HEAD@004e7a49"
+  },
+  "contract_snapshots": [
+    {
+      "label": "symbol",
+      "kind": "slice",
+      "target": "symbol:Gson",
+      "module": ".",
+      "dependsOn": 0,
+      "dependedOnBy": 0,
+      "collaborators": 12,
+      "health": {
+        "hot": true,
+        "inCycle": false,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": {
+        "collaborators": 16
+      }
+    },
+    {
+      "label": "file-only",
+      "kind": "slice",
+      "target": "package:gson",
+      "module": ".",
+      "dependsOn": 0,
+      "dependedOnBy": 0,
+      "collaborators": 0,
+      "health": {
+        "hot": false,
+        "inCycle": false,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": null
+    },
+    {
+      "label": "task",
+      "kind": "candidates",
+      "candidates": 5,
+      "top": "JsonToken"
+    },
+    {
+      "label": "did-you-mean",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: gson/src/main/java/com/google/gson/Gson.java::GsonZZZ",
+      "candidates": 5
+    },
+    {
+      "label": "error-nopath",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: no/such/dir/nope.xyz",
+      "candidates": 1
+    }
+  ]
+}

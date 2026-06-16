@@ -10,6 +10,7 @@
 //   package → symbol list
 //   symbol  → derived facts + @sivru block (or add-intent affordance) + radial
 
+import { buildReverseDeps } from "../agent-map.js";
 import { topHotNodes } from "../attention.js";
 import type { ExplainerModel, ExplainerNode } from "../types.js";
 import { escapeHtml as esc } from "./escape.js";
@@ -48,17 +49,14 @@ const NO_ANNOTATIONS: StaticAnnotations = { cycleMembers: new Set(), brokenLinka
 /** Render every node in the model into a flat list of sections. */
 export function renderSections(model: ExplainerModel, ann: StaticAnnotations = NO_ANNOTATIONS): Section[] {
   const byId = new Map<string, ExplainerNode>();
-  const reverseDeps = new Map<string, string[]>();
   const index = (n: ExplainerNode): void => {
     byId.set(n.id, n);
     n.children.forEach(index);
   };
   index(model.root);
-  for (const mod of model.root.children) {
-    for (const dep of mod.derived.depEdges) {
-      (reverseDeps.get(dep) ?? reverseDeps.set(dep, []).get(dep)!).push(mod.id);
-    }
-  }
+  // Shared 1-hop neighbour helper (DESIGN-0024 T4) — one source of truth for
+  // module reverse-deps across the HTML view and the agent `map` slice.
+  const reverseDeps = buildReverseDeps(model);
   const ctx: Ctx = { byId, reverseDeps, ann };
 
   const sections: Section[] = [];

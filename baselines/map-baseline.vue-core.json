@@ -1,0 +1,94 @@
+{
+  "tool": "map-baseline",
+  "schema": 1,
+  "repo": {
+    "path": "/Users/pochadri/dev/10xdelta/_qa-corpora/vue-core",
+    "head": "478e3e83a",
+    "dirtyServed": false,
+    "stateId": "478e3e83acd34dd213a860be4a2a2bf2090dc26b"
+  },
+  "model": {
+    "files": 701,
+    "symbols": 829,
+    "modules": 16,
+    "totalNodes": 882
+  },
+  "latency_ms": {
+    "load_cold_or_warm": 3921.6,
+    "load_warm_reload": 51.6,
+    "slice_p50": 0.2,
+    "slice_p95": 1.3,
+    "slice_n": 20,
+    "cold": true
+  },
+  "health_coverage": {
+    "hotRankLimit": 25,
+    "nodesWithHot": 25,
+    "nodesInCycle": 31,
+    "nodesDriftBroken": 0,
+    "nodesUnguardable": 0,
+    "totalSignalNodes": 55
+  },
+  "freshAsOf": {
+    "sha": "478e3e83a",
+    "dirty": false,
+    "stale": false,
+    "note": "current as of HEAD@478e3e83a"
+  },
+  "contract_snapshots": [
+    {
+      "label": "symbol",
+      "kind": "slice",
+      "target": "symbol:AllowedAttrs",
+      "module": "@vue/runtime-core",
+      "dependsOn": 7,
+      "dependedOnBy": 5,
+      "collaborators": 12,
+      "health": {
+        "hot": true,
+        "inCycle": false,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": {
+        "collaborators": 46
+      }
+    },
+    {
+      "label": "file-only",
+      "kind": "slice",
+      "target": "package:(root)",
+      "module": "@vue/runtime-core",
+      "dependsOn": 7,
+      "dependedOnBy": 5,
+      "collaborators": 0,
+      "health": {
+        "hot": false,
+        "inCycle": true,
+        "driftBroken": 0,
+        "unguardable": 0
+      },
+      "authoring": true,
+      "truncated": null
+    },
+    {
+      "label": "task",
+      "kind": "candidates",
+      "candidates": 3,
+      "top": "Callbacks"
+    },
+    {
+      "label": "did-you-mean",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: packages/runtime-core/src/component.ts::AllowedAttrsZZZ",
+      "candidates": 5
+    },
+    {
+      "label": "error-nopath",
+      "kind": "error",
+      "error": "SIVRU-E249: no such target: no/such/dir/nope.xyz",
+      "candidates": 4
+    }
+  ]
+}

@@ -160,3 +160,40 @@ server-init path — extending it to assert version equality with
 **Effort estimate:** XS (human ~30 min) → with CC+gstack: ~10 min.
 **Priority:** P3 — low impact unless drift recurs at v0.6+.
 **Depends on:** nothing.
+
+## Agent-assisted @sivru authoring (provenance-aware)
+
+**What:** Let an agent draft an `@sivru` block, but mark provenance
+(`source: agent-drafted`) and require a human-confirm before it counts as
+authored intent.
+**Why:** DESIGN-0024's CEO review cut the "map hands the agent a fill-in stub"
+expansion (T2) — machine-authored intent that looks human-authored after commit
+erodes sivru's human-authored trust layer. The honest version needs provenance +
+a confirm step, which is its own design.
+**Context:** Surfaced cutting DESIGN-0024 E3. `map` will still surface the GAP
+("no `@sivru` here"); this TODO is the authoring half done safely.
+**Effort:** M (human ~2 days) → with CC+gstack: ~M. **Priority:** P3.
+**Depends on:** DESIGN-0024 (map) shipping the surface-the-gap hint.
+
+## Cross-agent reach proof for the map tool (Cursor / Codex)
+
+**What:** Verify `mcp__sivru__map` serves correctly to a non-Claude MCP client.
+**Why:** DESIGN-0024's value (M-C platform reach) is only proven when a second
+agent harness consumes it; deferred from the CEO review (E4) as adapter work.
+**Context:** Ties to DESIGN-0010 (Cursor) / DESIGN-0011 (Codex) and the
+consumption precondition in DESIGN-0024. The MCP tool is already client-neutral.
+**Effort:** M (human ~1 day) → with CC+gstack: ~S. **Priority:** P2.
+**Depends on:** DESIGN-0024 Slice 1.
+
+## Post-ship usage metric for the map tool
+
+**What:** After `map` ships, measure whether agents actually call it pre-edit and
+whether it completes the locate → orient → inspect → edit → `find_related` arc.
+**Why:** DESIGN-0024's DX review (Pass 8) noted the Slice 0 consumption signal
+measures *demand before* build, but nothing measures `map`'s *own* uptake after.
+Supply without measured uptake is the failure mode the precondition warned about.
+**Context:** MCP call logging already exists; track map call-rate + arc completion.
+Ties to the efficacy bench (DESIGN-0013). A wrong answer here ("agents ignore it")
+should feed the harness-hook / SKILL-workflow follow-on, not another tool.
+**Effort:** S (human ~half day) → with CC+gstack: ~XS. **Priority:** P3.
+**Depends on:** DESIGN-0024 Slice 1 shipping; DESIGN-0013 (efficacy bench).

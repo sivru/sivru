@@ -1,6 +1,6 @@
 {
   "name": "@sivru/cli",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Sivru CLI + MCP server — the comprehension layer for AI-written code (search, authored intent, the explainer model, and the architectural drift gate). Local.",
   "license": "MIT",
   "type": "module",

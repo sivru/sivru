@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDepGraph, cycleMemberIds, findCycleGroups, newCycles, type DepGraph } from "./cycles.js";
+import { buildDepGraph, cycleMemberIds, cycleRenders, findCycleGroups, newCycles, type DepGraph } from "./cycles.js";
 import type { ExplainerModel, ExplainerNode } from "./types.js";
 
 const g = (edges: Record<string, string[]>): DepGraph => new Map(Object.entries(edges));
@@ -91,5 +91,19 @@ describe("cycleMemberIds (static badge source)", () => {
     expect([...cycleMemberIds(cyclic)].sort()).toEqual(["module:a", "module:b"]); // c depends in but isn't in the cycle
     const dag = modelOf([modNode("module:a", ["module:b"]), modNode("module:b", [])]);
     expect(cycleMemberIds(dag).size).toBe(0);
+  });
+});
+
+describe("cycleRenders (DESIGN-0024 — render per member for the map slice)", () => {
+  it("maps each cycle member to the canonical render of its cycle", () => {
+    const cyclic = modelOf([modNode("module:a", ["module:b"]), modNode("module:b", ["module:a"])]);
+    const renders = cycleRenders(cyclic);
+    expect([...renders.keys()].sort()).toEqual(["module:a", "module:b"]);
+    expect(renders.get("module:a")).toBe("module:a → module:b → module:a");
+    expect(renders.get("module:a")).toBe(renders.get("module:b")); // same cycle, same render
+  });
+  it("a DAG has no renders", () => {
+    const dag = modelOf([modNode("module:a", ["module:b"]), modNode("module:b", [])]);
+    expect(cycleRenders(dag).size).toBe(0);
   });
 });

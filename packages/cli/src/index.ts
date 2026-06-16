@@ -15,6 +15,7 @@ import {
   runFromGit,
   runHelp,
   runIndex,
+  runMap,
   runObserve,
   runSearch,
   runSession,
@@ -74,6 +75,9 @@ async function main(): Promise<number> {
 
     case "explain":
       return runExplain(argv.slice(1));
+
+    case "map":
+      return runMap(argv.slice(1));
 
     case "feedback":
       return runFeedback(argv.slice(1));

@@ -108,13 +108,25 @@ export async function checkDrift(
   return { broken, unguardable };
 }
 
+/** Per-node drift detail: the broken linkages and unguardable invariants on one node. */
+export interface NodeDrift {
+  broken: BrokenLinkage[];
+  unguardable: Unguardable[];
+}
+
 /**
- * Node ids carrying an `@sivru` block with at least one BROKEN invariant→test
- * linkage, across the WHOLE model (not diff-scoped). Drives the `⚠ drift` badge
- * on the static System page — drift you can see without a PR. One shared symbol
- * map amortises the resolution (createEnforcementResolver).
+ * Per-node drift across the WHOLE model (not diff-scoped), keeping the full
+ * BrokenLinkage / Unguardable detail (DESIGN-0024). The `map` slice serves a
+ * single target's entry; `staticBrokenLinkages` derives the id-set badge from
+ * the same pass. One shared symbol map amortises the resolution
+ * (createEnforcementResolver) — the same hot-path discipline `checkDrift` uses.
+ * Only nodes with SOME signal (broken or unguardable) get an entry, so the map
+ * stays compact and an absent id means "all clear".
  */
-export async function staticBrokenLinkages(model: ExplainerModel, resolve?: ResolveFn): Promise<Set<string>> {
+export async function staticDriftDetail(
+  model: ExplainerModel,
+  resolve?: ResolveFn,
+): Promise<Map<string, NodeDrift>> {
   const resolveRef: (ref: ParsedReference) => ReturnType<ResolveFn> = resolve
     ? (ref) => resolve(ref, model.repoPath)
     : createEnforcementResolver(model.repoPath);
@@ -125,19 +137,52 @@ export async function staticBrokenLinkages(model: ExplainerModel, resolve?: Reso
   };
   walk(model.root);
 
-  const broken = new Set<string>();
+  const out = new Map<string, NodeDrift>();
   for (const node of nodes) {
     if (node.block === null) continue;
+    const broken: BrokenLinkage[] = [];
+    const unguardable: Unguardable[] = [];
     for (const inv of node.block.invariantsV2 ?? []) {
-      if (inv.enforcedBy === null) continue;
+      if (inv.enforcedBy === null) {
+        unguardable.push({ ref: refOf(node), rule: inv.rule });
+        continue;
+      }
       const parsed = parseEnforcedBy(inv.enforcedBy);
       if (parsed === null) {
-        broken.add(node.id);
+        broken.push({
+          ref: refOf(node),
+          rule: inv.rule,
+          enforcedBy: inv.enforcedBy,
+          reason: `malformed reference (expected \`Class.method\` or \`path::name\`)`,
+        });
         continue;
       }
       const r = await resolveRef(parsed);
-      if (r.kind === "missing" || (r.kind === "found" && r.skipped)) broken.add(node.id);
+      if (r.kind === "missing") {
+        broken.push({ ref: refOf(node), rule: inv.rule, enforcedBy: inv.enforcedBy, reason: r.reason });
+      } else if (r.skipped) {
+        broken.push({
+          ref: refOf(node),
+          rule: inv.rule,
+          enforcedBy: inv.enforcedBy,
+          reason: `resolves to a skipped/disabled test — no longer enforces`,
+        });
+      }
     }
+    if (broken.length > 0 || unguardable.length > 0) out.set(node.id, { broken, unguardable });
   }
+  return out;
+}
+
+/**
+ * Node ids carrying an `@sivru` block with at least one BROKEN invariant→test
+ * linkage, across the WHOLE model (not diff-scoped). Drives the `⚠ drift` badge
+ * on the static System page — drift you can see without a PR. Derives from
+ * `staticDriftDetail` so the two passes can never disagree.
+ */
+export async function staticBrokenLinkages(model: ExplainerModel, resolve?: ResolveFn): Promise<Set<string>> {
+  const detail = await staticDriftDetail(model, resolve);
+  const broken = new Set<string>();
+  for (const [id, d] of detail) if (d.broken.length > 0) broken.add(id);
   return broken;
 }
