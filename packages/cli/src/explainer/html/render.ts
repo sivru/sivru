@@ -23,7 +23,7 @@ import { escapeHtml as esc, jsonIsland } from "./escape.js";
 import { routeOf, selfVerify } from "./routes.js";
 import { buildSearchIndex } from "./search.js";
 import { renderSystemMap } from "./svg.js";
-import { renderSections } from "./views.js";
+import { collapsedRootModule, renderSections } from "./views.js";
 import type { StaticAnnotations } from "./views.js";
 
 export function renderHtml(model: ExplainerModel, annotations?: StaticAnnotations): string {
@@ -70,24 +70,24 @@ export function renderHtml(model: ExplainerModel, annotations?: StaticAnnotation
 // ── sidebar tree (System → Module → Package) ─────────────────────────────────
 
 function renderTree(root: ExplainerNode): string {
+  const pkgLink = (p: ExplainerNode): string =>
+    `<li><a href="${routeOf(p.id)}" data-link>${esc(p.name)}</a></li>`;
   const pkgList = (mod: ExplainerNode): string =>
-    mod.children.length
-      ? `<ul>${mod.children
-          .map(
-            (p) =>
-              `<li><a href="${routeOf(p.id)}" data-link>${esc(p.name)}</a></li>`,
-          )
-          .join("")}</ul>`
-      : "";
-  const modItems = root.children
-    .map(
-      (m) =>
-        `<li><a href="${routeOf(m.id)}" data-link>${esc(m.name)}</a>${pkgList(m)}</li>`,
-    )
-    .join("");
+    mod.children.length ? `<ul>${mod.children.map(pkgLink).join("")}</ul>` : "";
+  // Single-package repo: hoist the lone root module's packages directly under
+  // the system so the repo name isn't repeated as its own child node.
+  const collapsed = collapsedRootModule(root);
+  const items = collapsed
+    ? collapsed.children.map(pkgLink).join("")
+    : root.children
+        .map(
+          (m) =>
+            `<li><a href="${routeOf(m.id)}" data-link>${esc(m.name)}</a>${pkgList(m)}</li>`,
+        )
+        .join("");
   return (
     `<a class="tree-root" href="${routeOf(root.id)}" data-link>${esc(root.name)}</a>` +
-    `<ul>${modItems}</ul>`
+    `<ul>${items}</ul>`
   );
 }
 

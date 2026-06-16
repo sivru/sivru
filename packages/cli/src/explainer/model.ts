@@ -18,7 +18,7 @@
 // an in-memory index and no git / filesystem.
 
 import { readFile, readdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 import {
   buildCommitCounts,
@@ -108,7 +108,9 @@ async function defaultPackageName(
   } catch {
     // fall through to basename
   }
-  if (moduleDir === "") return ".";
+  // The repo root: name it after the repo directory rather than a bare "."
+  // (a no-package.json repo would otherwise render "." as the system name).
+  if (moduleDir === "") return basename(repoRoot) || ".";
   return moduleDir.split("/").pop() ?? moduleDir;
 }
 

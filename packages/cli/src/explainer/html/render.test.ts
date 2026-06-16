@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureModel } from "./fixture.js";
+import { fixtureModel, singlePackageModel } from "./fixture.js";
 import { CLIENT_JS, renderHtml } from "./render.js";
 
 describe("renderHtml", () => {
@@ -65,5 +65,13 @@ describe("renderHtml", () => {
     expect(html).toContain('class="tree"');
     expect(html).toContain("@scope/a"); // module
     expect(html).toContain(">src<"); // package name in the tree
+  });
+
+  it("single-package repo: tree hoists packages under the system, no duplicate root module", () => {
+    const out = renderHtml(singlePackageModel());
+    const tree = /<nav class="tree"[^>]*>(.*?)<\/nav>/s.exec(out)![1]!;
+    // root shows the repo name once; packages (auth) sit directly under it.
+    expect((tree.match(/>acme</g) ?? []).length).toBe(1);
+    expect(tree).toContain(">auth<");
   });
 });

@@ -163,6 +163,19 @@ describe("buildExplainerModel — single package collapses module/package", () =
     expect(mod.name).toBe("my-tool");
     expect(mod.children.map((p) => p.name).sort()).toEqual(["(root)", "commands"]);
   });
+
+  it("names the root after the repo dir when there is no package.json (not '.')", async () => {
+    // Omit the packageName dep so the real defaultPackageName runs: it reads a
+    // (nonexistent) package.json, fails, and falls back to the repo basename.
+    const m = await buildExplainerModel("/tmp/acme-service", {
+      index: fakeIndex([entry({ filePath: "src/auth/session.ts", exports: [exp("validateSession")] })]),
+      packageDirs: [""],
+      extractFor: NO_BLOCKS,
+      narrative: STUB_NARRATIVE,
+    });
+    expect(m.root.name).toBe("acme-service");
+    expect(m.root.name).not.toBe(".");
+  });
 });
 
 describe("buildExplainerModel — load-bearing cap + blocks", () => {
