@@ -272,6 +272,26 @@ Good starting points if no labeled issue catches your eye:
 
 ---
 
+## Releasing
+
+Publishing to npm is **automatic** and tied to the version in `package.json`,
+not to a manual tag. The `release` workflow runs on every push to `main` and
+publishes the workspace packages (`@sivru/cli`, `@sivru/search`,
+`@sivru/observe`) only when `package.json`'s version is not already on npm.
+
+- To cut a release: bump the version (all packages move together) and merge to
+  `main` — typically via `/ship`, which bumps + writes the CHANGELOG. The publish,
+  the `vX.Y.Z` git tag, and the GitHub Release are created by the workflow.
+- A docs/refactor merge that doesn't change the version is a no-op (the gate
+  skips it).
+- A missed or failed publish self-heals: the next push to `main` retries, and the
+  `Verify published` step fails the run loudly if npm didn't actually move.
+- Do **not** hand-push `vX.Y.Z` tags — the workflow owns tags now. (The old
+  `tags: v*` trigger is why npm sat at 0.8.0 while the repo was at 0.14.0: nobody
+  pushed tags after v0.9.0.)
+
+---
+
 ## License
 
 By contributing, you agree your contribution is licensed under the MIT License,
