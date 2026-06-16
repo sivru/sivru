@@ -47,7 +47,7 @@ Output (let it sit on screen):
 ```
 Architectural gate vs main:
   FAIL — 1 gateable regression(s):
-    linkage  broken linkage: validateSession — no it("rejects an expired token", ...)
+    linkage  broken linkage: validateSession — no `it("rejects an expired token", ...)` or declaration
              in test/auth.test.ts (enforced-by test/auth.test.ts::rejects an expired token)
   Suppress an accepted finding by adding its key to .sivru/gate-allowlist:
     linkage:symbol:src/auth/session.ts#validateSession:test/auth.test.ts::rejects an expired token
@@ -70,11 +70,17 @@ Plain card, the locked lines:
 
 ## How to record
 
-- **Terminal beat (beat 2):** [asciinema](https://asciinema.org) → GIF keeps it
-  crisp + small: `asciinema rec beat2.cast`, type the two commands, `exit`, then
-  `agg beat2.cast beat2.gif` (or upload the cast directly to the README).
-- **Map beat (beat 1):** a screen recorder on the browser (QuickTime screen
-  record on macOS), then trim + `gifski` for a tight GIF.
+Tools (once): `brew install asciinema agg`.
+
+- **Terminal beat (beat 2) — automated:** `./record-beat2.sh`. It regenerates the
+  demo, parks it on `agent/refactor-session`, records the gate command typed at a
+  readable pace, and renders `beat2.gif` via `agg` — no live typing, no trimming.
+  Uses this repo's local build (so the output matches the storyboard above); falls
+  back to a global `sivru`. The `.cast`/`.gif` it writes are gitignored.
+- **Map beat (beat 1) — manual:** generate the artifact first —
+  `sivru explain --html --repo=/tmp/sivru-demo --out=/tmp/sivru-demo-map.html` —
+  then screen-record the browser (QuickTime on macOS) drilling
+  System → auth → `validateSession`, and trim + `gifski` for a tight GIF.
 - **Stitch:** beat 1 → beat 2 → closing card into one ~20s GIF (or two short ones
   if a single GIF gets heavy). The README embeds it right under the hero.
 - **Captions:** burn them in (the viewer often has sound off). Keep them to the

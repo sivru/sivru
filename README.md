@@ -7,12 +7,19 @@
 > Your agent just confidently broke something it didn't understand. sivru is the
 > layer that remembers *why* your code is the way it is — and blocks the PR that breaks it.
 
-<!-- DEMO GIF — the map → gate, ~20s. Record it with marketing/demo/STORYBOARD.md,
-     drop it at docs/assets/demo.gif, then this image goes live. Do not merge the
-     README to main until the gif exists (avoids a broken image). -->
+<!-- Static demo stills (the map → gate, from marketing/demo). The ~20s GIF
+     replaces these once recorded: marketing/demo/STORYBOARD.md (beat 2 via
+     marketing/demo/record-beat2.sh) → drop it at docs/assets/demo.gif and swap
+     the two <img> below for it. -->
 <p align="center">
-  <img src="docs/assets/demo.gif" width="760"
-       alt="sivru maps a repo's authored intent, then blocks a PR where an agent's refactor deleted the test guarding a security decision">
+  <img src="docs/assets/demo-map.png" width="820"
+       alt="sivru's map: validateSession's @sivru block shows the 24h-expiry decision, in plain sight, linked to the test that guards it" />
+  <br /><sub><b>The map.</b> The authored intent — the <em>why</em> — attached to the code and machine-readable.</sub>
+</p>
+<p align="center">
+  <img src="docs/assets/demo-gate.png" width="820"
+       alt="sivru's gate fails a PR: an agent's refactor deleted the test guarding 'expired tokens are rejected'; the code still compiles" />
+  <br /><sub><b>The gate.</b> An agent's refactor deleted the test guarding "expired tokens are rejected." The code still compiles. sivru fails the PR.</sub>
 </p>
 
 ```sh

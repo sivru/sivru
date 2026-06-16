@@ -14,6 +14,11 @@ cd "$DIR"
 
 # --- the clean codebase (this is `main`) -------------------------------------
 
+# name the service so the map reads "acme" (not the temp dir basename)
+cat > package.json <<'JSON'
+{ "name": "acme", "private": true, "version": "0.0.0" }
+JSON
+
 cat > src/auth/session.ts <<'TS'
 /**
  * @sivru
